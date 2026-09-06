@@ -10,8 +10,8 @@ android {
         versionCode 6
         versionName '1.5.0'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '""'
-        buildConfigField 'String', 'SYNC_URL', '""'
-        buildConfigField 'String', 'SYNC_SECRET', '""'
+        buildConfigField 'String', 'SYNC_URL', '"https://script.google.com/macros/s/AKfycbzf1j2bcsyA-7OULRshX2iGRTy1G-zisp3NBvMm6Ciyixwnnky4ByQmBl4u6MptqKoe/exec"'
+        buildConfigField 'String', 'SYNC_SECRET', '"Alameer2026SecretKey99"'
     }
     buildFeatures { buildConfig true }
 }
