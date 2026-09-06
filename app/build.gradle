@@ -7,11 +7,9 @@ android {
         applicationId 'com.alameer.station.shifts'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '1.2.0'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '""'
-        buildConfigField 'String', 'SYNC_URL', '""'
-        buildConfigField 'String', 'SYNC_SECRET', '""'
     }
     buildFeatures { buildConfig true }
 }
