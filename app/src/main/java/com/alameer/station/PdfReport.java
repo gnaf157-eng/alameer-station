@@ -181,6 +181,6 @@ public final class PdfReport {
     }
 
     private String money(double value){return String.format(Locale.US, value == Math.rint(value) ? "%,.0f" : "%,.2f", value);}
-    static String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
-    static String arabicStatus(String s){if("OPEN".equals(s))return "مفتوحة";if("SUBMITTED".equals(s))return "مرسلة للمدير";if("RETURNED".equals(s))return "مُرجعة للتصحيح";if("APPROVED".equals(s))return "معتمدة";return s;}
+    static String arabicType(String t){return Calc.arabicType(t);}
+    static String arabicStatus(String s){return Calc.arabicStatus(s);}
 }
