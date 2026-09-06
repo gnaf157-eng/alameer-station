@@ -1,5 +1,7 @@
 import java.util.Properties
 
+plugins { id 'com.android.application' }
+
 def secrets = new Properties()
 def secretsFile = rootProject.file('keystore.properties')
 if (secretsFile.exists()) secretsFile.withInputStream { secrets.load(it) }
@@ -10,8 +12,6 @@ ext.prop = { String name ->
     value == null ? '' : value.toString()
 }
 ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() }
-
-plugins { id 'com.android.application' }
 
 android {
     namespace 'com.alameer.station.shifts'
@@ -41,7 +41,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingReady ? signingConfigs.release : null
+            if (signingReady) signingConfig signingConfigs.release
             minifyEnabled false
         }
     }
