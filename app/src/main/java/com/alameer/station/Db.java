@@ -1,4 +1,4 @@
-package com.alameer.station;
+package com.alameer.station.shifts;
 
 import android.content.*;
 import android.database.Cursor;
