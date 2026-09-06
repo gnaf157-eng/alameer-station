@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,14 +29,74 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Read app version
+        id: version
+        run: |
+          echo "name=$(grep -oP "versionName '\K[^']+" app/build.gradle)" >> "$GITHUB_OUTPUT"
+          echo "code=$(grep -oP 'versionCode \K\d+' app/build.gradle)" >> "$GITHUB_OUTPUT"
+
+      - name: Decode release keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::لا يوجد مفتاح توقيع (KEYSTORE_BASE64). سيُبنى إصدار debug فقط."
+          fi
+
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Alameer-Station-Shifts-v1.6.0-unsigned.apk
+        if: steps.keystore.outputs.available != 'true'
+        env:
+          SYNC_URL: ${{ secrets.SYNC_URL }}
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
+        run: |
+          gradle --no-daemon :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}-debug.apk"
+
+      - name: Build signed release APK
+        if: steps.keystore.outputs.available == 'true'
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SYNC_URL: ${{ secrets.SYNC_URL }}
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
+        run: |
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk \
+             "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}.apk"
+
+      - name: Generate update manifest
+        run: |
+          cat > update-manifest.json <<JSON
+          {
+            "versionCode": ${{ steps.version.outputs.code }},
+            "versionName": "${{ steps.version.outputs.name }}",
+            "apkUrl": "",
+            "notes": "نسخة ${{ steps.version.outputs.name }} من تطبيق محطة الأمير.",
+            "required": false
+          }
+          JSON
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
           name: Alameer-Station-Shifts-APK
-          path: Alameer-Station-Shifts-v1.6.0-unsigned.apk
+          path: |
+            Alameer-Station-Shifts-v*.apk
+            update-manifest.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30

@@ -20,6 +20,9 @@ public class ArchiveActivity extends Activity {
                 double bal=c.getDouble(5);String note=c.getString(7);
                 TextView card=Util.card(this,"وردية #"+c.getLong(0)+" — "+c.getString(1)+"\n"+c.getString(2)+"\nالحالة: "+status(c.getString(3))+" | المبيعات: "+fmt(c.getDouble(4))+"\nالباقي: "+fmt(bal)+" | المزامنة: "+sync(c.getString(6))+(note==null||note.isEmpty()?"":"\nملاحظة المدير: "+note));
                 card.setTextColor(Math.abs(bal)<0.01?Util.GREEN:Util.RED);
+                final long shiftId=c.getLong(0);
+                card.setClickable(true);
+                card.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+shiftId).setMessage("أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة.").setPositiveButton("تقرير PDF",(d,w)->exportPdf(shiftId)).setNegativeButton("إغلاق",null).show());
                 root.addView(card,Util.spaced());
             }
         }
@@ -44,15 +47,24 @@ public class ArchiveActivity extends Activity {
             File dir=new File(getCacheDir(),"exports");dir.mkdirs();
             File file=new File(dir,"alameer-shifts-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".csv");
             try(OutputStream out=new FileOutputStream(file)){out.write(sb.toString().getBytes(StandardCharsets.UTF_8));}
-            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
-            Intent share=new Intent(Intent.ACTION_SEND);share.setType("text/csv");
-            share.putExtra(Intent.EXTRA_STREAM,uri);share.putExtra(Intent.EXTRA_SUBJECT,"أرشيف ورديات محطة الأمير");
-            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(share,"تصدير الأرشيف"));
+            share(file,"text/csv","أرشيف ورديات محطة الأمير","تصدير الأرشيف");
         }catch(Exception e){Toast.makeText(this,"تعذر تصدير الأرشيف",Toast.LENGTH_LONG).show();}
     }
+    private void exportPdf(long shiftId){
+        try{
+            File file=new PdfReport(this,db).build(shiftId);
+            share(file,"application/pdf","تقرير وردية #"+shiftId,"مشاركة تقرير الوردية");
+        }catch(Exception e){Toast.makeText(this,"تعذر إنشاء تقرير PDF",Toast.LENGTH_LONG).show();}
+    }
+    private void share(File file,String mime,String subject,String chooser){
+        Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
+        Intent intent=new Intent(Intent.ACTION_SEND);intent.setType(mime);
+        intent.putExtra(Intent.EXTRA_STREAM,uri);intent.putExtra(Intent.EXTRA_SUBJECT,subject);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(Intent.createChooser(intent,chooser));
+    }
     private String cell(String value){if(value==null)value="";return "\""+value.replace("\"","\"\"").replace("\n"," ")+"\"";}
-    private String status(String s){if("OPEN".equals(s))return "مفتوحة";if("SUBMITTED".equals(s))return "مرسلة للمدير";if("RETURNED".equals(s))return "مُرجعة للتصحيح";if("APPROVED".equals(s))return "معتمدة";return s;}
+    private String status(String s){return PdfReport.arabicStatus(s);}
     private String sync(String s){return "LOCAL".equals(s)?"محلي":"PENDING".equals(s)?"بانتظار الإنترنت":"تمت";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
 }

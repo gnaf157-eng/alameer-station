@@ -12,3 +12,4 @@ app/release/
 *.jks
 *.keystore
 signing.properties
+keystore.properties
