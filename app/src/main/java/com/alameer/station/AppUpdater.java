@@ -1,4 +1,4 @@
-package com.alameer.station;
+package com.alameer.station.shifts;
 
 import android.app.*;import android.content.*;import android.net.*;import android.os.*;import android.provider.Settings;import android.widget.*;import org.json.JSONObject;import java.io.*;import java.net.*;import java.nio.charset.StandardCharsets;
 
