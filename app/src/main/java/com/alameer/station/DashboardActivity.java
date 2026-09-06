@@ -1,4 +1,4 @@
-package com.alameer.station;
+package com.alameer.station.shifts;
 
 import android.app.*;import android.os.*;import android.content.*;import android.graphics.Color;import android.view.*;import android.widget.*;import java.text.*;import java.util.*;
 
