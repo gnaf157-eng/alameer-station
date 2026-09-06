@@ -1,8 +1,10 @@
 <resources>
-    <color name="navy">#102A43</color>
-    <color name="blue">#1F5C8C</color>
-    <color name="sky">#DCEEFF</color>
-    <color name="green">#198754</color>
-    <color name="red">#C62828</color>
-    <color name="cream">#F7FAFC</color>
+    <color name="navy">#0A2239</color>
+    <color name="navy_light">#163A5F</color>
+    <color name="gold">#C8A44D</color>
+    <color name="gold_light">#F3E5B5</color>
+    <color name="sky">#EAF1F7</color>
+    <color name="green">#12805C</color>
+    <color name="red">#B42335</color>
+    <color name="cream">#F5F7FA</color>
 </resources>
