@@ -32,7 +32,7 @@ public class Sync {
         j.put("closedAt",c.isNull(3)?"":c.getString(3));j.put("status",c.getString(4));
         j.put("sales",c.getDouble(5));j.put("collections",c.getDouble(6));j.put("cashDelivered",c.getDouble(7));
         j.put("debts",c.getDouble(8));j.put("expenses",c.getDouble(9));j.put("balance",c.getDouble(10));
-        j.put("differenceReason",c.getString(11));j.put("revision",c.getInt(12));
+        j.put("differenceReason",c.getString(11));j.put("revision",c.getInt(12));j.put("managerNote",c.getString(13));
         JSONArray readings=new JSONArray();
         try(Cursor r=db.syncReadings(shiftId)){while(r.moveToNext()){JSONObject ro=new JSONObject();ro.put("pump",r.getString(0));ro.put("fuel",r.getString(1));ro.put("previous",r.getDouble(2));ro.put("current",r.getDouble(3));ro.put("price",r.getDouble(4));ro.put("sales",r.getDouble(5));readings.put(ro);}}
         j.put("readings",readings);

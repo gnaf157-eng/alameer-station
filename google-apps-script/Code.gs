@@ -51,18 +51,18 @@ function getOrCreateSheet(ss, name, headers) {
 
 function upsertShift(ss, body) {
   var headers = ['shiftId', 'العامل', 'وقت الفتح', 'وقت الإغلاق', 'الحالة', 'المبيعات',
-    'المقبوضات', 'النقد المسلّم', 'الديون', 'المخاريج', 'الباقي', 'سبب الفرق', 'النسخة', 'آخر تحديث'];
+    'المقبوضات', 'النقد المسلّم', 'الديون', 'المخاريج', 'الباقي', 'سبب الفرق', 'ملاحظة المدير', 'النسخة', 'آخر تحديث'];
   var sheet = getOrCreateSheet(ss, 'الورديات', headers);
   var data = sheet.getDataRange().getValues();
   var rowIndex = -1;
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(body.shiftId)) { rowIndex = i + 1; break; }
   }
-  var existingRevision = rowIndex > -1 ? Number(data[rowIndex - 1][12] || 0) : -1;
+  var existingRevision = rowIndex > -1 ? Number(data[rowIndex - 1][13] || 0) : -1;
   if (body.revision < existingRevision) return; // بيانات أقدم من الموجود، تجاهلها
   var row = [body.shiftId, body.worker, body.openedAt, body.closedAt, body.status,
     body.sales, body.collections, body.cashDelivered, body.debts, body.expenses,
-    body.balance, body.differenceReason, body.revision, new Date()];
+    body.balance, body.differenceReason, body.managerNote || '', body.revision, new Date()];
   if (rowIndex > -1) sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
 }
