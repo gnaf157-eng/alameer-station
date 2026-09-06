@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build installable APK
 
 on:
   push:
@@ -7,32 +7,36 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 20
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-      - name: Set up Gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install required Android packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
-      - name: Upload APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk Alameer-Station-Shifts-v1.0.0.apk
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: AlameerStation-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Alameer-Station-Shifts-APK
+          path: Alameer-Station-Shifts-v1.0.0.apk
           if-no-files-found: error
           retention-days: 14
