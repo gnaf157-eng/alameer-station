@@ -205,11 +205,8 @@ public class ShiftActivity extends Activity {
         double bal=db.balance(shiftId);String issue=db.validateShift(shiftId);
         if(balanceText!=null){
             boolean matched=issue.isEmpty()&&Math.abs(bal)<0.01;
-            balanceText.setText((!issue.isEmpty()?"الوردية غير مكتملة":matched?"✓  الوردية مطابقة":"يوجد فرق في الوردية")+"
-
-الباقي
-"+money(bal)+" ر.ي"+(!issue.isEmpty()?"
-"+issue:""));
+            String nl=System.lineSeparator();
+            balanceText.setText((!issue.isEmpty()?"الوردية غير مكتملة":matched?"✓ الوردية مطابقة":"يوجد فرق في الوردية")+nl+nl+"الباقي"+nl+money(bal)+" ر.ي"+(!issue.isEmpty()?nl+issue:""));
             balanceText.setTextColor(matched?0xff3f7542:!issue.isEmpty()?Util.NAVY:Util.RED);
             balanceText.setBackground(Util.round(matched?0xffe3efe3:!issue.isEmpty()?0xfffff4ce:0xfffce9e8,dp(16)));
         }
