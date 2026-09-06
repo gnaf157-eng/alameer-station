@@ -7,11 +7,11 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE workers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,pin TEXT NOT NULL UNIQUE,role TEXT NOT NULL,shift_kind TEXT NOT NULL DEFAULT 'DAY',active INTEGER NOT NULL DEFAULT 1)");
+        db.execSQL("CREATE TABLE workers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,pin_hash TEXT NOT NULL UNIQUE,role TEXT NOT NULL,shift_kind TEXT NOT NULL DEFAULT 'DAY',active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE pumps(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,fuel TEXT NOT NULL,price REAL NOT NULL DEFAULT 0,last_reading REAL NOT NULL DEFAULT 0,worker_id INTEGER,active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE readings(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,pump_id INTEGER NOT NULL,previous REAL NOT NULL,current REAL,price REAL NOT NULL,sales REAL NOT NULL DEFAULT 0)");
@@ -22,24 +22,48 @@ public class Db extends SQLiteOpenHelper {
     }
 
     private void seed(SQLiteDatabase db) {
-        db.execSQL("INSERT INTO workers(name,pin,role,shift_kind) VALUES('المدير','0000','ADMIN','DAY')");
-        db.execSQL("INSERT INTO workers(name,pin,role,shift_kind) VALUES('عامل الديزل','1111','WORKER','DAY')");
-        db.execSQL("INSERT INTO workers(name,pin,role,shift_kind) VALUES('عامل البترول','2222','WORKER','DAY')");
-        db.execSQL("INSERT INTO workers(name,pin,role,shift_kind) VALUES('عامل الغاز','3333','WORKER','DAY')");
-        db.execSQL("INSERT INTO workers(name,pin,role,shift_kind) VALUES('عامل الليل','4444','WORKER','NIGHT')");
+        seedWorker(db,"المدير","0000","ADMIN","DAY");
+        seedWorker(db,"عامل الديزل","1111","WORKER","DAY");
+        seedWorker(db,"عامل البترول","2222","WORKER","DAY");
+        seedWorker(db,"عامل الغاز","3333","WORKER","DAY");
+        seedWorker(db,"عامل الليل","4444","WORKER","NIGHT");
         for (int i=1;i<=4;i++) db.execSQL("INSERT INTO pumps(name,fuel,worker_id) VALUES('ديزل "+i+"','ديزل',2)");
         for (int i=1;i<=3;i++) db.execSQL("INSERT INTO pumps(name,fuel,worker_id) VALUES('بترول "+i+"','بترول',3)");
         db.execSQL("INSERT INTO pumps(name,fuel,worker_id) VALUES('غاز 1','غاز',4)");
+    }
+
+    private void seedWorker(SQLiteDatabase db,String name,String pin,String role,String kind){
+        db.execSQL("INSERT INTO workers(name,pin_hash,role,shift_kind) VALUES(?,?,?,?)",new Object[]{name,hash(pin),role,kind});
+    }
+
+    /** تجزئة الرمز بـ SHA-256 مع ملح ثابت للتطبيق، حتى لا يُخزَّن الرمز كنص صريح. */
+    public static String hash(String pin){
+        try{
+            java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");
+            byte[] out=md.digest(("alameer::"+pin.trim()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb=new StringBuilder();
+            for(byte b:out)sb.append(String.format("%02x",b));
+            return sb.toString();
+        }catch(Exception e){return "plain:"+pin.trim();}
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
             try { db.execSQL("ALTER TABLE shifts ADD COLUMN manager_note TEXT DEFAULT ''"); } catch (Exception ignored) {}
         }
+        if (oldVersion < 3) {
+            try {
+                db.execSQL("ALTER TABLE workers ADD COLUMN pin_hash TEXT");
+                try (Cursor c = db.rawQuery("SELECT id,pin FROM workers", null)) {
+                    while (c.moveToNext())
+                        db.execSQL("UPDATE workers SET pin_hash=? WHERE id=?", new Object[]{hash(c.getString(1)), c.getLong(0)});
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     public Cursor login(String pin) {
-        return getReadableDatabase().rawQuery("SELECT id,name,role FROM workers WHERE pin=? AND active=1",new String[]{pin});
+        return getReadableDatabase().rawQuery("SELECT id,name,role FROM workers WHERE pin_hash=? AND active=1",new String[]{hash(pin)});
     }
     public boolean isNightWorker(int workerId){try(Cursor c=getReadableDatabase().rawQuery("SELECT shift_kind FROM workers WHERE id=?",new String[]{String.valueOf(workerId)})){return c.moveToFirst()&&"NIGHT".equals(c.getString(0));}}
     public ArrayList<String> workerNames() {
@@ -47,10 +71,17 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery("SELECT name FROM workers WHERE active=1 ORDER BY id",null)){while(c.moveToNext())out.add(c.getString(0));}
         return out;
     }
-    public Cursor workers(){return getReadableDatabase().rawQuery("SELECT id,name,pin,role,shift_kind,active FROM workers ORDER BY id",null);}
-    public Cursor pumps(){return getReadableDatabase().rawQuery("SELECT p.id,p.name,p.fuel,p.price,p.last_reading,p.worker_id,COALESCE(w.name,'بدون عامل') FROM pumps p LEFT JOIN workers w ON w.id=p.worker_id ORDER BY p.id",null);}
-    public void updateWorker(long id,String name,String pin,String kind){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("pin",pin.trim());v.put("shift_kind",kind);getWritableDatabase().update("workers",v,"id=?",new String[]{String.valueOf(id)});}
+    public Cursor workers(){return getReadableDatabase().rawQuery("SELECT id,name,'',role,shift_kind,active FROM workers ORDER BY id",null);}
+    public Cursor pumps(){return getReadableDatabase().rawQuery("SELECT p.id,p.name,p.fuel,p.price,p.last_reading,p.worker_id,COALESCE(w.name,'بدون عامل'),p.active FROM pumps p LEFT JOIN workers w ON w.id=p.worker_id ORDER BY p.id",null);}
+    public void updateWorker(long id,String name,String pin,String kind){ContentValues v=new ContentValues();v.put("name",name.trim());if(!pin.trim().isEmpty())v.put("pin_hash",hash(pin));v.put("shift_kind",kind);getWritableDatabase().update("workers",v,"id=?",new String[]{String.valueOf(id)});}
     public void updatePump(long id,String name,String fuel,double price,double reading,long workerId){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("fuel",fuel.trim());v.put("price",price);v.put("last_reading",reading);v.put("worker_id",workerId);getWritableDatabase().update("pumps",v,"id=?",new String[]{String.valueOf(id)});}
+    public void addWorker(String name,String pin,String kind){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("pin_hash",hash(pin));v.put("role","WORKER");v.put("shift_kind",kind);v.put("active",1);getWritableDatabase().insertOrThrow("workers",null,v);}
+    public void addPump(String name,String fuel,double price,double reading,long workerId){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("fuel",fuel.trim());v.put("price",price);v.put("last_reading",reading);v.put("worker_id",workerId);v.put("active",1);getWritableDatabase().insertOrThrow("pumps",null,v);}
+    /** لا نحذف نهائيًا حفاظًا على الأرشيف، بل نوقف الحساب/الطرمبة. */
+    public void setWorkerActive(long id,boolean active){ContentValues v=new ContentValues();v.put("active",active?1:0);getWritableDatabase().update("workers",v,"id=?",new String[]{String.valueOf(id)});}
+    public void setPumpActive(long id,boolean active){ContentValues v=new ContentValues();v.put("active",active?1:0);getWritableDatabase().update("pumps",v,"id=?",new String[]{String.valueOf(id)});}
+    public boolean workerHasOpenShift(long id){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE worker_id=? AND status IN ('OPEN','SUBMITTED','RETURNED')",new String[]{String.valueOf(id)})){c.moveToFirst();return c.getInt(0)>0;}}
+    public void deleteMovement(long movementId){getWritableDatabase().delete("movements","id=?",new String[]{String.valueOf(movementId)});}
     public ArrayList<Integer> workerIds(){ArrayList<Integer> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT id FROM workers WHERE role='WORKER' AND active=1 ORDER BY id",null)){while(c.moveToNext())out.add(c.getInt(0));}return out;}
     public long openShift(int workerId, boolean night) {
         SQLiteDatabase db=getWritableDatabase();

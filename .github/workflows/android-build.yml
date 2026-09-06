@@ -25,10 +25,11 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Install required Android packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+
+      - name: Run unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
 
       - name: Read app version
         id: version
@@ -56,7 +57,7 @@ jobs:
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
           UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
         run: |
-          gradle --no-daemon :app:assembleDebug
+          ./gradlew --no-daemon :app:assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk \
              "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}-debug.apk"
 
@@ -71,7 +72,7 @@ jobs:
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
           UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
         run: |
-          gradle --no-daemon :app:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk \
              "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}.apk"
 
