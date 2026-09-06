@@ -10,6 +10,8 @@ android {
         versionCode 3
         versionName '1.2.0'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '""'
+        buildConfigField 'String', 'SYNC_URL', '""'
+        buildConfigField 'String', 'SYNC_SECRET', '""'
     }
     buildFeatures { buildConfig true }
 }
