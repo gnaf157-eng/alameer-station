@@ -1,10 +1,10 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'com.alameer.station'
+    namespace 'com.alameer.station.shifts'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.alameer.station'
+        applicationId 'com.alameer.station.shifts'
         minSdk 26
         targetSdk 35
         versionCode 1
