@@ -18,5 +18,5 @@ public final class Util {
     public static Button dangerButton(android.content.Context c,String text){Button b=button(c,text);b.setBackgroundTintList(ColorStateList.valueOf(RED));return b;}
     public static GradientDrawable round(int color,float radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(radius);return g;}
     public static LinearLayout.LayoutParams spaced(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,8,0,8);return p;}
-    public static double number(String s){try{return Double.parseDouble(s.trim());}catch(Exception e){return 0;}}
+    public static double number(String s){return Calc.number(s);}
 }

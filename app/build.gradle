@@ -1,4 +1,17 @@
+import java.util.Properties
+
 plugins { id 'com.android.application' }
+
+def secrets = new Properties()
+def secretsFile = rootProject.file('keystore.properties')
+if (secretsFile.exists()) secretsFile.withInputStream { secrets.load(it) }
+
+/** يقرأ القيمة من keystore.properties، ثم من متغيرات البيئة، وإلا يرجع فراغًا. */
+ext.prop = { String name ->
+    def value = secrets.getProperty(name) ?: System.getenv(name) ?: project.findProperty(name)
+    value == null ? '' : value.toString()
+}
+ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() }
 
 android {
     namespace 'com.alameer.station.shifts'
@@ -7,11 +20,39 @@ android {
         applicationId 'com.alameer.station.shifts'
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName '1.5.0'
-        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '""'
-        buildConfigField 'String', 'SYNC_URL', '""'
-        buildConfigField 'String', 'SYNC_SECRET', '""'
+        versionCode 9
+        versionName '1.8.0'
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL')}\""
+        buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
+        buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""
+    }
+
+    signingConfigs {
+        release {
+            // يُفعّل فقط عند وجود keystore.properties أو متغيرات بيئة التوقيع.
+            if (signingReady) {
+                storeFile file(prop('KEYSTORE_FILE'))
+                storePassword prop('KEYSTORE_PASSWORD')
+                keyAlias prop('KEY_ALIAS')
+                keyPassword prop('KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (signingReady) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
     }
     buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+    testImplementation 'junit:junit:4.13.2'
 }

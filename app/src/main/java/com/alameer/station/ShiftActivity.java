@@ -43,6 +43,13 @@ public class ShiftActivity extends Activity {
         greeting.addView(text("مرحبًا، "+workerName,18,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
         TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
         pages[0].addView(greeting,space());
+        String note=db.managerNote(shiftId);
+        if("RETURNED".equals(db.shiftStatus(shiftId))&&!note.isEmpty()){
+            LinearLayout returned=panel(0xfffce9e8);
+            returned.addView(text("↩  أرجع المدير الوردية للتصحيح",17,Util.RED,true));
+            returned.addView(text(note,15,Util.NAVY,false),space());
+            pages[0].addView(returned,space());
+        }
         LinearLayout hero=panel(Util.NAVY);
         boolean night=db.isNightWorker(workerId);int count;try(Cursor c=db.shiftReadings(shiftId)){count=c.getCount();}
         hero.addView(text(night?"☾  وردية الليل":"☀  وردية النهار",24,Color.WHITE,true));
@@ -142,7 +149,7 @@ public class ShiftActivity extends Activity {
             if(c.getCount()==0)pages[3].addView(Util.card(this,"لا توجد ورديات محفوظة بعد."),Util.spaced());
             while(c.moveToNext()){
                 String state=c.getString(3);
-                String label="APPROVED".equals(state)?"معتمدة":"SUBMITTED".equals(state)?"بانتظار الاعتماد":"مفتوحة";
+                String label="APPROVED".equals(state)?"معتمدة":"SUBMITTED".equals(state)?"بانتظار الاعتماد":"RETURNED".equals(state)?"مُرجعة للتصحيح":"مفتوحة";
                 pages[3].addView(Util.card(this,"وردية #"+c.getLong(0)+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال"),Util.spaced());
             }
         }
@@ -196,6 +203,14 @@ public class ShiftActivity extends Activity {
             int color="COLLECTION".equals(type)?Util.GREEN:"EXPENSE".equals(type)?0xffa85a1a:Util.RED;
             TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round("COLLECTION".equals(type)?0xffe7f1e7:0xfffbebdf,dp(8)));words.addView(badge,space());
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));TextView amount=text(money(c.getDouble(3))+" ر.ي",17,0xff141922,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
+            final long movementId=c.getLong(0);final String movementLabel=c.getString(2);
+            boolean locked=!"OPEN".equals(db.shiftStatus(shiftId))&&!"RETURNED".equals(db.shiftStatus(shiftId));
+            if(!locked){
+                TextView remove=text("✕",18,Util.RED,true);remove.setPadding(dp(14),dp(4),dp(6),dp(4));
+                remove.setContentDescription("حذف الحركة");
+                remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(d,w)->{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}).setNegativeButton("إلغاء",null).show());
+                row.addView(remove);
+            }
             movementsBox.addView(row);View line=new View(this);line.setBackgroundColor(0xffeceef0);movementsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
         }}
         if(count==0)movementsBox.addView(text("لا توجد حركات في هذه القائمة",15,0xff777d84,false));
@@ -216,7 +231,7 @@ public class ShiftActivity extends Activity {
     }
     private String money(double value){return String.format(Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);}
     private void submit(){if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إرسال الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}double bal=db.balance(shiftId);if(Math.abs(bal)<0.01){confirmSubmit("");return;}EditText reason=new EditText(this);reason.setHint("سبب العجز أو الزيادة (إجباري)");AlertDialog dialog=new AlertDialog.Builder(this).setTitle("الباقي "+fmt(bal)+" ريال").setMessage("توجد زيادة أو عجز. اكتب السبب قبل الإرسال.").setView(reason).setPositiveButton("إرسال",null).setNegativeButton("رجوع",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String r=reason.getText().toString().trim();if(r.isEmpty()){reason.setError("السبب مطلوب");return;}dialog.dismiss();confirmSubmit(r);}));dialog.show();}
-    private void confirmSubmit(String reason){new AlertDialog.Builder(this).setTitle("تأكيد الإرسال").setMessage("ستُرسل الوردية للمدير ويمكن تعديلها حتى يعتمدها.").setPositiveButton("تأكيد",(d,w)->{db.submit(shiftId,workerId,reason);Toast.makeText(this,"حُفظت الوردية وهي بانتظار المزامنة",Toast.LENGTH_LONG).show();finish();}).setNegativeButton("إلغاء",null).show();}
+    private void confirmSubmit(String reason){new AlertDialog.Builder(this).setTitle("تأكيد الإرسال").setMessage("ستُرسل الوردية للمدير ويمكن تعديلها حتى يعتمدها.").setPositiveButton("تأكيد",(d,w)->{db.submit(shiftId,workerId,reason);Toast.makeText(this,"حُفظت الوردية وهي بانتظار المزامنة",Toast.LENGTH_LONG).show();new Sync(this).run(false);finish();}).setNegativeButton("إلغاء",null).show();}
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
 }
