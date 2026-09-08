@@ -28,6 +28,7 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -297,7 +298,7 @@ public class ReviewActivity extends Activity {
             try{
                 Bitmap b=Util.decodeScaledFile(img,1800);
                 if(b==null)throw new Exception("تعذّرت قراءة الصورة");
-                TextRecognizer rec=TextRecognition.getClient();
+                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
                 InputImage in=InputImage.fromBitmap(b,0);
                 com.google.mlkit.vision.text.Text vt=rec.process(in).getResult();
                 items=OcrParser.parse(vt);
