@@ -25,6 +25,30 @@ public class Sync {
         }).start();
     }
 
+    /** يسحب أسعار الوقود المحدّثة من الشيت ويطبّقها محليًا. */
+    public void pullPrices(boolean userRequested){
+        String url=BuildConfig.SYNC_URL;
+        if(url==null||url.trim().isEmpty()){if(userRequested)toast("لم يُفعّل رابط مزامنة Google Sheets بعد.");return;}
+        new Thread(()->{
+            try{
+                String separator=url.contains("?")?"&":"?";
+                JSONObject response=new JSONObject(get(url+separator+"action=prices&secret="+URLEncoder.encode(BuildConfig.SYNC_SECRET,"UTF-8")));
+                if(!response.optBoolean("ok",false)){if(userRequested)activity.runOnUiThread(()->toast("تعذر جلب الأسعار من الشيت."));return;}
+                JSONObject prices=response.optJSONObject("prices");
+                if(prices==null||prices.length()==0){if(userRequested)activity.runOnUiThread(()->toast("لا توجد أسعار منشورة في الشيت."));return;}
+                int changed=db.applyPrices(prices);
+                if(userRequested||changed>0)activity.runOnUiThread(()->toast(changed==0?"الأسعار لديك محدّثة.":"حُدِّث سعر "+changed+" طرمبة من الشيت."));
+            }catch(Exception e){if(userRequested)activity.runOnUiThread(()->toast("تعذر الاتصال بالشيت."));}
+        }).start();
+    }
+
+    private String get(String address)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
+        c.setConnectTimeout(15000);c.setReadTimeout(15000);c.setInstanceFollowRedirects(true);
+        c.setRequestProperty("Accept","application/json");
+        try{return readAll(c.getInputStream());}finally{c.disconnect();}
+    }
+
     private JSONObject payload(Cursor c,long shiftId)throws Exception{
         JSONObject j=new JSONObject();
         j.put("secret",BuildConfig.SYNC_SECRET);

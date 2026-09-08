@@ -39,6 +39,16 @@ public final class Calc {
         } catch (Exception e) { return "plain:" + pin.trim(); }
     }
 
+    /** اسم الشهر بالعربية من صيغة yyyy-MM. */
+    public static String arabicMonth(String yyyyMM){
+        String[] names = {"يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"};
+        try {
+            int m = Integer.parseInt(yyyyMM.substring(5, 7));
+            if (m < 1 || m > 12) return yyyyMM;
+            return names[m - 1] + " " + yyyyMM.substring(0, 4);
+        } catch (Exception e) { return yyyyMM; }
+    }
+
     public static String arabicType(String t){
         if ("COLLECTION".equals(t)) return "مقبوضات";
         if ("CASH".equals(t)) return "نقد مسلّم";

@@ -56,6 +56,16 @@ public class UtilTest {
         assertEquals("مرسلة للمدير", Calc.arabicStatus("SUBMITTED"));
         assertEquals("مفتوحة", Calc.arabicStatus("OPEN"));
     }
+    @Test public void arabicMonthFormatsRealMonths(){
+        assertEquals("سبتمبر 2026", Calc.arabicMonth("2026-09"));
+        assertEquals("يناير 2025", Calc.arabicMonth("2025-01"));
+        assertEquals("ديسمبر 2025", Calc.arabicMonth("2025-12"));
+    }
+    @Test public void arabicMonthFallsBackOnBadInput(){
+        assertEquals("2026-13", Calc.arabicMonth("2026-13"));
+        assertEquals("abc", Calc.arabicMonth("abc"));
+    }
+
     @Test public void arabicLabelsCoverEveryMovementType(){
         assertEquals("مقبوضات", Calc.arabicType("COLLECTION"));
         assertEquals("نقد مسلّم", Calc.arabicType("CASH"));

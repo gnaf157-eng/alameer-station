@@ -36,8 +36,29 @@ function doPost(e) {
   }
 }
 
-function doGet() {
-  return jsonOutput({ ok: true, message: 'نقطة مزامنة محطة الأمير جاهزة. استخدم POST.' });
+/**
+ * يخدم طلبات القراءة من التطبيق. حاليًا: أسعار الوقود.
+ * أنشئ شيتًا باسم «الأسعار» بعمودين: نوع الوقود | سعر اللتر، وسيقرأه التطبيق.
+ */
+function doGet(e) {
+  var params = (e && e.parameter) || {};
+  if (params.action !== 'prices') {
+    return jsonOutput({ ok: true, message: 'نقطة مزامنة محطة الأمير جاهزة. استخدم POST.' });
+  }
+  var expected = PropertiesService.getScriptProperties().getProperty('SYNC_SECRET');
+  if (!expected || params.secret !== expected) {
+    return jsonOutput({ ok: false, error: 'unauthorized' });
+  }
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('الأسعار');
+  if (!sheet) return jsonOutput({ ok: true, prices: {} });
+  var rows = sheet.getDataRange().getValues();
+  var prices = {};
+  for (var i = 1; i < rows.length; i++) {
+    var fuel = String(rows[i][0] || '').trim();
+    var price = Number(rows[i][1]);
+    if (fuel && price > 0) prices[fuel] = price;
+  }
+  return jsonOutput({ ok: true, prices: prices });
 }
 
 function getOrCreateSheet(ss, name, headers) {
