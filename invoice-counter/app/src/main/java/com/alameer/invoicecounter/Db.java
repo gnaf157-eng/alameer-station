@@ -103,37 +103,37 @@ public class Db extends SQLiteOpenHelper {
     public Cursor report(String from,String to,String filter){
         StringBuilder sql=new StringBuilder(
             "SELECT it.name AS name,SUM(it.qty) AS qty,SUM(it.qty*it.price) AS amount,COUNT(DISTINCT it.invoice_id) AS inv_count FROM invoice_items it JOIN invoices i ON i.id=it.invoice_id WHERE 1=1");
-        ArrayList<Object> args=new ArrayList<>();
+        ArrayList<String> args=new ArrayList<>();
         if(from!=null&&!from.isEmpty()){sql.append(" AND i.date>=?");args.add(from);}
         if(to!=null&&!to.isEmpty()){sql.append(" AND i.date<=?");args.add(to);}
         if(filter!=null&&!filter.trim().isEmpty()){sql.append(" AND it.name LIKE ?");args.add("%"+filter.trim()+"%");}
         sql.append(" GROUP BY it.name ORDER BY qty DESC,name");
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
+        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new String[0]));
     }
     public Cursor rangeSummary(String from,String to){
         StringBuilder sql=new StringBuilder(
             "SELECT COUNT(DISTINCT i.id) AS invoices,COALESCE(SUM(cnt.c),0) AS items,COALESCE(SUM(i.total),0) AS total FROM invoices i LEFT JOIN (SELECT invoice_id,COUNT(*) c FROM invoice_items GROUP BY invoice_id) cnt ON cnt.invoice_id=i.id WHERE 1=1");
-        ArrayList<Object> args=new ArrayList<>();
+        ArrayList<String> args=new ArrayList<>();
         if(from!=null&&!from.isEmpty()){sql.append(" AND i.date>=?");args.add(from);}
         if(to!=null&&!to.isEmpty()){sql.append(" AND i.date<=?");args.add(to);}
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
+        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new String[0]));
     }
     public String unitOf(String name,String from,String to){
         StringBuilder sql=new StringBuilder("SELECT it.unit FROM invoice_items it JOIN invoices i ON i.id=it.invoice_id WHERE it.name=? AND it.unit<>'' AND 1=1");
-        ArrayList<Object> args=new ArrayList<>();
+        ArrayList<String> args=new ArrayList<>();
         if(from!=null&&!from.isEmpty()){sql.append(" AND i.date>=?");args.add(from);}
         if(to!=null&&!to.isEmpty()){sql.append(" AND i.date<=?");args.add(to);}
         sql.append(" GROUP BY it.unit ORDER BY COUNT(*) DESC LIMIT 1");
-        try(Cursor c=getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]))){
+        try(Cursor c=getReadableDatabase().rawQuery(sql.toString(),args.toArray(new String[0]))){
             return c.moveToFirst()?c.getString(0):"";
         }
     }
     public Cursor itemDetail(String name,String from,String to){
         StringBuilder sql=new StringBuilder("SELECT i.date,it.qty,it.unit,it.qty*it.price FROM invoice_items it JOIN invoices i ON i.id=it.invoice_id WHERE it.name=? AND 1=1");
-        ArrayList<Object> args=new ArrayList<>();
+        ArrayList<String> args=new ArrayList<>();
         if(from!=null&&!from.isEmpty()){sql.append(" AND i.date>=?");args.add(from);}
         if(to!=null&&!to.isEmpty()){sql.append(" AND i.date<=?");args.add(to);}
         sql.append(" ORDER BY i.date DESC,i.id DESC");
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
+        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new String[0]));
     }
 }

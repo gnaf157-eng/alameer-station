@@ -34,7 +34,7 @@ public final class OcrParser {
 
     public static List<Parsed> parse(Text text){
         List<Parsed> out=new ArrayList<>();
-        for(Text.Block b:text.getBlocks()){
+        for(Text.TextBlock b:text.getTextBlocks()){
             for(Text.Line ln:b.getLines()){
                 Parsed p=parseLine(ln);
                 if(p!=null)out.add(p);
@@ -46,7 +46,7 @@ public final class OcrParser {
     /** تخمين اسم المحل: أول سطر بدون أرقام في بداية الفاتورة. */
     public static String guessStore(Text text){
         int count=0;
-        for(Text.Block b:text.getBlocks()){
+        for(Text.TextBlock b:text.getTextBlocks()){
             for(Text.Line ln:b.getLines()){
                 count++;
                 if(count>8)return null;

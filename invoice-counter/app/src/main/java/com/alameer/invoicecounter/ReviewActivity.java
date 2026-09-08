@@ -28,7 +28,6 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
-import com.google.mlkit.vision.text.TextRecognizerOptions;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -38,7 +37,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public class ReviewActivity extends Activity {
     Db db;
@@ -286,7 +284,7 @@ public class ReviewActivity extends Activity {
 
     private void startOcr(File img){
         int gs=GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this);
-        if(gs!=GoogleApiAvailability.ConnectionPlayStatusCode.SUCCESS){
+        if(gs!=0){
             statusText.setText("⚠ التعرّف على النصوص يتطلب خدمة Google Play — أضف الأصناف يدويًا");
             addRow("",0,"",0);
             return;
@@ -299,9 +297,9 @@ public class ReviewActivity extends Activity {
             try{
                 Bitmap b=Util.decodeScaledFile(img,1800);
                 if(b==null)throw new Exception("تعذّرت قراءة الصورة");
-                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                TextRecognizer rec=TextRecognition.getClient();
                 InputImage in=InputImage.fromBitmap(b,0);
-                com.google.mlkit.vision.text.Text vt=rec.process(in).getResult(120,TimeUnit.SECONDS);
+                com.google.mlkit.vision.text.Text vt=rec.process(in).getResult();
                 items=OcrParser.parse(vt);
                 store=OcrParser.guessStore(vt);
             }catch(Exception e){

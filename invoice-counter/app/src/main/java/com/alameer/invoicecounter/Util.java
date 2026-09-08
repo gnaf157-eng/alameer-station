@@ -1,6 +1,7 @@
 package com.alameer.invoicecounter;
 
 import android.content.ContentResolver;
+import android.net.Uri;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
