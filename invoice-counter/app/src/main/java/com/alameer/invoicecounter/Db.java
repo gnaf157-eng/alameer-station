@@ -78,9 +78,9 @@ public class Db extends SQLiteOpenHelper {
     }
     public void wipeAll(){
         SQLiteDatabase db=getWritableDatabase();
-        db.delete("invoice_items","1=1");
-        db.delete("invoices","1=1");
-        db.delete("item_names","1=1");
+        db.delete("invoice_items","1=1",null);
+        db.delete("invoices","1=1",null);
+        db.delete("item_names","1=1",null);
     }
     public Cursor invoices(){
         return getReadableDatabase().rawQuery(
@@ -106,14 +106,18 @@ public class Db extends SQLiteOpenHelper {
         }
         return out;
     }
-    public Cursor report(String from,String to,String filter){
+    public Cursor report(String from,String to,String filter,String order){
         StringBuilder sql=new StringBuilder(
             "SELECT it.name AS name,SUM(it.qty) AS qty,SUM(it.qty*it.price) AS amount,COUNT(DISTINCT it.invoice_id) AS inv_count FROM invoice_items it JOIN invoices i ON i.id=it.invoice_id WHERE 1=1");
         ArrayList<String> args=new ArrayList<>();
         if(from!=null&&!from.isEmpty()){sql.append(" AND i.date>=?");args.add(from);}
         if(to!=null&&!to.isEmpty()){sql.append(" AND i.date<=?");args.add(to);}
         if(filter!=null&&!filter.trim().isEmpty()){sql.append(" AND it.name LIKE ?");args.add("%"+filter.trim()+"%");}
-        sql.append(" GROUP BY it.name ORDER BY qty DESC,name");
+        String orderBy="qty";
+        if("amount".equals(order))orderBy="amount";
+        else if("name".equals(order))orderBy="name";
+        if(orderBy.equals("name"))sql.append(" GROUP BY it.name ORDER BY name");
+        else sql.append(" GROUP BY it.name ORDER BY ").append(orderBy).append(" DESC,name");
         return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new String[0]));
     }
     public Cursor rangeSummary(String from,String to){
