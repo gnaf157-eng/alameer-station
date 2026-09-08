@@ -329,52 +329,49 @@ public class ReviewActivity extends Activity {
         });
     }
 
-    /** يضمن تنزيل نموذج القراءة قبل التحليل (أول مرة فقط، ≈15 م.ب) */
+    /** يضمن بدء تنزيل نموذج القراءة قبل التحليل (أول مرة فقط، ≈15 م.ب) */
     private void ensureModel() throws Exception{
-        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
-            .add(com.google.mlkit.vision.common.OptInModuleId.TEXT_RECOGNITION)
-            .setForceUpdate(false)
-            .setPriority(2)
-            .build();
-        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
-        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
-        boolean installed=false;
+        TextRecognizer probe=null;
         try{
-            installed=client.isModuleInstalled(req).getResult();
+            probe=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            com.google.android.gms.common.api.OptionalModuleApi api=(com.google.android.gms.common.api.OptionalModuleApi)probe;
+            com.google.android.gms.common.moduleinstall.ModuleInstallClient client=com.google.android.gms.common.moduleinstall.ModuleInstall.getClient(this);
+            com.google.android.gms.common.moduleinstall.ModuleAvailabilityResponse avail=null;
+            try{
+                avail=client.areModulesAvailable(api).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+            }catch(Exception e){}
+            if(avail!=null&&avail.areModulesAvailable())return;
+            com.google.android.gms.common.moduleinstall.ModuleInstallRequest req=com.google.android.gms.common.moduleinstall.ModuleInstallRequest.newBuilder().addApi(api).build();
+            client.installModules(req).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+            // تم طلب التنزيل — runOcrWithRetries ستنتظر اكتماله
         }catch(Exception e){
-            installed=false;
+            // إن لم تتوفر واجهة التثبيت الصريحة، سيُجرى التحليل مباشرة وقد يبدأ التنزيل تلقائيًا
+        }finally{
+            if(probe!=null){
+                try{probe.close();}catch(Exception e){}
+            }
         }
-        if(installed)return;
-        int code;
-        try{
-            code=client.requestModuleInstall(req).getResult();
-        }catch(Exception e){
-            code=-1;
-        }
-        if(code==com.google.android.gms.common.api.CommonStatusCodes.SUCCESS){
-            return; // التنزيل جارٍ — runOcrWithRetries ستنتظر اكتماله
-        }
-        if(code==com.google.android.gms.common.api.CommonStatusCodes.INTERRUPTED){
-            throw new Exception("تنزيل نموذج القراءة توقف — تأكد من الاتصال بالإنترنت (يفضل واي فاي) ثم أعد المحاولة");
-        }
-        throw new Exception("تعذر تجهيز نموذج القراءة (رمز الخطأ "+code+") — حاول مرة أخرى");
     }
 
     /** يحاول التحليل عدة مرات بانتظار اكتمال تنزيل النموذج */
     private com.google.mlkit.vision.text.Text runOcrWithRetries(Bitmap b) throws Exception{
         Exception last=null;
-        for(int attempt=0;attempt<20;attempt++){
+        for(int attempt=0;attempt<12;attempt++){
+            TextRecognizer rec=null;
             try{
-                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
                 InputImage in=InputImage.fromBitmap(b,0);
-                return rec.process(in).getResult();
+                return rec.process(in).getResult(25, java.util.concurrent.TimeUnit.SECONDS);
             }catch(Exception e){
                 last=e;
-                Thread.sleep(5000);
+            }finally{
+                if(rec!=null){
+                    try{rec.close();}catch(Exception e){}
+                }
             }
+            Thread.sleep(5000);
         }
-        if(last!=null)throw last;
-        throw new Exception("فشل التحليل — أعد المحاولة");
+        throw new Exception("لم يكتمل التحليل خلال الانتظار — تأكد من الاتصال بالإنترنت (أول مرة ينزّل النموذج) ثم أعد المحاولة");
     }
 
     private void onOcrDone(List<OcrParser.Parsed> items,String err,String store,String rawText){

@@ -25,6 +25,8 @@ android {
 dependencies {
     // التعرف على النصوص (يدعم العربية) — يعمل على الجهاز بعد تنزيل النموذج مرة واحدة
     implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
+    // واجهة تثبيت النماذج (ModuleInstallClient) لتنزيل نموذج القراءة آليًا
+    implementation 'com.google.android.gms:play-services-base:18.10.1'
     // اختبارات الوحدة (تشغيل الشاشة الرئيسية آليًا أثناء البناء)
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.11.1'
