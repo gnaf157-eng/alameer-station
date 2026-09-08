@@ -41,8 +41,8 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           mkdir -p invoice-counter/apk
           if [ -f invoice-counter/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp invoice-counter/app/build/outputs/apk/debug/app-debug.apk invoice-counter/apk/Invoice-Counter-v1.0.0.apk
-            cp invoice-counter/app/build/outputs/apk/debug/app-debug.apk Invoice-Counter-v1.0.0.apk
+            cp invoice-counter/app/build/outputs/apk/debug/app-debug.apk invoice-counter/apk/Invoice-Counter-v2.0.0.apk
+            cp invoice-counter/app/build/outputs/apk/debug/app-debug.apk Invoice-Counter-v2.0.0.apk
             echo "BUILD_OK=1" >> "$GITHUB_ENV"
           else
             cp build-full.log invoice-counter/build-failure.log
@@ -68,6 +68,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Invoice-Counter-APK
-          path: Invoice-Counter-v1.0.0.apk
+          path: Invoice-Counter-v2.0.0.apk
           if-no-files-found: error
           retention-days: 30

@@ -44,6 +44,8 @@ public class ReviewActivity extends Activity {
     long invoiceId=0;
     String imagePath="";
     String dateIso=Util.today();
+    String[] queue=null;
+    int queueIndex=0;
     LinearLayout itemsBox;
     ImageView preview;
     EditText dateField,storeField;
@@ -64,6 +66,8 @@ public class ReviewActivity extends Activity {
         Util.installCrashReporter(this);
         db=new Db(this);
         invoiceId=getIntent().getLongExtra("invoiceId",0);
+        queue=getIntent().getStringArrayExtra("queue");
+        if(queue!=null)queueIndex=getIntent().getIntExtra("queueIndex",1);
         String path=getIntent().getStringExtra("imagePath");
         if(path!=null){
             bmp=Util.decodeScaledFile(new File(path),1200);
@@ -104,7 +108,17 @@ public class ReviewActivity extends Activity {
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         shell.setBackgroundColor(Util.BG);
-        shell.addView(Util.brandBar(this,"مراجعة الفاتورة",invoiceId>0?"تعديل":"بعد التقاط الصورة",v->finish()));
+        String sub=queue!=null?("الفاتورة "+queueIndex+" من "+queue.length):invoiceId>0?"تعديل":"بعد التقاط الصورة";
+        shell.addView(Util.brandBar(this,"مراجعة الفاتورة",sub,v->{
+            if(queue!=null&&queueIndex<queue.length){
+                new AlertDialog.Builder(ReviewActivity.this)
+                    .setTitle("تخطي الفاتورة؟")
+                    .setMessage("لن تُحفظ هذه الفاتورة. الانتقال إلى الفاتورة التالية؟")
+                    .setPositiveButton("التالي",(d,w)->launchNext())
+                    .setNegativeButton("إنهاء الكل",null)
+                    .show();
+            }else finish();
+        }));
         ScrollView scroll=new ScrollView(this);
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -399,11 +413,21 @@ public class ReviewActivity extends Activity {
                 }catch(Exception e){}
             }
         }
+        boolean more=(queue!=null&&queueIndex<queue.length);
         new AlertDialog.Builder(this)
             .setTitle("تم الحفظ ✓")
-            .setMessage("حُفظت الفاتورة مع "+items.size()+" صنفًا على الجهاز.\nالإجمالي: "+Util.money(total)+" ج.م")
-            .setPositiveButton("العودة",(d,w)->finish())
+            .setMessage("حُفظت الفاتورة مع "+items.size()+" صنفًا على الجهاز.\nالإجمالي: "+Util.money(total)+" ج.م"+(more?("\n\nالمتبقي في القائمة: "+(queue.length-queueIndex)+" فواتير"):""))
+            .setPositiveButton(more?("التالي ("+(queueIndex+1)+" من "+queue.length+")"):"العودة",(d,w)->{if(more)launchNext();else finish();})
             .setCancelable(false)
             .show();
+    }
+
+    private void launchNext(){
+        Intent i=new Intent(this,ReviewActivity.class);
+        i.putExtra("imagePath",queue[queueIndex]);
+        i.putExtra("queue",queue);
+        i.putExtra("queueIndex",queueIndex+1);
+        startActivity(i);
+        finish();
     }
 }

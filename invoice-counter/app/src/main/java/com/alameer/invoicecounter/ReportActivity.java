@@ -31,6 +31,9 @@ import java.util.Locale;
 public class ReportActivity extends Activity {
     Db db;
     String from="",to="";
+    String order="qty";
+    final String[] orderLabels={"بالكمية","بالقيمة","أبجدي"};
+    final String[] orderVals={"qty","amount","name"};
     EditText fromField,toField,searchField;
     LinearLayout resultsBox;
     TextView summaryText;
@@ -86,7 +89,22 @@ public class ReportActivity extends Activity {
             chips.addView(chip,cp);
             chip.setOnClickListener(v->applyChip(ci));
         }
-        range.addView(chips);
+        range.addView(chips,Util.spaced(this));
+        LinearLayout orderRow=new LinearLayout(this);
+        orderRow.setGravity(Gravity.CENTER_VERTICAL);
+        orderRow.addView(Util.text(this,"ترتيب:",12,Util.MUTED,false),new LinearLayout.LayoutParams(-2,-2));
+        for(int i=0;i<3;i++){
+            final int oi=i;
+            Button chip=Util.button(this,orderLabels[i]);
+            chip.setTextSize(12);
+            chip.setMinHeight(Util.dp(this,42));
+            chip.setPadding(Util.dp(this,10),0,Util.dp(this,10),0);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);
+            cp.setMargins(Util.dp(this,4),0,0,0);
+            orderRow.addView(chip,cp);
+            chip.setOnClickListener(v->applyOrder(oi));
+        }
+        range.addView(orderRow);
         content.addView(range,Util.spaced(this));
 
         LinearLayout searchPanel=Util.panel(this,Color.WHITE);
@@ -115,6 +133,11 @@ public class ReportActivity extends Activity {
         shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(shell);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
+        load();
+    }
+
+    private void applyOrder(int i){
+        order=orderVals[i];
         load();
     }
 
@@ -167,7 +190,7 @@ public class ReportActivity extends Activity {
         }
         resultsBox.removeAllViews();
         int rows=0;
-        try(Cursor c=db.report(from,to,filter)){
+        try(Cursor c=db.report(from,to,filter,order)){
             while(c.moveToNext()){
                 rows++;
                 final String name=c.getString(0);
@@ -225,7 +248,7 @@ public class ReportActivity extends Activity {
             Writer w=new OutputStreamWriter(new FileOutputStream(out),StandardCharsets.UTF_8);
             w.write("\uFEFF");
             w.write("الصنف,الوحدة,إجمالي الكمية,إجمالي المبلغ (ج.م),عدد الفواتير\n");
-            try(Cursor c=db.report(from,to,searchField.getText().toString().trim())){
+            try(Cursor c=db.report(from,to,searchField.getText().toString().trim(),order)){
                 while(c.moveToNext()){
                     String name=c.getString(0).replace("\"","\"\"");
                     w.write("\""+name+"\"");

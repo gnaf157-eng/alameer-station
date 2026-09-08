@@ -76,6 +76,12 @@ public class Db extends SQLiteOpenHelper {
         db.delete("invoice_items","invoice_id=?",new String[]{String.valueOf(id)});
         db.delete("invoices","id=?",new String[]{String.valueOf(id)});
     }
+    public void wipeAll(){
+        SQLiteDatabase db=getWritableDatabase();
+        db.delete("invoice_items","1=1");
+        db.delete("invoices","1=1");
+        db.delete("item_names","1=1");
+    }
     public Cursor invoices(){
         return getReadableDatabase().rawQuery(
             "SELECT invoices.id,date,store,total,(SELECT COUNT(*) FROM invoice_items WHERE invoice_id=invoices.id) AS items FROM invoices ORDER BY date DESC,invoices.id DESC",null);
