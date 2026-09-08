@@ -307,7 +307,7 @@ public class ReviewActivity extends Activity {
             return;
         }
         progressBar.setVisibility(View.VISIBLE);
-        statusText.setText("جاري تحليل الفاتورة... (أول مرة يحتاج إنترنت لتنزيل نموذج القراءة)");
+        statusText.setText("جاري تجهيز نموذج القراءة وتحليل الفاتورة... (أول مرة ينزّل النموذج ≈15 م.ب)");
         pool.execute(()->{
             final List<OcrParser.Parsed> items;
             final String store;
@@ -315,9 +315,8 @@ public class ReviewActivity extends Activity {
             try{
                 Bitmap b=Util.decodeScaledFile(img,1800);
                 if(b==null)throw new Exception("تعذّرت قراءة الصورة");
-                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-                InputImage in=InputImage.fromBitmap(b,0);
-                com.google.mlkit.vision.text.Text vt=rec.process(in).getResult();
+                ensureModel();
+                com.google.mlkit.vision.text.Text vt=runOcrWithRetries(b);
                 items=OcrParser.parse(vt);
                 store=OcrParser.guessStore(vt);
                 raw=vt.getText();
@@ -328,6 +327,54 @@ public class ReviewActivity extends Activity {
             }
             runOnUiThread(()->onOcrDone(items,null,store,raw));
         });
+    }
+
+    /** يضمن تنزيل نموذج القراءة قبل التحليل (أول مرة فقط، ≈15 م.ب) */
+    private void ensureModel() throws Exception{
+        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
+            .add(com.google.mlkit.vision.common.OptInModuleId.TEXT_RECOGNITION)
+            .setForceUpdate(false)
+            .setPriority(2)
+            .build();
+        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
+        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
+        boolean installed=false;
+        try{
+            installed=client.isModuleInstalled(req).getResult();
+        }catch(Exception e){
+            installed=false;
+        }
+        if(installed)return;
+        int code;
+        try{
+            code=client.requestModuleInstall(req).getResult();
+        }catch(Exception e){
+            code=-1;
+        }
+        if(code==com.google.android.gms.common.api.CommonStatusCodes.SUCCESS){
+            return; // التنزيل جارٍ — runOcrWithRetries ستنتظر اكتماله
+        }
+        if(code==com.google.android.gms.common.api.CommonStatusCodes.INTERRUPTED){
+            throw new Exception("تنزيل نموذج القراءة توقف — تأكد من الاتصال بالإنترنت (يفضل واي فاي) ثم أعد المحاولة");
+        }
+        throw new Exception("تعذر تجهيز نموذج القراءة (رمز الخطأ "+code+") — حاول مرة أخرى");
+    }
+
+    /** يحاول التحليل عدة مرات بانتظار اكتمال تنزيل النموذج */
+    private com.google.mlkit.vision.text.Text runOcrWithRetries(Bitmap b) throws Exception{
+        Exception last=null;
+        for(int attempt=0;attempt<20;attempt++){
+            try{
+                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                InputImage in=InputImage.fromBitmap(b,0);
+                return rec.process(in).getResult();
+            }catch(Exception e){
+                last=e;
+                Thread.sleep(5000);
+            }
+        }
+        if(last!=null)throw last;
+        throw new Exception("فشل التحليل — أعد المحاولة");
     }
 
     private void onOcrDone(List<OcrParser.Parsed> items,String err,String store,String rawText){
