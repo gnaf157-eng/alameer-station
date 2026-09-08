@@ -37,6 +37,7 @@ public class ReportActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        Util.installCrashReporter(this);
         db=new Db(this);
         to=Util.today();
         from=to.substring(0,8)+"01";

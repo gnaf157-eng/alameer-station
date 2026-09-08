@@ -29,6 +29,7 @@ public class HomeActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        Util.installCrashReporter(this);
         db=new Db(this);
         LinearLayout shell=new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -161,6 +162,10 @@ public class HomeActivity extends Activity {
                 });
                 listBox.addView(row,Util.spaced(this));
             }
+        }
+        catch(Exception e){
+            countText.setText("خطأ في قراءة الفواتير: "+e.getMessage());
+            return;
         }
         if(n==0){
             TextView empty=Util.text(this,"لا فواتير محفوظة بعد — صوّر أول فاتورة بالأعلى",14,Util.MUTED,false);

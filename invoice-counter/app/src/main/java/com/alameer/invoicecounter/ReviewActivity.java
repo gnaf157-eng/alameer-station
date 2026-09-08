@@ -61,6 +61,7 @@ public class ReviewActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        Util.installCrashReporter(this);
         db=new Db(this);
         invoiceId=getIntent().getLongExtra("invoiceId",0);
         String path=getIntent().getStringExtra("imagePath");

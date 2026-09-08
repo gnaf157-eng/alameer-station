@@ -20,9 +20,6 @@
         android:label="سجل الفواتير"
         android:supportsRtl="true"
         android:theme="@style/Theme.InvoiceCounter">
-        <meta-data
-            android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="ocr" />
         <activity android:name=".HomeActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -134,8 +134,29 @@ public final class Util {
         words.setGravity(Gravity.START);
         words.addView(text(c,title,19,Color.WHITE,true));
         if(sub!=null&&!sub.isEmpty())words.addView(text(c,sub,12,0xffc9ccce,false));
-        bar.addView(words,new LinearLayout.LayoutParams(0,-2,back==null?0f:1f));
+        bar.addView(words,new LinearLayout.LayoutParams(back==null?-2:0,-2,back==null?0f:1f));
         return bar;
+    }
+
+    /**
+     * عرض أي خطأ مفاجئ كنص على الشاشة بدلًا من شاشة سوداء،
+     * ليعرف المستخدم (والمطور) سبب المشكلة.
+     */
+    public static void installCrashReporter(android.app.Activity a){
+        Thread.currentThread().setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler(){
+            @Override public void uncaughtException(Thread t,Throwable e){
+                try{
+                    TextView tv=new TextView(a);
+                    tv.setText("⚠ حدث خطأ غير متوقع\n\nخذ لقطة شاشة وأرسلها للمطور:\n\n"+android.util.Log.getStackTraceString(e));
+                    tv.setTextColor(0xffb42335);
+                    tv.setTextSize(13);
+                    tv.setPadding(40,100,40,40);
+                    tv.setBackgroundColor(Color.WHITE);
+                    tv.setTextDirection(View.TEXT_DIRECTION_RTL);
+                    a.setContentView(tv);
+                }catch(Throwable ignore){}
+            }
+        });
     }
 
     public static Bitmap decodeScaled(InputStream boundsStream,InputStream dataStream,int maxSide){

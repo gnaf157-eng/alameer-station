@@ -34,7 +34,7 @@ jobs:
           gradle-version: '8.9'
       - name: Build debug APK
         continue-on-error: true
-        run: gradle --no-daemon -p invoice-counter :app:assembleDebug 2>&1 | tee build-full.log
+        run: gradle --no-daemon -p invoice-counter :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee build-full.log
       - name: Publish artifacts (APK or failure log)
         run: |
           set -e
