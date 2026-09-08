@@ -296,6 +296,7 @@ public class ReviewActivity extends Activity {
         pool.execute(()->{
             final List<OcrParser.Parsed> items;
             final String store;
+            final String raw;
             try{
                 Bitmap b=Util.decodeScaledFile(img,1800);
                 if(b==null)throw new Exception("تعذّرت قراءة الصورة");
@@ -304,24 +305,46 @@ public class ReviewActivity extends Activity {
                 com.google.mlkit.vision.text.Text vt=rec.process(in).getResult();
                 items=OcrParser.parse(vt);
                 store=OcrParser.guessStore(vt);
+                raw=vt.getText();
             }catch(Exception e){
                 final String msg=(e.getMessage()==null||e.getMessage().isEmpty())?"فشل التحليل — أضف الأصناف يدويًا":e.getMessage();
-                runOnUiThread(()->onOcrDone(null,msg,null));
+                runOnUiThread(()->onOcrDone(null,msg,null,null));
                 return;
             }
-            runOnUiThread(()->onOcrDone(items,null,store));
+            runOnUiThread(()->onOcrDone(items,null,store,raw));
         });
     }
 
-    private void onOcrDone(List<OcrParser.Parsed> items,String err,String store){
+    private void onOcrDone(List<OcrParser.Parsed> items,String err,String store,String rawText){
         progressBar.setVisibility(View.GONE);
         if(err!=null){
             statusText.setText("⚠ "+err);
+            new AlertDialog.Builder(this)
+                .setTitle("لم يكتمل التحليل")
+                .setMessage(err+"\n\n💡 أول مرة يحتاج إنترنت لتنزيل نموذج القراءة (≈15 م.ب) — بعد تنزيله يعمل بدون إنترنت.\n\nيمكنك إضافة الأصناف يدويًا الآن.")
+                .setPositiveButton("حسنًا",null)
+                .show();
             addRow("",0,"",0);
             return;
         }
         if(items==null||items.isEmpty()){
-            statusText.setText("لم يُتعرّف على أصناف في الصورة — أضفها يدويًا");
+            if(rawText==null||rawText.trim().isEmpty()){
+                statusText.setText("لم يتعرف على أي نص في الصورة");
+                new AlertDialog.Builder(this)
+                    .setTitle("لم يُقرأ أي نص من الصورة")
+                    .setMessage("تأكد من:\n• الصورة واضحة وغير مغبشة (ثبّت الجوال)\n• الفاتورة تملأ أغلب الصورة (اقترب من الكاميرا)\n• الإضاءة جيدة والفاتورة مسطحة\n• الفاتورة مطبوعة وليست مكتوبة بخط اليد\n\nثم أعد المحاولة، أو أضف الأصناف يدويًا.")
+                    .setPositiveButton("إضافة يدويًا",null)
+                    .show();
+            }else{
+                statusText.setText("تم قراءة النص لكن لم يُفرز أصناف — انظر ما قرأه التطبيق");
+                String show=rawText.trim();
+                if(show.length()>600)show=show.substring(0,600)+"…";
+                new AlertDialog.Builder(this)
+                    .setTitle("النص الذي قرأه التطبيق")
+                    .setMessage(show)
+                    .setPositiveButton("إغلاق",null)
+                    .show();
+            }
             addRow("",0,"",0);
             return;
         }
