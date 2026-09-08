@@ -1,0 +1,23 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.alameer.invoicecounter'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.alameer.invoicecounter'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    // التعرف على النصوص (يدعم العربية) — يعمل على الجهاز بعد تنزيل النموذج مرة واحدة
+    implementation 'com.google.android.gms:play-services-mlkit-text-recognition:16.0.1'
+}
