@@ -23,7 +23,7 @@ public final class OcrParser {
         "حبة","عبوة","علبة","علبة.","كيس","كيس.","شنطة","برطمان","صندوق","صناديق","قطعة","قطع","باكو",
         "رزمة","رزمات","زجاجة","قارورة","طبق","كرتون","كارتون","بالة","جوال","جوال.","شال"));
 
-    private static final String[] NOISE={"الإجمالي","الإجمالى","الاجمالي","الاجمالى","اجمالي","مجموع","المجموع","القيمة","قيمة","صافي","الصافي","الخصم","خصم","الكمية","الكميات","كاشير","كاشييه","خدمة","خدمه","الشحن","شحن","نقل","تاريخ","التاريخ","الساعة","رقم","فاتورة","فاتوره","شكرا","شكراً","مرحبا","مرحباً","العنوان","الهاتف","تليفون","موبايل","واتساب","انستجرام","فيسبوك","الدفع","دفع","بالتوفيق","الرجاء","total","subtotal","tax","cash","card","credit","debit","balance","customer","cashier","invoice","item","price","discount","grand","welcome","thank","thanks","please"};
+    private static final String[] NOISE={"الإجمالي","الإجمالى","الاجمالي","الاجمالى","اجمالي","مجموع","المجموع","القيمة","قيمة","صافي","الصافي","الخصم","خصم","الكمية","الكميات","كاشير","كاشييه","خدمة","خدمه","الشحن","شحن","نقل","تاريخ","التاريخ","الساعة","رقم","فاتورة","فاتوره","شكرا","شكراً","مرحبا","مرحباً","العنوان","الهاتف","تليفون","موبايل","واتساب","انستجرام","فيسبوك","الدفع","دفع","بالتوفيق","الرجاء","بقالة","محلات","محل","مخزن","مستودع","تجارية","محطة","اجل","الاجل","الجملة","نسخة","فرع","شوارع","شارع","total","subtotal","tax","cash","card","credit","debit","balance","customer","cashier","invoice","item","price","discount","grand","welcome","thank","thanks","please"};
     private static final Set<String> NOISE_SET;
     static{
         NOISE_SET=new HashSet<>();
@@ -91,6 +91,7 @@ public final class OcrParser {
         name=name.replaceAll("[؛;.،,]+$","").trim();
         if(name.length()<2)return null;
         if(isNoise(name))return null;
+        if(nums.isEmpty())return null; // سطر بلا أرقام (اسم محل/عنوان) ليس صنفًا
 
         double qty=0,price=0;
         int n=nums.size();
@@ -122,17 +123,37 @@ public final class OcrParser {
                 else{price=v1;qty=v2;}
             }
         }else{
-            double v1=nums.get(0)[0];
-            if(nums.get(0)[1]>0&&weightName(name)){
-                qty=v1;
-                price=n>=2?nums.get(1)[0]:0;
-            }else{
-                qty=(nums.get(0)[1]==0)?v1:1;
-                price=0;
-                for(int i=0;i<n;i++){
-                    if(nums.get(i)[1]>0){price=nums.get(i)[0];break;}
+            // محاولة: آخر رقم في السطر هو الإجمالي = العدد × سعر الوحدة
+            // (نمط فواتير الجملة الجدولية) — نختار الزوج الذي يحققها
+            double total=nums.get(n-1)[0];
+            boolean solved=false;
+            if(total>0){
+                if(pairMatches(nums,n-3,n-2,total)){
+                    qty=nums.get(n-3)[0];price=nums.get(n-2)[0];solved=true;
+                }else{
+                    for(int i=n-4;i>=0&&!solved;i--){
+                        if(pairMatches(nums,i,n-2,total)){qty=nums.get(i)[0];price=nums.get(n-2)[0];solved=true;}
+                    }
+                    for(int j=n-3;j>=1&&!solved;j--){
+                        for(int i=j-1;i>=0&&!solved;i--){
+                            if(pairMatches(nums,i,j,total)){qty=nums.get(i)[0];price=nums.get(j)[0];solved=true;}
+                        }
+                    }
                 }
-                if(price==0&&n>=2)price=nums.get(1)[0];
+            }
+            if(!solved){
+                double v1=nums.get(0)[0];
+                if(nums.get(0)[1]>0&&weightName(name)){
+                    qty=v1;
+                    price=nums.get(1)[0];
+                }else{
+                    qty=(nums.get(0)[1]==0)?v1:1;
+                    price=0;
+                    for(int i=0;i<n;i++){
+                        if(nums.get(i)[1]>0){price=nums.get(i)[0];break;}
+                    }
+                    if(price==0)price=nums.get(1)[0];
+                }
             }
         }
         if(qty<0)qty=0;
@@ -154,6 +175,14 @@ public final class OcrParser {
     private static boolean weightName(String n){
         String x=n.toLowerCase(Locale.US);
         return x.contains("كجم")||x.contains("كيلو")||x.contains("جرام")||x.contains("لتر")||x.contains("مل")||x.contains("جم")||x.contains("ك ج")||x.contains("غرام");
+    }
+
+    private static boolean pairMatches(ArrayList<double[]> nums,int i,int j,double total){
+        if(i<0||j<0||i>=j)return false;
+        double a=nums.get(i)[0],b=nums.get(j)[0];
+        if(a<=0||b<=0)return false;
+        double prod=a*b;
+        return Math.abs(prod-total)<=Math.max(total*0.02,0.01);
     }
 
     private static boolean isNoise(String s){
