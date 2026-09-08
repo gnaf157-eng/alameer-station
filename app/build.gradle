@@ -9,7 +9,7 @@ android {
         targetSdk 35
         versionCode 6
         versionName '1.5.0'
-        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://drive.google.com/uc?export=download&id=1sc77fA7-27KRArxV0FJcsdodVh43lxI-"'
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://drive.google.com/uc?export=download&id=15-szIB-Fq4nIXhX-FgnBTdbNc-9cdllE"'
         buildConfigField 'String', 'SYNC_URL', '"https://script.google.com/macros/s/AKfycbzf1j2bcsyA-7OULRshX2iGRTy1G-zisp3NBvMm6Ciyixwnnky4ByQmBl4u6MptqKoe/exec"'
         buildConfigField 'String', 'SYNC_SECRET', '"Alameer2026SecretKey99"'
     }
