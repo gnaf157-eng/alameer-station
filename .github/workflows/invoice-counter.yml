@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     # تجاهل الدورات الذاتية عندما يرفع الـ workflow نفسه الملفات
-    if: github.event.head_commit.message != 'chore(invoice-counter): publish build artifacts'
+    if: "github.event.head_commit.message != 'chore(invoice-counter): publish build artifacts'"
     runs-on: ubuntu-latest
     permissions:
       contents: write
