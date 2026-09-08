@@ -49,19 +49,28 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -f invoice-counter/apk/Invoice-Counter-v1.0.0.apk ]; then
+          if [ -f invoice-counter/apk/Invoice-Counter-v2.0.0.apk ]; then
             git add -f invoice-counter/apk
           fi
           git add invoice-counter/build-failure.log 2>/dev/null || true
+          echo "staged files:"
+          git diff --cached --name-only
           if git diff --cached --quiet; then
             echo "nothing to publish"
           else
             git commit -m "chore(invoice-counter): publish build artifacts"
+            LOCAL_HEAD=$(git rev-parse HEAD)
             for i in 1 2 3 4 5; do
               if git push origin HEAD:"$GITHUB_REF" 2>&1; then break; fi
               sleep 15
-              git pull --rebase origin "$GITHUB_REF" || true
+              git pull --rebase origin "$GITHUB_REF" 2>&1 || true
             done
+            REMOTE_HEAD=$(git ls-remote origin "$GITHUB_REF" | awk '{print $1}')
+            echo "local=$LOCAL_HEAD remote=$REMOTE_HEAD"
+            if [ "$REMOTE_HEAD" != "$LOCAL_HEAD" ]; then
+              echo "ERROR: the artifact commit did not land on the branch"
+              exit 1
+            fi
           fi
       - name: Upload installable APK
         if: env.BUILD_OK == '1'
