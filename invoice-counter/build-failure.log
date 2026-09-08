@@ -26,91 +26,18 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugJavaResource
 
 > Task :app:compileDebugJavaWithJavac
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Util.java:160: error: cannot find symbol
-    public static Bitmap decodeScaledUri(ContentResolver cr,Uri uri,int maxSide){
-                                                            ^
-  symbol:   class Uri
-  location: class Util
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:31: error: cannot find symbol
-import com.google.mlkit.vision.text.TextRecognizerOptions;
-                                   ^
-  symbol:   class TextRecognizerOptions
-  location: package com.google.mlkit.vision.text
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:111: error: incompatible types: inference variable T has incompatible bounds
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
-                                    ^
-    lower bounds: String,Object
-    lower bounds: Object
-  where T is a type-variable:
-    T extends Object declared in method <T>toArray(T[])
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:119: error: incompatible types: inference variable T has incompatible bounds
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
-                                    ^
-    lower bounds: String,Object
-    lower bounds: Object
-  where T is a type-variable:
-    T extends Object declared in method <T>toArray(T[])
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:127: error: incompatible types: inference variable T has incompatible bounds
-        try(Cursor c=getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]))){
-                                          ^
-    lower bounds: String,Object
-    lower bounds: Object
-  where T is a type-variable:
-    T extends Object declared in method <T>toArray(T[])
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:137: error: incompatible types: inference variable T has incompatible bounds
-        return getReadableDatabase().rawQuery(sql.toString(),args.toArray(new Object[0]));
-                                    ^
-    lower bounds: String,Object
-    lower bounds: Object
-  where T is a type-variable:
-    T extends Object declared in method <T>toArray(T[])
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/OcrParser.java:37: error: cannot find symbol
-        for(Text.Block b:text.getBlocks()){
-                             ^
-  symbol:   method getBlocks()
-  location: variable text of type Text
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/OcrParser.java:37: error: cannot find symbol
-        for(Text.Block b:text.getBlocks()){
-                ^
-  symbol:   class Block
-  location: class Text
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/OcrParser.java:49: error: cannot find symbol
-        for(Text.Block b:text.getBlocks()){
-                             ^
-  symbol:   method getBlocks()
-  location: variable text of type Text
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/OcrParser.java:49: error: cannot find symbol
-        for(Text.Block b:text.getBlocks()){
-                ^
-  symbol:   class Block
-  location: class Text
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:289: error: cannot find symbol
-        if(gs!=GoogleApiAvailability.ConnectionPlayStatusCode.SUCCESS){
-                                    ^
-  symbol:   variable ConnectionPlayStatusCode
-  location: class GoogleApiAvailability
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:302: error: cannot find symbol
-                TextRecognizer rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-                                                             ^
-  symbol:   variable TextRecognizerOptions
-  location: class ReviewActivity
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:304: error: method getResult in class Task<TResult> cannot be applied to given types;
-                com.google.mlkit.vision.text.Text vt=rec.process(in).getResult(120,TimeUnit.SECONDS);
-                                                                    ^
-  required: Class<X>
-  found:    int,TimeUnit
-  reason: cannot infer type-variable(s) X
-    (actual and formal argument lists differ in length)
-  where X,TResult are type-variables:
-    X extends Throwable declared in method <X>getResult(Class<X>)
-    TResult extends Object declared in class Task
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:300: error: method getClient in class TextRecognition cannot be applied to given types;
+                TextRecognizer rec=TextRecognition.getClient();
+                                                  ^
+  required: TextRecognizerOptionsInterface
+  found:    no arguments
+  reason: actual and formal argument lists differ in length
 Note: /home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
-13 errors
+1 error
 
 > Task :app:compileDebugJavaWithJavac FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788902101133.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788902339148.json
 
 FAILURE: Build failed with an exception.
 
@@ -122,5 +49,5 @@ Execution failed for task ':app:compileDebugJavaWithJavac'.
 > Run with --info option to get more log output.
 > Run with --scan to get full insights.
 
-BUILD FAILED in 35s
+BUILD FAILED in 38s
 19 actionable tasks: 19 executed
