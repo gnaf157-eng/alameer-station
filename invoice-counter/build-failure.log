@@ -1,0 +1,90 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.9/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:javaPreCompileDebug
+> Task :app:generateDebugResValues
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:packageDebugResources
+> Task :app:parseDebugLocalResources
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes NO-SOURCE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:compressDebugAssets
+> Task :app:processDebugResources
+> Task :app:mergeDebugJavaResource
+
+> Task :app:compileDebugJavaWithJavac
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:81: error: method delete in class SQLiteDatabase cannot be applied to given types;
+        db.delete("invoice_items","1=1");
+          ^
+  required: String,String,String[]
+  found:    String,String
+  reason: actual and formal argument lists differ in length
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:82: error: method delete in class SQLiteDatabase cannot be applied to given types;
+        db.delete("invoices","1=1");
+          ^
+  required: String,String,String[]
+  found:    String,String
+  reason: actual and formal argument lists differ in length
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/Db.java:83: error: method delete in class SQLiteDatabase cannot be applied to given types;
+        db.delete("item_names","1=1");
+          ^
+  required: String,String,String[]
+  found:    String,String
+  reason: actual and formal argument lists differ in length
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:426: error: cannot find symbol
+        Intent i=new Intent(this,ReviewActivity.class);
+        ^
+  symbol:   class Intent
+  location: class ReviewActivity
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:426: error: cannot find symbol
+        Intent i=new Intent(this,ReviewActivity.class);
+                     ^
+  symbol:   class Intent
+  location: class ReviewActivity
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReportActivity.java:193: error: method report in class Db cannot be applied to given types;
+        try(Cursor c=db.report(from,to,filter,order)){
+                       ^
+  required: String,String,String
+  found:    String,String,String,String
+  reason: actual and formal argument lists differ in length
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReportActivity.java:251: error: method report in class Db cannot be applied to given types;
+            try(Cursor c=db.report(from,to,searchField.getText().toString().trim(),order)){
+                           ^
+  required: String,String,String
+  found:    String,String,String,String
+  reason: actual and formal argument lists differ in length
+Note: /home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+7 errors
+
+> Task :app:compileDebugJavaWithJavac FAILED
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788909873767.json
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 31s
+20 actionable tasks: 20 executed
