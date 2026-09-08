@@ -1,0 +1,83 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.9/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:javaPreCompileDebug
+> Task :app:generateDebugResValues
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:mergeDebugResources
+> Task :app:processDebugMainManifest
+> Task :app:packageDebugResources
+> Task :app:parseDebugLocalResources
+> Task :app:processDebugManifest
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes NO-SOURCE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:compressDebugAssets
+> Task :app:processDebugResources
+> Task :app:mergeDebugJavaResource
+
+> Task :app:compileDebugJavaWithJavac
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:334: error: cannot find symbol
+        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
+                                     ^
+  symbol:   class DownloadParams
+  location: package com.google.mlkit.common.model
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:335: error: cannot find symbol
+            .add(com.google.mlkit.vision.common.OptInModuleId.TEXT_RECOGNITION)
+                                               ^
+  symbol:   class OptInModuleId
+  location: package com.google.mlkit.vision.common
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:334: error: package com.google.mlkit.common.model.DownloadParams does not exist
+        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
+                                                                                                            ^
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:339: error: cannot find symbol
+        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
+                               ^
+  symbol:   class ModuleInstallRequest
+  location: package com.google.mlkit.common
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:339: error: cannot find symbol
+        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
+                                                                                ^
+  symbol:   class ModuleInstallRequest
+  location: package com.google.mlkit.common
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:340: error: cannot find symbol
+        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
+                               ^
+  symbol:   class ModuleInstallClient
+  location: package com.google.mlkit.common
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:340: error: cannot find symbol
+        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
+                                                                                  ^
+  symbol:   class ModuleInstallClient
+  location: package com.google.mlkit.common
+Note: /home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+7 errors
+
+> Task :app:compileDebugJavaWithJavac FAILED
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788911753153.json
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 32s
+20 actionable tasks: 20 executed
