@@ -4,7 +4,7 @@ import android.app.*;import android.os.*;import android.content.*;import android
 
 public class ShiftActivity extends Activity {
     Db db;long shiftId;int workerId;String workerName;LinearLayout readingsBox,movementsBox;TextView salesText,balanceText;final ArrayList<ReadingInput> inputs=new ArrayList<>();
-    static class ReadingInput { long id; EditText current; ReadingInput(long i,EditText e){id=i;current=e;} }
+    static class ReadingInput { long id; EditText current; EditText previous; ReadingInput(long i,EditText e,EditText p){id=i;current=e;previous=p;} }
     @Override public void onCreate(Bundle b){super.onCreate(b);db=new Db(this);shiftId=getIntent().getLongExtra("shiftId",0);workerId=getIntent().getIntExtra("workerId",0);workerName=getIntent().getStringExtra("workerName");build();}
     LinearLayout[] pages=new LinearLayout[5];
     Button[] tabs=new Button[4];
@@ -184,18 +184,36 @@ public class ShiftActivity extends Activity {
             LinearLayout row=column();row.setPadding(0,dp(8),0,dp(12));
             LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
             top.addView(text(c.getString(1),16,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
-            top.addView(text("السابقة  "+money(c.getDouble(3)),15,Util.NAVY,true));row.addView(top);
+            row.addView(top);
             boolean stopped=c.getInt(7)==0;
             row.addView(text(c.getString(2)+"  •  سعر اللتر "+money(c.getDouble(5))+(stopped?"  •  أوقفها المدير":""),12,stopped?Util.RED:0xff7c8186,false),space());
-            EditText current=new EditText(this);styleInput(current);current.setHint("القراءة الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
-            if(!c.isNull(4))current.setText(fmt(c.getDouble(4)));
-            if(stopped){current.setEnabled(false);current.setAlpha(0.6f);}
-            row.addView(current);
+            LinearLayout pair=new LinearLayout(this);pair.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout prevBox=column();prevBox.addView(text("القراءة السابقة",12,0xff7c8186,false));
+            EditText previous=new EditText(this);styleInput(previous);previous.setHint("السابقة");previous.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);previous.setTextDirection(View.TEXT_DIRECTION_LTR);
+            previous.setText(fmt(c.getDouble(3)));prevBox.addView(previous);
+            LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff7c8186,false));
+            EditText current=new EditText(this);styleInput(current);current.setHint("الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
+            if(!c.isNull(4))current.setText(fmt(c.getDouble(4)));currBox.addView(current);
+            LinearLayout.LayoutParams half=new LinearLayout.LayoutParams(0,-2,1);half.setMargins(dp(3),0,dp(3),0);
+            pair.addView(prevBox,half);pair.addView(currBox,new LinearLayout.LayoutParams(half));
+            if(stopped){current.setEnabled(false);current.setAlpha(0.6f);previous.setEnabled(false);previous.setAlpha(0.6f);}
+            row.addView(pair);
             readingsBox.addView(row);View divider=new View(this);divider.setBackgroundColor(0xffeceef0);readingsBox.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
-            inputs.add(new ReadingInput(c.getLong(0),current));
+            inputs.add(new ReadingInput(c.getLong(0),current,previous));
         }}
     }
-    private boolean saveReadings(){boolean ok=true;for(ReadingInput r:inputs)if(r.current.isEnabled()&&!r.current.getText().toString().trim().isEmpty())if(!db.saveReading(r.id,Util.number(r.current.getText().toString())))ok=false;Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة أقل من السابقة",Toast.LENGTH_SHORT).show();return ok;}
+    private boolean saveReadings(){
+        boolean ok=true;
+        for(ReadingInput r:inputs){
+            if(!r.current.isEnabled())continue;
+            String prev=r.previous.getText().toString().trim();
+            if(!prev.isEmpty()&&!db.savePrevious(r.id,Util.number(prev)))ok=false;
+            String curr=r.current.getText().toString().trim();
+            if(!curr.isEmpty()&&!db.saveReading(r.id,Util.number(curr)))ok=false;
+        }
+        Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة حالية أقل من السابقة",Toast.LENGTH_SHORT).show();
+        loadReadings();
+        return ok;}
     private void movementDialog(String type,String label){LinearLayout box=new LinearLayout(this);box.setPadding(30,10,30,0);box.setOrientation(LinearLayout.VERTICAL);EditText name=new EditText(this);name.setHint("الاسم أو البيان");EditText amount=new EditText(this);amount.setHint("المبلغ");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);box.addView(name);box.addView(amount);new AlertDialog.Builder(this).setTitle("إضافة "+label).setView(box).setPositiveButton("حفظ",(d,w)->{if(name.getText().toString().trim().isEmpty()||Util.number(amount.getText().toString())<=0){Toast.makeText(this,"أدخل الاسم والمبلغ",Toast.LENGTH_SHORT).show();return;}db.addMovement(shiftId,type,name.getText().toString(),Util.number(amount.getText().toString()));loadMovements();refreshTotals();}).setNegativeButton("إلغاء",null).show();}
     private void loadMovements(){
         movementsBox.removeAllViews();int count=0;

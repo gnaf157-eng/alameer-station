@@ -9,7 +9,12 @@ public class AdminActivity extends Activity {
     private void home(){shell("إعدادات المدير");Button workers=Util.button(this,"العمال ورموز الدخول");workers.setOnClickListener(v->workers());content.addView(workers,Util.spaced());Button prices=Util.goldButton(this,"أسعار اللتر");prices.setOnClickListener(v->prices());content.addView(prices,Util.spaced());
         Button pumps=Util.button(this,"الطرمبات والقراءات");pumps.setOnClickListener(v->pumps());content.addView(pumps,Util.spaced());int n=db.pendingCount();Button approvals=Util.goldButton(this,"الورديات بانتظار الاعتماد"+(n>0?" ("+n+")":""));approvals.setOnClickListener(v->approvals());content.addView(approvals,Util.spaced());Button sync=Util.button(this,"مزامنة الآن مع Google Sheets");sync.setOnClickListener(v->{Sync s2=new Sync(this);s2.run(true);s2.pullPrices(true);});content.addView(sync,Util.spaced());
         Button monthly=Util.button(this,"التقرير الشهري");monthly.setOnClickListener(v->monthly());content.addView(monthly,Util.spaced());
-        Button backup=Util.button(this,"نسخة احتياطية واستعادة");backup.setOnClickListener(v->backupScreen());content.addView(backup,Util.spaced());content.addView(Util.card(this,"ابدأ بإدخال الأسعار والقراءات الافتتاحية قبل تشغيل أول وردية حقيقية."),Util.spaced());}
+        Button backup=Util.button(this,"نسخة احتياطية واستعادة");backup.setOnClickListener(v->backupScreen());content.addView(backup,Util.spaced());
+        boolean open=db.openAccess();
+        Button access=Util.button(this,"وضع التجربة (دخول بلا رمز): "+(open?"مفعّل":"مغلق"));
+        if(open)access.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Util.RED));
+        access.setOnClickListener(v->accessDialog(open));
+        content.addView(access,Util.spaced());content.addView(Util.card(this,"ابدأ بإدخال الأسعار والقراءات الافتتاحية قبل تشغيل أول وردية حقيقية."),Util.spaced());}
     private void back(){Button b=Util.button(this,"رجوع");b.setOnClickListener(v->home());content.addView(b,Util.spaced());}
     private void workers(){shell("إعداد العمال");
         Button add=Util.goldButton(this,"＋ إضافة عامل جديد");add.setOnClickListener(v->addWorkerDialog());content.addView(add,Util.spaced());
@@ -75,6 +80,15 @@ public class AdminActivity extends Activity {
     private void approvals(){shell("بانتظار اعتماد المدير");try(Cursor c=db.submitted()){if(c.getCount()==0)content.addView(Util.label(this,"لا توجد ورديات بانتظار الاعتماد."));while(c.moveToNext()){long id=c.getLong(0);String worker=c.getString(1),date=c.getString(2),reason=c.getString(5);double sales=c.getDouble(3),balance=c.getDouble(4);Button b=Util.button(this,"وردية #"+id+" — "+worker+"\n"+date+" | المبيعات: "+fmt(sales)+" | الباقي: "+fmt(balance)+(reason.isEmpty()?"":"\nالسبب: "+reason));b.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+id).setMessage("اعتمدها لتصبح قراءات الإغلاق بداية الوردية التالية، أو أرجعها للعامل للتصحيح.").setPositiveButton("اعتماد",(d,w)->{db.approve(id);new Sync(this).run(false);approvals();}).setNeutralButton("إرجاع للعامل",(d,w)->returnDialog(id)).setNegativeButton("إلغاء",null).show());content.addView(b);}}back();}
     private void returnDialog(long id){EditText note=input("سبب الإرجاع وما يجب تصحيحه","",false);LinearLayout box=form();box.addView(note);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("إرجاع الوردية #"+id).setView(box).setPositiveButton("إرجاع",null).setNegativeButton("إلغاء",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String text=note.getText().toString().trim();if(text.isEmpty()){note.setError("اكتب سبب الإرجاع");return;}dialog.dismiss();db.returnToWorker(id,text);new Sync(this).run(false);approvals();}));dialog.show();}
 
+    private void accessDialog(boolean open){
+        new AlertDialog.Builder(this)
+            .setTitle(open?"إغلاق وضع التجربة":"تفعيل وضع التجربة")
+            .setMessage(open
+                ?"سيعود الدخول برمز PIN لكل عامل. استخدم هذا عند ربط العمال بالمنظومة الواحدة."
+                :"سيدخل أي شخص باختيار الاسم من قائمة بلا رمز، ويشمل ذلك حساب المدير.\n\nمناسب لتجربة المطابقة قبل الربط، لكن لا تتركه مفعّلًا في التشغيل الرسمي.")
+            .setPositiveButton(open?"إغلاقه":"تفعيله",(d,w)->{db.setOpenAccess(!open);home();
+                Toast.makeText(this,open?"عاد الدخول بالرمز.":"فُعّل الدخول بلا رمز.",Toast.LENGTH_LONG).show();})
+            .setNegativeButton("إلغاء",null).show();}
     private void prices(){shell("أسعار اللتر");
         content.addView(Util.card(this,"غيّر سعر اللتر مرة واحدة، فيُطبَّق على كل طرمبات هذا النوع."),Util.spaced());
         int types=0;

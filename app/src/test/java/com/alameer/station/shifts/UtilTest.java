@@ -33,6 +33,11 @@ public class UtilTest {
     @Test public void pumpSalesUseMeterDifference(){
         assertEquals(5000.0, Calc.pumpSales(1000, 1010, 500), 0.001);
     }
+    @Test public void editingPreviousReadingChangesSales(){
+        // عدّاد سابق خاطئ 1000 صُحّح إلى 1005 => تقل المبيعات
+        assertEquals(5000.0, Calc.pumpSales(1000, 1010, 500), 0.001);
+        assertEquals(2500.0, Calc.pumpSales(1005, 1010, 500), 0.001);
+    }
     @Test public void pumpSalesAreZeroWhenMeterUnchanged(){
         assertEquals(0.0, Calc.pumpSales(1000, 1000, 500), 0.001);
     }
