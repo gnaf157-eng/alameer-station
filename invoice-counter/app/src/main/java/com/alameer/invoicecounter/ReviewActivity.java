@@ -338,11 +338,11 @@ public class ReviewActivity extends Activity {
             com.google.android.gms.common.moduleinstall.ModuleInstallClient client=com.google.android.gms.common.moduleinstall.ModuleInstall.getClient(this);
             com.google.android.gms.common.moduleinstall.ModuleAvailabilityResponse avail=null;
             try{
-                avail=client.areModulesAvailable(api).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+                avail=client.areModulesAvailable(api).getResult();
             }catch(Exception e){}
             if(avail!=null&&avail.areModulesAvailable())return;
             com.google.android.gms.common.moduleinstall.ModuleInstallRequest req=com.google.android.gms.common.moduleinstall.ModuleInstallRequest.newBuilder().addApi(api).build();
-            client.installModules(req).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+            client.installModules(req).getResult();
             // تم طلب التنزيل — runOcrWithRetries ستنتظر اكتماله
         }catch(Exception e){
             // إن لم تتوفر واجهة التثبيت الصريحة، سيُجرى التحليل مباشرة وقد يبدأ التنزيل تلقائيًا
@@ -356,12 +356,12 @@ public class ReviewActivity extends Activity {
     /** يحاول التحليل عدة مرات بانتظار اكتمال تنزيل النموذج */
     private com.google.mlkit.vision.text.Text runOcrWithRetries(Bitmap b) throws Exception{
         Exception last=null;
-        for(int attempt=0;attempt<12;attempt++){
+        for(int attempt=0;attempt<15;attempt++){
             TextRecognizer rec=null;
             try{
                 rec=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
                 InputImage in=InputImage.fromBitmap(b,0);
-                return rec.process(in).getResult(25, java.util.concurrent.TimeUnit.SECONDS);
+                return rec.process(in).getResult();
             }catch(Exception e){
                 last=e;
             }finally{
