@@ -62,7 +62,15 @@ public class AdminActivity extends Activity {
                 else db.updatePump(id,name.getText().toString(),fuel.getText().toString(),Util.number(price.getText().toString()),Util.number(reading.getText().toString()),chosen);
                 pumps();})
             .setNegativeButton("إلغاء",null);
-        if(!creating)builder.setNeutralButton(active?"إيقاف الطرمبة":"إعادة تفعيلها",(d,w)->{db.setPumpActive(id,!active);pumps();});
+        if(!creating)builder.setNeutralButton(active?"إيقاف الطرمبة":"إعادة تفعيلها",(d,w)->{
+            if(active&&db.pumpInOpenShift(id)){
+                new AlertDialog.Builder(this).setTitle("الطرمبة داخل وردية مفتوحة")
+                    .setMessage("سيختفي سطر هذه الطرمبة من وردية العامل الجارية، ولن تُحتسب ضمن مبيعاتها. إن كان قد باع منها اليوم فاطلب منه إدخال القراءة أولًا.")
+                    .setPositiveButton("إيقافها",(d2,w2)->{db.setPumpActive(id,false);pumps();})
+                    .setNegativeButton("تراجع",null).show();
+                return;
+            }
+            db.setPumpActive(id,!active);pumps();});
         builder.show();}
     private void approvals(){shell("بانتظار اعتماد المدير");try(Cursor c=db.submitted()){if(c.getCount()==0)content.addView(Util.label(this,"لا توجد ورديات بانتظار الاعتماد."));while(c.moveToNext()){long id=c.getLong(0);String worker=c.getString(1),date=c.getString(2),reason=c.getString(5);double sales=c.getDouble(3),balance=c.getDouble(4);Button b=Util.button(this,"وردية #"+id+" — "+worker+"\n"+date+" | المبيعات: "+fmt(sales)+" | الباقي: "+fmt(balance)+(reason.isEmpty()?"":"\nالسبب: "+reason));b.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+id).setMessage("اعتمدها لتصبح قراءات الإغلاق بداية الوردية التالية، أو أرجعها للعامل للتصحيح.").setPositiveButton("اعتماد",(d,w)->{db.approve(id);new Sync(this).run(false);approvals();}).setNeutralButton("إرجاع للعامل",(d,w)->returnDialog(id)).setNegativeButton("إلغاء",null).show());content.addView(b);}}back();}
     private void returnDialog(long id){EditText note=input("سبب الإرجاع وما يجب تصحيحه","",false);LinearLayout box=form();box.addView(note);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("إرجاع الوردية #"+id).setView(box).setPositiveButton("إرجاع",null).setNegativeButton("إلغاء",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String text=note.getText().toString().trim();if(text.isEmpty()){note.setError("اكتب سبب الإرجاع");return;}dialog.dismiss();db.returnToWorker(id,text);new Sync(this).run(false);approvals();}));dialog.show();}
