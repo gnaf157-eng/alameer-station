@@ -6,7 +6,8 @@ public class AdminActivity extends Activity {
     Db db;LinearLayout content;
     @Override public void onCreate(Bundle b){super.onCreate(b);db=new Db(this);if("approvals".equals(getIntent().getStringExtra("screen")))approvals();else home();}
     private void shell(String title){ScrollView scroll=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(18,24,18,50);content.setBackgroundColor(Util.BG);content.addView(Util.title(this,title),Util.spaced());scroll.addView(content);setContentView(scroll);}
-    private void home(){shell("إعدادات المدير");Button workers=Util.button(this,"العمال ورموز الدخول");workers.setOnClickListener(v->workers());content.addView(workers,Util.spaced());Button pumps=Util.button(this,"الطرمبات والأسعار والقراءات");pumps.setOnClickListener(v->pumps());content.addView(pumps,Util.spaced());int n=db.pendingCount();Button approvals=Util.goldButton(this,"الورديات بانتظار الاعتماد"+(n>0?" ("+n+")":""));approvals.setOnClickListener(v->approvals());content.addView(approvals,Util.spaced());Button sync=Util.button(this,"مزامنة الآن مع Google Sheets");sync.setOnClickListener(v->{Sync s2=new Sync(this);s2.run(true);s2.pullPrices(true);});content.addView(sync,Util.spaced());
+    private void home(){shell("إعدادات المدير");Button workers=Util.button(this,"العمال ورموز الدخول");workers.setOnClickListener(v->workers());content.addView(workers,Util.spaced());Button prices=Util.goldButton(this,"أسعار اللتر");prices.setOnClickListener(v->prices());content.addView(prices,Util.spaced());
+        Button pumps=Util.button(this,"الطرمبات والقراءات");pumps.setOnClickListener(v->pumps());content.addView(pumps,Util.spaced());int n=db.pendingCount();Button approvals=Util.goldButton(this,"الورديات بانتظار الاعتماد"+(n>0?" ("+n+")":""));approvals.setOnClickListener(v->approvals());content.addView(approvals,Util.spaced());Button sync=Util.button(this,"مزامنة الآن مع Google Sheets");sync.setOnClickListener(v->{Sync s2=new Sync(this);s2.run(true);s2.pullPrices(true);});content.addView(sync,Util.spaced());
         Button monthly=Util.button(this,"التقرير الشهري");monthly.setOnClickListener(v->monthly());content.addView(monthly,Util.spaced());
         Button backup=Util.button(this,"نسخة احتياطية واستعادة");backup.setOnClickListener(v->backupScreen());content.addView(backup,Util.spaced());content.addView(Util.card(this,"ابدأ بإدخال الأسعار والقراءات الافتتاحية قبل تشغيل أول وردية حقيقية."),Util.spaced());}
     private void back(){Button b=Util.button(this,"رجوع");b.setOnClickListener(v->home());content.addView(b,Util.spaced());}
@@ -46,12 +47,12 @@ public class AdminActivity extends Activity {
         back();}
     private void pumpDialog(long id,String oldName,String oldFuel,double oldPrice,double oldReading,long oldWorkerId,boolean active){
         boolean creating=id==0;
-        LinearLayout box=form();EditText name=input("اسم الطرمبة",oldName,false),fuel=input("نوع الوقود",oldFuel,false),price=input("سعر اللتر",creating?"":fmt(oldPrice),true),reading=input("القراءة الافتتاحية / الحالية",creating?"":fmt(oldReading),true);
+        LinearLayout box=form();EditText name=input("اسم الطرمبة",oldName,false),fuel=input("نوع الوقود",oldFuel,false),price=input(creating?"سعر اللتر (فارغ = سعر النوع)":"سعر اللتر",creating?"":fmt(oldPrice),true),reading=input("القراءة الافتتاحية / الحالية",creating?"":fmt(oldReading),true);
         ArrayList<String> names=new ArrayList<>();ArrayList<Integer> ids=db.workerIds();
         try(Cursor c=db.workers()){while(c.moveToNext())if("WORKER".equals(c.getString(3))&&c.getInt(5)==1)names.add(c.getString(1));}
         Spinner worker=new Spinner(this);worker.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));
         worker.setSelection(Math.max(0,ids.indexOf((int)oldWorkerId)));
-        box.addView(name);box.addView(fuel);box.addView(price);box.addView(reading);box.addView(Util.label(this,"العامل المسؤول في النهار"));box.addView(worker);
+        box.addView(name);box.addView(fuel);box.addView(price);box.addView(Util.label(this,"لتغيير سعر كل طرمبات النوع دفعة واحدة استخدم شاشة «أسعار اللتر»."));box.addView(reading);box.addView(Util.label(this,"العامل المسؤول في النهار"));box.addView(worker);
         AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle(creating?"طرمبة جديدة":"تعديل الطرمبة").setView(box)
             .setPositiveButton(creating?"إضافة":"حفظ",(d,w)->{
                 if(names.isEmpty()){Toast.makeText(this,"أضف عاملًا نشطًا أولًا",Toast.LENGTH_LONG).show();return;}
@@ -66,6 +67,38 @@ public class AdminActivity extends Activity {
     private void approvals(){shell("بانتظار اعتماد المدير");try(Cursor c=db.submitted()){if(c.getCount()==0)content.addView(Util.label(this,"لا توجد ورديات بانتظار الاعتماد."));while(c.moveToNext()){long id=c.getLong(0);String worker=c.getString(1),date=c.getString(2),reason=c.getString(5);double sales=c.getDouble(3),balance=c.getDouble(4);Button b=Util.button(this,"وردية #"+id+" — "+worker+"\n"+date+" | المبيعات: "+fmt(sales)+" | الباقي: "+fmt(balance)+(reason.isEmpty()?"":"\nالسبب: "+reason));b.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+id).setMessage("اعتمدها لتصبح قراءات الإغلاق بداية الوردية التالية، أو أرجعها للعامل للتصحيح.").setPositiveButton("اعتماد",(d,w)->{db.approve(id);new Sync(this).run(false);approvals();}).setNeutralButton("إرجاع للعامل",(d,w)->returnDialog(id)).setNegativeButton("إلغاء",null).show());content.addView(b);}}back();}
     private void returnDialog(long id){EditText note=input("سبب الإرجاع وما يجب تصحيحه","",false);LinearLayout box=form();box.addView(note);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("إرجاع الوردية #"+id).setView(box).setPositiveButton("إرجاع",null).setNegativeButton("إلغاء",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String text=note.getText().toString().trim();if(text.isEmpty()){note.setError("اكتب سبب الإرجاع");return;}dialog.dismiss();db.returnToWorker(id,text);new Sync(this).run(false);approvals();}));dialog.show();}
 
+    private void prices(){shell("أسعار اللتر");
+        content.addView(Util.card(this,"غيّر سعر اللتر مرة واحدة، فيُطبَّق على كل طرمبات هذا النوع."),Util.spaced());
+        int types=0;
+        try(Cursor c=db.fuelPrices()){
+            while(c.moveToNext()){
+                types++;
+                final String fuel=c.getString(0);
+                double min=c.getDouble(1),max=c.getDouble(2);int count=c.getInt(3);
+                boolean mixed=Math.abs(max-min)>=0.01;
+                String priceLabel=(min<=0&&!mixed)?"لم يُحدَّد بعد":mixed?"مختلف ("+fmt(min)+" — "+fmt(max)+")":fmt(min)+" ريال";
+                Button b=Util.button(this,fuel+"\n"+priceLabel+"  •  "+count+" طرمبة");
+                if(mixed||min<=0)b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Util.RED));
+                b.setOnClickListener(v->fuelPriceDialog(fuel,mixed?0:min));
+                content.addView(b);
+            }
+        }
+        if(types==0)content.addView(Util.card(this,"لا توجد طرمبات نشطة بعد."),Util.spaced());
+        back();}
+    private void fuelPriceDialog(String fuel,double current){
+        LinearLayout box=form();
+        EditText price=input("سعر اللتر بالريال",current>0?fmt(current):"",true);
+        box.addView(price);
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("سعر "+fuel).setView(box)
+            .setPositiveButton("تطبيق على كل الطرمبات",null).setNegativeButton("إلغاء",null).create();
+        d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            double value=Util.number(price.getText().toString());
+            if(value<=0){price.setError("أدخل سعرًا أكبر من صفر");return;}
+            int changed=db.setFuelPrice(fuel,value);
+            d.dismiss();
+            Toast.makeText(this,changed==0?"السعر كما هو، لم يتغير شيء.":"حُدِّث سعر "+changed+" طرمبة.",Toast.LENGTH_LONG).show();
+            prices();}));
+        d.show();}
     private void monthly(){shell("التقرير الشهري");
         ArrayList<String> months=db.months();
         if(months.isEmpty()){content.addView(Util.card(this,"لا توجد ورديات مسجلة بعد."),Util.spaced());back();return;}
