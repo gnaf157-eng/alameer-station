@@ -29,45 +29,43 @@ Daemon will be stopped at the end of the build
 > Task :app:mergeDebugJavaResource
 
 > Task :app:compileDebugJavaWithJavac
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:334: error: cannot find symbol
-        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
-                                     ^
-  symbol:   class DownloadParams
-  location: package com.google.mlkit.common.model
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:335: error: cannot find symbol
-            .add(com.google.mlkit.vision.common.OptInModuleId.TEXT_RECOGNITION)
-                                               ^
-  symbol:   class OptInModuleId
-  location: package com.google.mlkit.vision.common
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:334: error: package com.google.mlkit.common.model.DownloadParams does not exist
-        com.google.mlkit.common.model.DownloadParams params=new com.google.mlkit.common.model.DownloadParams.Builder()
-                                                                                                            ^
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:339: error: cannot find symbol
-        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
-                               ^
-  symbol:   class ModuleInstallRequest
-  location: package com.google.mlkit.common
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:339: error: cannot find symbol
-        com.google.mlkit.common.ModuleInstallRequest req=com.google.mlkit.common.ModuleInstallRequest.createModuleInstallRequest(params);
-                                                                                ^
-  symbol:   class ModuleInstallRequest
-  location: package com.google.mlkit.common
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:340: error: cannot find symbol
-        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
-                               ^
-  symbol:   class ModuleInstallClient
-  location: package com.google.mlkit.common
-/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:340: error: cannot find symbol
-        com.google.mlkit.common.ModuleInstallClient client=com.google.mlkit.common.ModuleInstallClient.getModuleInstallClient(this);
-                                                                                  ^
-  symbol:   class ModuleInstallClient
-  location: package com.google.mlkit.common
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:341: error: method getResult in class Task<TResult> cannot be applied to given types;
+                avail=client.areModulesAvailable(api).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+                                                     ^
+  required: Class<X>
+  found:    int,TimeUnit
+  reason: cannot infer type-variable(s) X
+    (actual and formal argument lists differ in length)
+  where X,TResult are type-variables:
+    X extends Throwable declared in method <X>getResult(Class<X>)
+    TResult extends Object declared in class Task
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:345: error: method getResult in class Task<TResult> cannot be applied to given types;
+            client.installModules(req).getResult(30, java.util.concurrent.TimeUnit.SECONDS);
+                                      ^
+  required: Class<X>
+  found:    int,TimeUnit
+  reason: cannot infer type-variable(s) X
+    (actual and formal argument lists differ in length)
+  where X,TResult are type-variables:
+    X extends Throwable declared in method <X>getResult(Class<X>)
+    TResult extends Object declared in class Task
+/home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java:364: error: method getResult in class Task<TResult> cannot be applied to given types;
+                return rec.process(in).getResult(25, java.util.concurrent.TimeUnit.SECONDS);
+                                      ^
+  required: Class<X>
+  found:    int,TimeUnit
+  reason: cannot infer type-variable(s) X
+    (actual and formal argument lists differ in length)
+  where X,TResult are type-variables:
+    X extends Throwable declared in method <X>getResult(Class<X>)
+    TResult extends Object declared in class Task
 Note: /home/runner/work/alameer-station/alameer-station/invoice-counter/app/src/main/java/com/alameer/invoicecounter/ReviewActivity.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
-7 errors
+Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+3 errors
 
 > Task :app:compileDebugJavaWithJavac FAILED
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788911753153.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1788911994811.json
 
 FAILURE: Build failed with an exception.
 
@@ -79,5 +77,5 @@ Execution failed for task ':app:compileDebugJavaWithJavac'.
 > Run with --info option to get more log output.
 > Run with --scan to get full insights.
 
-BUILD FAILED in 32s
+BUILD FAILED in 35s
 20 actionable tasks: 20 executed
