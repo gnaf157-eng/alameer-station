@@ -5,7 +5,25 @@ import android.app.*;import android.os.*;import android.content.*;import android
 public class ShiftActivity extends Activity {
     Db db;long shiftId;int workerId;String workerName;LinearLayout readingsBox,movementsBox;TextView salesText,balanceText;final ArrayList<ReadingInput> inputs=new ArrayList<>();
     static class ReadingInput { long id; EditText current; EditText previous; ReadingInput(long i,EditText e,EditText p){id=i;current=e;previous=p;} }
-    @Override public void onCreate(Bundle b){super.onCreate(b);db=new Db(this);shiftId=getIntent().getLongExtra("shiftId",0);workerId=getIntent().getIntExtra("workerId",0);workerName=getIntent().getStringExtra("workerName");build();}
+    @Override public void onCreate(Bundle b){
+        super.onCreate(b);db=new Db(this);
+        shiftId=getIntent().getLongExtra("shiftId",0);
+        workerId=getIntent().getIntExtra("workerId",0);
+        workerName=getIntent().getStringExtra("workerName");
+        if(shiftId==0){ // فُتح التطبيق مباشرة بلا شاشة دخول
+            workerId=db.soloWorkerId();
+            workerName=db.workerName(workerId);
+            shiftId=db.openSoloShift(workerId);
+        }
+        build();
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        if(readingsBox!=null){ // قد يكون المدير غيّر الأسعار أو الطرمبات من الإعدادات
+            db.syncShiftPumps(shiftId);
+            loadReadings();refreshTotals();
+        }
+    }
     LinearLayout[] pages=new LinearLayout[5];
     Button[] tabs=new Button[4];
     int page=0;
@@ -93,24 +111,18 @@ public class ShiftActivity extends Activity {
         balanceText=text("",27,Util.GREEN,true);balanceText.setGravity(Gravity.CENTER);balanceText.setPadding(dp(16),dp(24),dp(16),dp(24));pages[2].addView(balanceText,space());
         totalsBox=panel(Color.WHITE);pages[2].addView(totalsBox,space());
         Button details=action("مراجعة التفاصيل  ▤",false);details.setOnClickListener(v->showPage(0));pages[2].addView(details,space());
-        TextView pending=text("تُحفظ محليًا بانتظار المزامنة",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
-        Button submit=action("إرسال للمدير  ➤",true);submit.setOnClickListener(v->submit());pages[2].addView(submit,space());
+        TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
+        Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
+        Button close=action("إغلاق الوردية وبدء وردية جديدة",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
-        pages[4].addView(Util.label(this,"حسابي"));
-        pages[4].addView(Util.card(this,workerName+"\nمحطة الأمير • مطابقة الورديات"),Util.spaced());
-        Button update=Util.button(this,"فحص تحديث التطبيق");
-        update.setOnClickListener(v->new AppUpdater(this).check(true));
-        pages[4].addView(update,Util.spaced());
-        Button logout=Util.button(this,"تسجيل الخروج");
-        logout.setOnClickListener(v->{Intent i=new Intent(this,LoginActivity.class);i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK);startActivity(i);finish();});
-        pages[4].addView(logout,Util.spaced());
+        buildSettingsPage();
         LinearLayout nav=new LinearLayout(this);
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
-        String[] names={"ورديتي","الحركات","الأرشيف","حسابي"};
+        String[] names={"ورديتي","الحركات","الأرشيف","الإعدادات"};
         int[] destinations={0,1,3,4};
         for(int i=0;i<4;i++){
             final int n=destinations[i];
@@ -127,6 +139,127 @@ public class ShiftActivity extends Activity {
             lp.setMargins(dp(3),0,dp(3),0);nav.addView(tab,lp);
         }
         shell.addView(nav);setContentView(shell);showPage(0);loadMovements();
+    }
+    /** تبويب الإعدادات: الأسعار والطرمبات قبل بدء المطابقة. */
+    private void buildSettingsPage(){
+        pages[4].removeAllViews();
+        pages[4].addView(heading("الإعدادات"));
+        pages[4].addView(sectionTitle("أسعار اللتر"));
+        LinearLayout priceBox=panel(Color.WHITE);
+        int types=0;
+        try(Cursor c=db.fuelPrices()){
+            while(c.moveToNext()){
+                types++;
+                final String fuel=c.getString(0);
+                double min=c.getDouble(1),max=c.getDouble(2);int count=c.getInt(3);
+                boolean mixed=Math.abs(max-min)>=0.01;
+                boolean missing=min<=0;
+                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
+                LinearLayout words=column();
+                words.addView(text(fuel,17,Util.NAVY,true));
+                words.addView(text(missing?"لم يُحدَّد بعد":mixed?"مختلف ("+money(min)+" — "+money(max)+")":money(min)+" ريال/لتر  •  "+count+" طرمبة",
+                        13,(missing||mixed)?Util.RED:0xff7c8186,false));
+                row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+                Button edit=action("تغيير",false);edit.setTextSize(14);
+                edit.setOnClickListener(v->fuelPriceDialog(fuel,mixed?0:min));
+                row.addView(edit);
+                priceBox.addView(row);
+            }
+        }
+        if(types==0)priceBox.addView(text("لا توجد طرمبات نشطة بعد.",15,0xff777d84,false));
+        pages[4].addView(priceBox,space());
+
+        pages[4].addView(sectionTitle("الطرمبات"));
+        LinearLayout pumpBox=panel(Color.WHITE);
+        try(Cursor c=db.pumps()){
+            while(c.moveToNext()){
+                final long id=c.getLong(0);
+                final String name=c.getString(1),fuel=c.getString(2);
+                final double price=c.getDouble(3),reading=c.getDouble(4);
+                final boolean active=c.getInt(7)==1;
+                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
+                LinearLayout words=column();
+                words.addView(text(name+(active?"":"  (موقوفة)"),17,active?Util.NAVY:Util.RED,true));
+                words.addView(text(fuel+"  •  العداد "+money(reading),13,0xff7c8186,false));
+                row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+                Button toggle=action(active?"إيقاف":"تفعيل",false);toggle.setTextSize(14);
+                toggle.setOnClickListener(v->{
+                    if(active&&db.pumpInOpenShift(id)){
+                        new AlertDialog.Builder(this).setTitle("إيقاف "+name)
+                            .setMessage("ستختفي من وردية اليوم ولن تُحتسب ضمن مبيعاتها. إن كنت قد بعت منها فأدخل قراءتها أولًا.")
+                            .setPositiveButton("إيقافها",(d,w)->{db.setPumpActive(id,false);refreshAll();})
+                            .setNegativeButton("تراجع",null).show();
+                        return;
+                    }
+                    db.setPumpActive(id,!active);refreshAll();});
+                row.addView(toggle);
+                Button edit=action("تعديل",false);edit.setTextSize(14);
+                edit.setOnClickListener(v->pumpDialog(id,name,fuel,price,reading));
+                row.addView(edit);
+                pumpBox.addView(row);
+                View line=new View(this);line.setBackgroundColor(0xffeceef0);
+                pumpBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
+            }
+        }
+        pages[4].addView(pumpBox,space());
+        Button addPump=action("＋  إضافة طرمبة",true);
+        addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
+        pages[4].addView(addPump,space());
+
+        Button startShift=action("ابدأ المطابقة  ➤",true);
+        startShift.setOnClickListener(v->{db.syncShiftPumps(shiftId);loadReadings();showPage(0);});
+        pages[4].addView(startShift,space());
+
+        Button update=action("فحص تحديث التطبيق",false);
+        update.setOnClickListener(v->new AppUpdater(this).check(true));
+        pages[4].addView(update,space());
+        Button backupBtn=action("نسخة احتياطية",false);
+        backupBtn.setOnClickListener(v->new Backup(this).export());
+        pages[4].addView(backupBtn,space());
+    }
+    private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
+    private void refreshAll(){db.syncShiftPumps(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
+    private void fuelPriceDialog(String fuel,double current){
+        EditText price=new EditText(this);styleInput(price);
+        price.setHint("سعر اللتر بالريال");
+        price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        price.setTextDirection(View.TEXT_DIRECTION_LTR);
+        if(current>0)price.setText(fmt(current));
+        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);box.addView(price);
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("سعر "+fuel).setView(box)
+            .setPositiveButton("تطبيق على كل الطرمبات",null).setNegativeButton("إلغاء",null).create();
+        d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            double value=Util.number(price.getText().toString());
+            if(value<=0){price.setError("أدخل سعرًا أكبر من صفر");return;}
+            int changed=db.setFuelPrice(fuel,value);
+            db.refreshShiftPrices(shiftId);
+            d.dismiss();
+            Toast.makeText(this,changed==0?"السعر كما هو.":"حُدِّث سعر "+changed+" طرمبة.",Toast.LENGTH_LONG).show();
+            refreshAll();}));
+        d.show();
+    }
+    private void pumpDialog(long id,String oldName,String oldFuel,double oldPrice,double oldReading){
+        boolean creating=id==0;
+        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);
+        EditText name=dialogInput("اسم الطرمبة",oldName,false);
+        EditText fuel=dialogInput("نوع الوقود (ديزل / بترول / غاز)",oldFuel,false);
+        EditText price=dialogInput(creating?"سعر اللتر (فارغ = سعر النوع)":"سعر اللتر",creating?"":fmt(oldPrice),true);
+        EditText reading=dialogInput("قراءة العداد الحالية",creating?"":fmt(oldReading),true);
+        box.addView(name);box.addView(fuel);box.addView(price);box.addView(reading);
+        AlertDialog d=new AlertDialog.Builder(this).setTitle(creating?"طرمبة جديدة":"تعديل الطرمبة").setView(box)
+            .setPositiveButton(creating?"إضافة":"حفظ",null).setNegativeButton("إلغاء",null).create();
+        d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            if(name.getText().toString().trim().isEmpty()){name.setError("الاسم مطلوب");return;}
+            if(fuel.getText().toString().trim().isEmpty()){fuel.setError("نوع الوقود مطلوب");return;}
+            if(creating)db.addPump(name.getText().toString(),fuel.getText().toString(),Util.number(price.getText().toString()),Util.number(reading.getText().toString()),workerId);
+            else db.updatePump(id,name.getText().toString(),fuel.getText().toString(),Util.number(price.getText().toString()),Util.number(reading.getText().toString()),workerId);
+            d.dismiss();refreshAll();}));
+        d.show();
+    }
+    private EditText dialogInput(String hint,String value,boolean number){
+        EditText e=new EditText(this);styleInput(e);e.setHint(hint);e.setText(value);
+        if(number){e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);e.setTextDirection(View.TEXT_DIRECTION_LTR);}
+        return e;
     }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void showPage(int selected){
@@ -150,7 +283,11 @@ public class ShiftActivity extends Activity {
             while(c.moveToNext()){
                 String state=c.getString(3);
                 String label="APPROVED".equals(state)?"معتمدة":"SUBMITTED".equals(state)?"بانتظار الاعتماد":"RETURNED".equals(state)?"مُرجعة للتصحيح":"مفتوحة";
-                pages[3].addView(Util.card(this,"وردية #"+c.getLong(0)+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال"),Util.spaced());
+                final long archivedId=c.getLong(0);
+                TextView card=Util.card(this,"وردية #"+archivedId+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال\n\nاضغط لحفظ PDF");
+                card.setClickable(true);
+                card.setOnClickListener(v->sharePdf(archivedId));
+                pages[3].addView(card,Util.spaced());
             }
         }
     }
@@ -253,6 +390,45 @@ public class ShiftActivity extends Activity {
     private String money(double value){return String.format(Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);}
     private void submit(){if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إرسال الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}double bal=db.balance(shiftId);if(Math.abs(bal)<0.01){confirmSubmit("");return;}EditText reason=new EditText(this);reason.setHint("سبب العجز أو الزيادة (إجباري)");AlertDialog dialog=new AlertDialog.Builder(this).setTitle("الباقي "+fmt(bal)+" ريال").setMessage("توجد زيادة أو عجز. اكتب السبب قبل الإرسال.").setView(reason).setPositiveButton("إرسال",null).setNegativeButton("رجوع",null).create();dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String r=reason.getText().toString().trim();if(r.isEmpty()){reason.setError("السبب مطلوب");return;}dialog.dismiss();confirmSubmit(r);}));dialog.show();}
     private void confirmSubmit(String reason){new AlertDialog.Builder(this).setTitle("تأكيد الإرسال").setMessage("ستُرسل الوردية للمدير ويمكن تعديلها حتى يعتمدها.").setPositiveButton("تأكيد",(d,w)->{db.submit(shiftId,workerId,reason);Toast.makeText(this,"حُفظت الوردية وهي بانتظار المزامنة",Toast.LENGTH_LONG).show();new Sync(this).run(false);finish();}).setNegativeButton("إلغاء",null).show();}
+    /** يحفظ تقرير الوردية PDF ويفتح قائمة المشاركة. */
+    private void exportPdf(){
+        if(!saveReadings())return;
+        try{
+            sharePdfOrThrow(shiftId);
+        }catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
+    }
+    private void sharePdf(long id){
+        try{ sharePdfOrThrow(id); }
+        catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
+    }
+    private void sharePdfOrThrow(long id)throws Exception{
+        java.io.File file=new PdfReport(this,db).build(id);
+        android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".files",file);
+        Intent intent=new Intent(Intent.ACTION_SEND);
+        intent.setType("application/pdf");
+        intent.putExtra(Intent.EXTRA_STREAM,uri);
+        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية محطة الأمير #"+id);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(Intent.createChooser(intent,"حفظ أو مشاركة الوردية"));
+    }
+    /** يقفل الوردية الحالية بعد حفظها ويبدأ وردية جديدة بعدادات الإغلاق. */
+    private void closeShift(){
+        if(!saveReadings())return;
+        String issue=db.validateShift(shiftId);
+        if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إغلاق الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}
+        double bal=db.balance(shiftId);
+        String message=Math.abs(bal)<0.01
+            ?"الوردية مطابقة. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق."
+            :"الباقي "+money(bal)+" ريال. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق.";
+        new AlertDialog.Builder(this).setTitle("إغلاق الوردية").setMessage(message)
+            .setPositiveButton("إغلاق",(d,w)->{
+                db.submit(shiftId,workerId,"");
+                db.approve(shiftId);
+                shiftId=db.openSoloShift(workerId);
+                Toast.makeText(this,"حُفظت الوردية وبدأت وردية جديدة.",Toast.LENGTH_LONG).show();
+                loadReadings();loadMovements();refreshTotals();showPage(0);})
+            .setNegativeButton("إلغاء",null).show();
+    }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
 }

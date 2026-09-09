@@ -57,6 +57,58 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    /** حساب المشغّل الوحيد في وضع الجهاز المستقل (بلا دخول). */
+    public int soloWorkerId(){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id FROM workers WHERE role='WORKER' AND active=1 ORDER BY id LIMIT 1",null)){
+            if(c.moveToFirst())return c.getInt(0);
+        }
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id FROM workers ORDER BY id LIMIT 1",null)){
+            return c.moveToFirst()?c.getInt(0):1;
+        }
+    }
+    public String workerName(int id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT name FROM workers WHERE id=?",new String[]{String.valueOf(id)})){
+            return c.moveToFirst()?c.getString(0):"المشغّل";
+        }
+    }
+    /** كل الطرمبات النشطة تُسند للمشغّل الوحيد، فيرى الجميع في ورديته. */
+    public long openSoloShift(int workerId){
+        SQLiteDatabase db=getWritableDatabase();
+        try(Cursor c=db.rawQuery("SELECT id FROM shifts WHERE worker_id=? AND status IN ('OPEN','RETURNED') ORDER BY id DESC LIMIT 1",new String[]{String.valueOf(workerId)})){
+            if(c.moveToFirst())return c.getLong(0);
+        }
+        ContentValues s=new ContentValues();s.put("worker_id",workerId);s.put("opened_at",Util.now());
+        long shiftId=db.insertOrThrow("shifts",null,s);
+        try(Cursor c=db.rawQuery("SELECT id,last_reading,price FROM pumps WHERE active=1 ORDER BY id",null)){
+            while(c.moveToNext()){
+                ContentValues r=new ContentValues();
+                r.put("shift_id",shiftId);r.put("pump_id",c.getLong(0));
+                r.put("previous",c.getDouble(1));r.put("price",c.getDouble(2));
+                db.insertOrThrow("readings",null,r);
+            }
+        }
+        audit(db,shiftId,workerId,"OPEN_SHIFT","فتح وردية على الجهاز");
+        return shiftId;
+    }
+    /** يسحب أسعار الطرمبات المحدّثة إلى وردية مفتوحة ويعيد حساب مبيعاتها. */
+    public void refreshShiftPrices(long shiftId){
+        SQLiteDatabase db=getWritableDatabase();
+        db.execSQL("UPDATE readings SET price=(SELECT p.price FROM pumps p WHERE p.id=readings.pump_id) WHERE shift_id=?",new Object[]{shiftId});
+        db.execSQL("UPDATE readings SET sales=(current-previous)*price WHERE shift_id=? AND current IS NOT NULL",new Object[]{shiftId});
+    }
+    /** يضمّ أي طرمبة نشطة أُضيفت بعد فتح الوردية. */
+    public int syncShiftPumps(long shiftId){
+        SQLiteDatabase db=getWritableDatabase();int added=0;
+        try(Cursor c=db.rawQuery("SELECT id,last_reading,price FROM pumps WHERE active=1 AND id NOT IN (SELECT pump_id FROM readings WHERE shift_id=?) ORDER BY id",new String[]{String.valueOf(shiftId)})){
+            while(c.moveToNext()){
+                ContentValues r=new ContentValues();
+                r.put("shift_id",shiftId);r.put("pump_id",c.getLong(0));
+                r.put("previous",c.getDouble(1));r.put("price",c.getDouble(2));
+                db.insertOrThrow("readings",null,r);added++;
+            }
+        }
+        return added;
+    }
     /** إعداد عام مخزّن في قاعدة البيانات. */
     public String setting(String key,String fallback){
         try(Cursor c=getReadableDatabase().rawQuery("SELECT value FROM settings WHERE key=?",new String[]{key})){
