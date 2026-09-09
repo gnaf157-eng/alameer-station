@@ -71,6 +71,12 @@ public class Db extends SQLiteOpenHelper {
             return c.moveToFirst()?c.getString(0):"المشغّل";
         }
     }
+    /** تغيير اسم المشغّل وحده، دون المساس بالرمز أو نوع الوردية. */
+    public void renameWorker(int id,String name){
+        if(name==null||name.trim().isEmpty())return;
+        ContentValues v=new ContentValues();v.put("name",name.trim());
+        getWritableDatabase().update("workers",v,"id=?",new String[]{String.valueOf(id)});
+    }
     /** كل الطرمبات النشطة تُسند للمشغّل الوحيد، فيرى الجميع في ورديته. */
     public long openSoloShift(int workerId){
         SQLiteDatabase db=getWritableDatabase();

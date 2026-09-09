@@ -3,7 +3,7 @@ package com.alameer.station.shifts;
 import android.app.*;import android.os.*;import android.content.*;import android.database.Cursor;import android.graphics.Color;import android.text.InputType;import android.view.*;import android.widget.*;import java.util.*;
 
 public class ShiftActivity extends Activity {
-    Db db;long shiftId;int workerId;String workerName;LinearLayout readingsBox,movementsBox;TextView salesText,balanceText;final ArrayList<ReadingInput> inputs=new ArrayList<>();
+    Db db;long shiftId;int workerId;String workerName;LinearLayout readingsBox,movementsBox;TextView salesText,balanceText,greetingText;final ArrayList<ReadingInput> inputs=new ArrayList<>();
     static class ReadingInput { long id; EditText current; EditText previous; ReadingInput(long i,EditText e,EditText p){id=i;current=e;previous=p;} }
     @Override public void onCreate(Bundle b){
         super.onCreate(b);db=new Db(this);
@@ -14,8 +14,14 @@ public class ShiftActivity extends Activity {
             workerId=db.soloWorkerId();
             workerName=db.workerName(workerId);
             shiftId=db.openSoloShift(workerId);
+            askNameOnFirstRun=db.setting("name_set","0").equals("0");
         }
         build();
+        if(askNameOnFirstRun){
+            db.setSetting("name_set","1");
+            showPage(4);
+            nameDialog();
+        }
     }
     @Override protected void onResume(){
         super.onResume();
@@ -27,6 +33,7 @@ public class ShiftActivity extends Activity {
     LinearLayout[] pages=new LinearLayout[5];
     Button[] tabs=new Button[4];
     int page=0;
+    boolean askNameOnFirstRun=false;
     LinearLayout totalsBox;
     String movementFilter="";
     AutoCompleteTextView movementName;
@@ -58,7 +65,7 @@ public class ShiftActivity extends Activity {
         for(int i=0;i<5;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
         pages[0].addView(heading("ورديتي"));
         LinearLayout greeting=new LinearLayout(this);greeting.setGravity(Gravity.CENTER_VERTICAL);
-        greeting.addView(text("مرحبًا، "+workerName,18,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
+        greetingText=text("مرحبًا، "+workerName,18,Util.NAVY,true);greeting.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
         pages[0].addView(greeting,space());
         String note=db.managerNote(shiftId);
@@ -144,6 +151,20 @@ public class ShiftActivity extends Activity {
     private void buildSettingsPage(){
         pages[4].removeAllViews();
         pages[4].addView(heading("الإعدادات"));
+
+        pages[4].addView(sectionTitle("اسم العامل"));
+        LinearLayout nameBox=panel(Color.WHITE);
+        LinearLayout nameRow=new LinearLayout(this);nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout nameWords=column();
+        nameWords.addView(text(workerName,18,Util.NAVY,true));
+        nameWords.addView(text("يظهر في الوردية وفي تقرير PDF",13,0xff7c8186,false));
+        nameRow.addView(nameWords,new LinearLayout.LayoutParams(0,-2,1));
+        Button editName=action("تغيير",false);editName.setTextSize(14);
+        editName.setOnClickListener(v->nameDialog());
+        nameRow.addView(editName);
+        nameBox.addView(nameRow);
+        pages[4].addView(nameBox,space());
+
         pages[4].addView(sectionTitle("أسعار اللتر"));
         LinearLayout priceBox=panel(Color.WHITE);
         int types=0;
@@ -216,6 +237,24 @@ public class ShiftActivity extends Activity {
         Button backupBtn=action("نسخة احتياطية",false);
         backupBtn.setOnClickListener(v->new Backup(this).export());
         pages[4].addView(backupBtn,space());
+    }
+    private void refreshGreeting(){if(greetingText!=null)greetingText.setText("مرحبًا، "+workerName);}
+    private void nameDialog(){
+        EditText input=new EditText(this);styleInput(input);
+        input.setHint("اسم العامل");input.setText(workerName);
+        input.setSelection(input.getText().length());
+        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);box.addView(input);
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("اسم العامل").setView(box)
+            .setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
+        d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String value=input.getText().toString().trim();
+            if(value.isEmpty()){input.setError("أدخل الاسم");return;}
+            db.renameWorker(workerId,value);
+            workerName=value;
+            d.dismiss();
+            Toast.makeText(this,"حُفظ الاسم.",Toast.LENGTH_SHORT).show();
+            buildSettingsPage();refreshGreeting();}));
+        d.show();
     }
     private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
     private void refreshAll(){db.syncShiftPumps(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
