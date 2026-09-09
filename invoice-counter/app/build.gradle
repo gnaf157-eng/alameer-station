@@ -22,6 +22,15 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        // توحيد إصدارات kotlin-stdlib لتجنب تعامل الفئات المكررة
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10'
+    }
+}
+
 dependencies {
     // التعرف على النصوص (يدعم العربية) — يعمل على الجهاز بعد تنزيل النموذج مرة واحدة
     implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
