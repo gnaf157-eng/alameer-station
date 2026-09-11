@@ -25,8 +25,8 @@ public class ShiftActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
-        if(readingsBox!=null){ // قد يكون المدير غيّر الأسعار أو الطرمبات من الإعدادات
-            db.syncShiftPumps(shiftId);
+        if(readingsBox!=null){ // قد تكون الأسعار أو العدّادات تغيّرت من الإعدادات
+            db.syncShiftWithSettings(shiftId);
             loadReadings();refreshTotals();
         }
     }
@@ -221,7 +221,7 @@ public class ShiftActivity extends Activity {
         pages[4].addView(addPump,space());
 
         Button startShift=action("ابدأ المطابقة  ➤",true);
-        startShift.setOnClickListener(v->{db.syncShiftPumps(shiftId);loadReadings();showPage(0);});
+        startShift.setOnClickListener(v->{db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
         pages[4].addView(startShift,space());
 
         Button update=action("فحص تحديث التطبيق",false);
@@ -250,7 +250,7 @@ public class ShiftActivity extends Activity {
         d.show();
     }
     private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
-    private void refreshAll(){db.syncShiftPumps(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
+    private void refreshAll(){db.syncShiftWithSettings(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
     private void fuelPriceDialog(String fuel,double current){
         EditText price=new EditText(this);styleInput(price);
         price.setHint("سعر اللتر بالريال");
@@ -264,7 +264,6 @@ public class ShiftActivity extends Activity {
             double value=Util.number(price.getText().toString());
             if(value<=0){price.setError("أدخل سعرًا أكبر من صفر");return;}
             int changed=db.setFuelPrice(fuel,value);
-            db.refreshShiftPrices(shiftId);
             d.dismiss();
             Toast.makeText(this,changed==0?"السعر كما هو.":"حُدِّث سعر "+changed+" طرمبة.",Toast.LENGTH_LONG).show();
             refreshAll();}));

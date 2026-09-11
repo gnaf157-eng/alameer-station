@@ -102,6 +102,23 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL("UPDATE readings SET price=(SELECT p.price FROM pumps p WHERE p.id=readings.pump_id) WHERE shift_id=?",new Object[]{shiftId});
         db.execSQL("UPDATE readings SET sales=(current-previous)*price WHERE shift_id=? AND current IS NOT NULL",new Object[]{shiftId});
     }
+
+    /**
+     * ينقل عدّاد الطرمبة المضبوط من الإعدادات إلى الوردية المفتوحة.
+     * لا نلمس طرمبة أدخل لها العامل قراءة حالية، حتى لا تضيع مبيعاته.
+     */
+    public void refreshShiftPrevious(long shiftId){
+        getWritableDatabase().execSQL(
+            "UPDATE readings SET previous=(SELECT p.last_reading FROM pumps p WHERE p.id=readings.pump_id) "+
+            "WHERE shift_id=? AND current IS NULL",new Object[]{shiftId});
+    }
+
+    /** يزامن الوردية المفتوحة مع أي تغيير في الإعدادات: طرمبات جديدة، أسعار، وعدّادات. */
+    public void syncShiftWithSettings(long shiftId){
+        syncShiftPumps(shiftId);
+        refreshShiftPrevious(shiftId);
+        refreshShiftPrices(shiftId);
+    }
     /** يضمّ أي طرمبة نشطة أُضيفت بعد فتح الوردية. */
     public int syncShiftPumps(long shiftId){
         SQLiteDatabase db=getWritableDatabase();int added=0;
