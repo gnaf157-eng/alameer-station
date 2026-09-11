@@ -17,6 +17,7 @@ public class ShiftActivity extends Activity {
             askNameOnFirstRun=db.setting("name_set","0").equals("0");
         }
         build();
+        new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
             db.setSetting("name_set","1");
             showPage(4);
