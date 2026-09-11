@@ -57,10 +57,10 @@ public final class Calc {
     }
 
     public static String arabicStatus(String s){
-        if ("OPEN".equals(s)) return "مفتوحة";
-        if ("SUBMITTED".equals(s)) return "مرسلة للمدير";
+        if ("OPEN".equals(s)) return "جارية الآن";
+        if ("SUBMITTED".equals(s)) return "مُغلقة";
         if ("RETURNED".equals(s)) return "مُرجعة للتصحيح";
-        if ("APPROVED".equals(s)) return "معتمدة";
+        if ("APPROVED".equals(s)) return "مُغلقة";
         return s;
     }
 }

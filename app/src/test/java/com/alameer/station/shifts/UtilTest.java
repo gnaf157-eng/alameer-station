@@ -56,10 +56,10 @@ public class UtilTest {
     }
 
     @Test public void arabicLabelsCoverEveryStatus(){
-        assertEquals("معتمدة", Calc.arabicStatus("APPROVED"));
-        assertEquals("مُرجعة للتصحيح", Calc.arabicStatus("RETURNED"));
-        assertEquals("مرسلة للمدير", Calc.arabicStatus("SUBMITTED"));
-        assertEquals("مفتوحة", Calc.arabicStatus("OPEN"));
+        // في وضع الجهاز المستقل: إما جارية أو مُغلقة
+        assertEquals("مُغلقة", Calc.arabicStatus("APPROVED"));
+        assertEquals("مُغلقة", Calc.arabicStatus("SUBMITTED"));
+        assertEquals("جارية الآن", Calc.arabicStatus("OPEN"));
     }
     @Test public void arabicMonthFormatsRealMonths(){
         assertEquals("سبتمبر 2026", Calc.arabicMonth("2026-09"));
