@@ -34,6 +34,8 @@ public class ShiftActivity extends Activity {
     LinearLayout[] pages=new LinearLayout[5];
     Button[] tabs=new Button[4];
     int page=0;
+    TextView headerBalance;
+    LinearLayout fuelLitresBox, reconciliationLitresBox;
     boolean askNameOnFirstRun=false;
     LinearLayout totalsBox;
     String movementFilter="";
@@ -55,7 +57,13 @@ public class ShiftActivity extends Activity {
         TextView drop=text("",32,Util.GOLD,true);drop.setBackground(new android.graphics.drawable.Drawable(){public void draw(android.graphics.Canvas c){android.graphics.Paint p=new android.graphics.Paint(3);p.setColor(Util.GOLD);android.graphics.Path path=new android.graphics.Path();float w=getBounds().width(),h=getBounds().height();path.moveTo(w*.5f,h*.12f);path.cubicTo(w*.4f,h*.35f,w*.15f,h*.5f,w*.15f,h*.64f);path.cubicTo(w*.15f,h*.98f,w*.85f,h*.98f,w*.85f,h*.64f);path.cubicTo(w*.85f,h*.5f,w*.6f,h*.3f,w*.5f,h*.12f);c.drawPath(path,p);}public void setAlpha(int a){}public void setColorFilter(android.graphics.ColorFilter f){}public int getOpacity(){return android.graphics.PixelFormat.TRANSLUCENT;}});brand.addView(drop,new LinearLayout.LayoutParams(dp(44),dp(52)));
         LinearLayout brandWords=column();
         brandWords.addView(text("محطة الأمير",20,Color.WHITE,true));
-        brandWords.addView(text("مطابقة الورديات",12,0xffd2d5d5,false));brand.addView(brandWords);
+        brandWords.addView(text("مطابقة الورديات",12,0xffd2d5d5,false));
+        brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
+        headerBalance=text("",15,Util.GOLD,true);
+        headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
+        headerBalance.setMaxLines(3);
+        headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        brand.addView(headerBalance,new LinearLayout.LayoutParams(0,dp(66),1));
         shell.addView(brand);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
@@ -75,6 +83,7 @@ public class ShiftActivity extends Activity {
         hero.addView(text(night?"7 مساءً — 7 صباحًا":"7 صباحًا — 7 مساءً",18,0xffe2e3e3,false),space());
         hero.addView(text(count+" طرمبات  •  وردية رقم "+shiftId,14,Color.WHITE,false));
         pages[0].addView(hero,space());
+        fuelLitresBox=panel(Color.WHITE);pages[0].addView(fuelLitresBox,space());
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
         Button save=action("حفظ القراءات ومتابعة الوردية",true);
         save.setOnClickListener(v->{if(saveReadings())showPage(2);});pages[0].addView(save,space());
@@ -84,8 +93,8 @@ public class ShiftActivity extends Activity {
         String[] filterNames={"الكل","مقبوضات","نقد مسلّم","ديون","مخاريج"};
         String[] filterTypes={"","COLLECTION","CASH","DEBT","EXPENSE"};
         for(int i=0;i<5;i++){final String type=filterTypes[i];Button chip=action(filterNames[i],i==0);chip.setTextSize(13);chip.setMinWidth(dp(72));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(44));cp.setMargins(dp(3),0,dp(3),0);chips.addView(chip,cp);chip.setOnClickListener(v->{movementFilter=type;for(int j=0;j<chips.getChildCount();j++)chips.getChildAt(j).setBackground(Util.round(chips.getChildAt(j)==v?Util.GOLD:0xffe7e8e9,dp(12)));loadMovements();});}
-        filters.addView(chips);pages[1].addView(filters,space());
-        movementsBox=panel(Color.WHITE);pages[1].addView(movementsBox,space());
+        filters.addView(chips);
+        movementsBox=panel(Color.WHITE);
         LinearLayout form=panel(Color.WHITE);form.addView(text("＋  إضافة حركة",21,Util.NAVY,true),space());
         form.addView(text("نوع الحركة",13,Util.NAVY,false));
         movementType=new Spinner(this);movementType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,movementLabels));
@@ -95,6 +104,9 @@ public class ShiftActivity extends Activity {
         form.addView(text("المبلغ • ر.ي",13,Util.NAVY,false));movementAmount=new EditText(this);styleInput(movementAmount);movementAmount.setHint("0");movementAmount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);movementAmount.setTextDirection(View.TEXT_DIRECTION_LTR);form.addView(movementAmount,space());
         Button add=action("حفظ الحركة  ▣",true);add.setOnClickListener(v->{String name=movementName.getText().toString().trim();double amount=Util.number(movementAmount.getText().toString());if(name.isEmpty()){movementName.setError("أدخل الاسم");return;}if(amount<=0||Double.isNaN(amount)||Double.isInfinite(amount)){movementAmount.setError("أدخل مبلغًا صحيحًا");return;}db.addMovement(shiftId,movementTypes[movementType.getSelectedItemPosition()],name,amount);movementName.setText("");movementAmount.setText("");refreshNames();loadMovements();refreshTotals();Toast.makeText(this,"حُفظت الحركة على الجهاز",Toast.LENGTH_SHORT).show();});
         form.addView(add,space());pages[1].addView(form,space());
+        pages[1].addView(text("الحركات المسجّلة",18,Util.NAVY,true),space());
+        pages[1].addView(filters,space());
+        pages[1].addView(movementsBox,space());
         Button review=action("مطابقة وتسليم الوردية",false);review.setOnClickListener(v->showPage(2));pages[1].addView(review,space());
         pages[2].addView(heading("مطابقة الوردية"));
         LinearLayout steps=new LinearLayout(this);
@@ -111,6 +123,7 @@ public class ShiftActivity extends Activity {
         pages[2].addView(steps,space());
         balanceText=text("",27,Util.GREEN,true);balanceText.setGravity(Gravity.CENTER);balanceText.setPadding(dp(16),dp(24),dp(16),dp(24));pages[2].addView(balanceText,space());
         totalsBox=panel(Color.WHITE);pages[2].addView(totalsBox,space());
+        reconciliationLitresBox=panel(Color.WHITE);pages[2].addView(reconciliationLitresBox,space());
         Button details=action("مراجعة التفاصيل  ▤",false);details.setOnClickListener(v->showPage(0));pages[2].addView(details,space());
         TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
@@ -381,7 +394,7 @@ public class ShiftActivity extends Activity {
             if(!curr.isEmpty()&&!db.saveReading(r.id,Util.number(curr)))ok=false;
         }
         Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة حالية أقل من السابقة",Toast.LENGTH_SHORT).show();
-        loadReadings();
+        loadReadings();refreshTotals();
         return ok;}
     private void movementDialog(String type,String label){LinearLayout box=new LinearLayout(this);box.setPadding(30,10,30,0);box.setOrientation(LinearLayout.VERTICAL);EditText name=new EditText(this);name.setHint("الاسم أو البيان");EditText amount=new EditText(this);amount.setHint("المبلغ");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);box.addView(name);box.addView(amount);new AlertDialog.Builder(this).setTitle("إضافة "+label).setView(box).setPositiveButton("حفظ",(d,w)->{if(name.getText().toString().trim().isEmpty()||Util.number(amount.getText().toString())<=0){Toast.makeText(this,"أدخل الاسم والمبلغ",Toast.LENGTH_SHORT).show();return;}db.addMovement(shiftId,type,name.getText().toString(),Util.number(amount.getText().toString()));loadMovements();refreshTotals();}).setNegativeButton("إلغاء",null).show();}
     private void loadMovements(){
@@ -408,6 +421,12 @@ public class ShiftActivity extends Activity {
     private void refreshTotals(){
         double[] values={db.sales(shiftId),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
         double bal=db.balance(shiftId);String issue=db.validateShift(shiftId);
+        if(headerBalance!=null){
+            headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
+            headerBalance.setTextColor(!issue.isEmpty()?Util.GOLD:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
+            headerBalance.setContentDescription("باقي الوردية الحالية "+money(bal)+" ريال");
+        }
+        refreshFuelLitres();
         if(balanceText!=null){
             boolean matched=issue.isEmpty()&&Math.abs(bal)<0.01;
             String nl=System.lineSeparator();
@@ -417,6 +436,34 @@ public class ShiftActivity extends Activity {
         }
         if(totalsBox!=null){totalsBox.removeAllViews();String[] labels={"المبيعات","المقبوضات","النقد المسلّم","الديون","المخاريج"};
             for(int i=0;i<5;i++){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(13),0,dp(13));row.addView(text(labels[i],17,Util.NAVY,false),new LinearLayout.LayoutParams(0,-2,1));TextView amount=text((i==0?"":i==1?"+ ":"− ")+money(values[i]),18,i==0?Util.NAVY:i==1?Util.GREEN:Util.RED,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);totalsBox.addView(row);if(i<4){View line=new View(this);line.setBackgroundColor(0xffeceef0);totalsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));}}
+        }
+    }
+    /** Uses the same visible reading rows as sales; missing counters stay incomplete. */
+    private void refreshFuelLitres(){
+        LinkedHashMap<String,double[]> totals=new LinkedHashMap<>();
+        try(Cursor c=db.shiftReadings(shiftId)){
+            while(c.moveToNext()){
+                String fuel=c.getString(2).trim();
+                double[] total=totals.get(fuel);
+                if(total==null){total=new double[2];totals.put(fuel,total);}
+                if(c.isNull(4)||c.getDouble(4)<c.getDouble(3)){total[1]++;continue;}
+                total[0]+=c.getDouble(4)-c.getDouble(3);
+            }
+        }
+        for(LinearLayout box:new LinearLayout[]{fuelLitresBox,reconciliationLitresBox}){
+            if(box==null)continue;
+            box.removeAllViews();box.addView(text("إجمالي اللترات حسب النوع",18,Util.NAVY,true),space());
+            if(totals.isEmpty())box.addView(text("لا توجد طرمبات في الوردية",14,0xff777d84,false));
+            for(Map.Entry<String,double[]> entry:totals.entrySet()){
+                double[] total=entry.getValue();
+                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+                row.addView(text(entry.getKey(),16,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
+                TextView amount=text(money(total[0])+" لتر",18,Util.NAVY,true);
+                amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
+                box.addView(row,space());
+                if(total[1]>0)box.addView(text("غير مكتمل — "+(int)total[1]+" قراءة متبقية",12,0xff8a6200,false));
+            }
+            box.addView(text("من فرق القراءات المحفوظة لهذه الوردية",11,0xff777d84,false),space());
         }
     }
     private String money(double value){return String.format(Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);}
