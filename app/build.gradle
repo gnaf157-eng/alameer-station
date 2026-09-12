@@ -20,8 +20,8 @@ android {
         applicationId 'com.alameer.station.shifts'
         minSdk 26
         targetSdk 35
-        versionCode 23
-        versionName '2.2.7'
+        versionCode 24
+        versionName '2.2.8'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://drive.google.com/uc?export=download&id=15-szIB-Fq4nIXhX-FgnBTdbNc-9cdllE'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""

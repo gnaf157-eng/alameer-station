@@ -82,22 +82,25 @@ public final class PdfReport {
     }
 
     private void fuelLitres(long shiftId){
-        section("إجمالي اللترات حسب نوع الوقود");
-        java.util.LinkedHashMap<String,double[]> grouped=new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String,Double> grouped=new java.util.LinkedHashMap<>();
+        grouped.put("بترول",0d);grouped.put("ديزل",0d);grouped.put("غاز",0d);
         try(Cursor c=db.shiftReadings(shiftId)){
             while(c.moveToNext()){
                 String fuel=c.getString(2).trim();
-                double[] sum=grouped.get(fuel);
-                if(sum==null){sum=new double[2];grouped.put(fuel,sum);}
-                if(c.isNull(4)||c.getDouble(4)<c.getDouble(3)){sum[1]++;continue;}
-                sum[0]+=c.getDouble(4)-c.getDouble(3);
+                if(fuel.equals("البترول")||fuel.equals("بنزين")||fuel.equals("البنزين"))fuel="بترول";
+                else if(fuel.equals("الديزل"))fuel="ديزل";
+                else if(fuel.equals("الغاز"))fuel="غاز";
+                if(!grouped.containsKey(fuel))grouped.put(fuel,0d);
+                if(!c.isNull(4)&&c.getDouble(4)>=c.getDouble(3))
+                    grouped.put(fuel,grouped.get(fuel)+c.getDouble(4)-c.getDouble(3));
             }
         }
-        for(java.util.Map.Entry<String,double[]> item:grouped.entrySet()){
-            line(item.getKey(),money(item.getValue()[0])+" لتر");
-            if(item.getValue()[1]>0)line("قراءات متبقية",String.valueOf((int)item.getValue()[1]));
-        }
-        if(grouped.isEmpty())line("اللترات","لا توجد قراءات");
+        // Keep the two rows together when the report spans multiple pages.
+        ensure(56);
+        columns(grouped.keySet().toArray(new String[0]));
+        String[] values=new String[grouped.size()];int index=0;
+        for(double litres:grouped.values())values[index++]=money(litres)+" لتر";
+        row(values);
         y+=12;
     }
 
