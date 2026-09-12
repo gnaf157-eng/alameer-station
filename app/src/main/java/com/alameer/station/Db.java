@@ -188,7 +188,7 @@ public class Db extends SQLiteOpenHelper {
      * فلا تضيع مبيعات سُجّلت قبل الإيقاف.
      */
     private static final String LIVE_PUMP = "(p.active=1 OR r.current IS NOT NULL)";
-    public Cursor shiftReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT r.id,p.name,p.fuel,r.previous,r.current,r.price,r.sales,p.active FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY p.id",new String[]{String.valueOf(shiftId)});}
+    public Cursor shiftReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT r.id,p.name,p.fuel,r.previous,r.current,r.price,r.sales,p.active FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY CASE TRIM(p.fuel) WHEN 'بترول' THEN 0 WHEN 'البترول' THEN 0 WHEN 'بنزين' THEN 0 WHEN 'البنزين' THEN 0 WHEN 'ديزل' THEN 1 WHEN 'الديزل' THEN 1 WHEN 'غاز' THEN 2 WHEN 'الغاز' THEN 2 ELSE 3 END,p.id",new String[]{String.valueOf(shiftId)});}
     public boolean saveReading(long readingId,double current){SQLiteDatabase db=getWritableDatabase();try(Cursor c=db.rawQuery("SELECT previous,price FROM readings WHERE id=?",new String[]{String.valueOf(readingId)})){if(c.moveToFirst()){double previous=c.getDouble(0),price=c.getDouble(1);if(current<previous)return false;ContentValues v=new ContentValues();v.put("current",current);v.put("sales",Calc.pumpSales(previous,current,price));db.update("readings",v,"id=?",new String[]{String.valueOf(readingId)});return true;}}return false;}
     /** تعديل القراءة السابقة يدويًا، مع إعادة حساب المبيعات إن كانت الحالية مُدخلة. */
     public boolean savePrevious(long readingId,double previous){
