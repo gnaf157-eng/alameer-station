@@ -362,6 +362,7 @@ public class ShiftActivity extends Activity {
     private void refreshNames(){ArrayList<String> names=new ArrayList<>();try(Cursor c=db.getReadableDatabase().rawQuery("SELECT DISTINCT name FROM remembered_names ORDER BY name",null)){while(c.moveToNext())names.add(c.getString(0));}movementName.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,names));}
     private void loadReadings(){
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
+        readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){
             LinearLayout row=column();row.setPadding(0,dp(8),0,dp(12));
             LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
@@ -376,6 +377,10 @@ public class ShiftActivity extends Activity {
             LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff7c8186,false));
             EditText current=new EditText(this);styleInput(current);current.setHint("الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
             if(!c.isNull(4))current.setText(fmt(c.getDouble(4)));currBox.addView(current);
+            if(!stopped){
+                restoreAndWatchDraft(previous,c.getLong(0),"previous");
+                restoreAndWatchDraft(current,c.getLong(0),"current");
+            }
             LinearLayout.LayoutParams half=new LinearLayout.LayoutParams(0,-2,1);half.setMargins(dp(3),0,dp(3),0);
             pair.addView(prevBox,half);pair.addView(currBox,new LinearLayout.LayoutParams(half));
             if(stopped){current.setEnabled(false);current.setAlpha(0.6f);previous.setEnabled(false);previous.setAlpha(0.6f);}
@@ -384,14 +389,39 @@ public class ShiftActivity extends Activity {
             inputs.add(new ReadingInput(c.getLong(0),current,previous));
         }}
     }
+    private android.content.SharedPreferences readingDrafts(){
+        return getSharedPreferences("reading_drafts",MODE_PRIVATE);
+    }
+    private String draftKey(long readingId,String field){
+        return "shift_"+shiftId+"_reading_"+readingId+"_"+field;
+    }
+    private void restoreAndWatchDraft(EditText input,long readingId,String field){
+        final String key=draftKey(readingId,field);
+        final android.content.SharedPreferences prefs=readingDrafts();
+        if(prefs.contains(key))input.setText(prefs.getString(key,""));
+        input.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            public void onTextChanged(CharSequence s,int start,int before,int count){}
+            public void afterTextChanged(android.text.Editable value){
+                // Persist exact input, including a cleared field, separately from validated sales.
+                prefs.edit().putString(key,value.toString()).apply();
+            }
+        });
+    }
     private boolean saveReadings(){
         boolean ok=true;
         for(ReadingInput r:inputs){
             if(!r.current.isEnabled())continue;
             String prev=r.previous.getText().toString().trim();
-            if(!prev.isEmpty()&&!db.savePrevious(r.id,Util.number(prev)))ok=false;
+            boolean previousSaved=prev.isEmpty()||db.savePrevious(r.id,Util.number(prev));
+            if(!previousSaved)ok=false;
+            else if(!prev.isEmpty())readingDrafts().edit().remove(draftKey(r.id,"previous")).apply();
             String curr=r.current.getText().toString().trim();
-            if(!curr.isEmpty()&&!db.saveReading(r.id,Util.number(curr)))ok=false;
+            if(!curr.isEmpty()){
+                if(previousSaved&&db.saveReading(r.id,Util.number(curr)))
+                    readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
+                else ok=false;
+            }
         }
         Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة حالية أقل من السابقة",Toast.LENGTH_SHORT).show();
         loadReadings();refreshTotals();
