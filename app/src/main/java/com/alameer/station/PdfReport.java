@@ -108,11 +108,13 @@ public final class PdfReport {
         java.util.LinkedHashMap<String,java.util.List<String[]>> groups=new java.util.LinkedHashMap<>();
         for(String type:new String[]{"COLLECTION","CASH","DEBT","EXPENSE"})
             groups.put(type,new java.util.ArrayList<>());
+        java.util.Map<String,Double> groupTotals=new java.util.HashMap<>();
         try(Cursor c=db.syncMovements(shiftId)){
             while(c.moveToNext()){
                 String type=c.getString(0);
                 if(!groups.containsKey(type))groups.put(type,new java.util.ArrayList<>());
                 groups.get(type).add(new String[]{c.getString(1),money(c.getDouble(2))});
+                groupTotals.put(type,groupTotals.containsKey(type)?groupTotals.get(type)+c.getDouble(2):c.getDouble(2));
             }
         }
         ensure(100);
@@ -122,7 +124,7 @@ public final class PdfReport {
             if(group.getValue().isEmpty())continue;
             any=true;
             ensure(74);
-            movementHeading(group.getKey(),false);
+            movementHeading(group.getKey(),groupTotals.get(group.getKey()),false);
             for(String[] movement:group.getValue()){
                 android.text.TextPaint namePaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
                 namePaint.setTextSize(11);namePaint.setColor(0xff2b2f33);
@@ -135,7 +137,7 @@ public final class PdfReport {
                 int height=Math.max(26,name.getHeight()+12);
                 if(y+height>HEIGHT-MARGIN){
                     newPage();
-                    movementHeading(group.getKey(),true);
+                    movementHeading(group.getKey(),groupTotals.get(group.getKey()),true);
                 }
                 canvas.save();
                 canvas.translate(WIDTH-MARGIN-351,y+6);
@@ -152,7 +154,7 @@ public final class PdfReport {
         y+=12;
     }
 
-    private void movementHeading(String type,boolean continued){
+    private void movementHeading(String type,double total,boolean continued){
         int background=0xffeef0f2;
         if("COLLECTION".equals(type))background=0xffedf5ee;
         else if("CASH".equals(type))background=0xffedf2f8;
@@ -162,6 +164,8 @@ public final class PdfReport {
         canvas.drawRect(MARGIN,y,WIDTH-MARGIN,y+26,paint);
         text(arabicType(type)+(continued?" — تابع":""),12,Util.NAVY,true,
                 WIDTH-MARGIN-6,y+18,Paint.Align.RIGHT);
+        text("الإجمالي: "+money(total)+" ر.ي",11,Util.NAVY,true,
+                MARGIN+245,y+18,Paint.Align.RIGHT);
         y+=26;
         text("الاسم / البيان",10,0xff5f6469,true,WIDTH-MARGIN-6,y+16,Paint.Align.RIGHT);
         text("المبلغ (ر.ي)",10,0xff5f6469,true,MARGIN+145,y+16,Paint.Align.RIGHT);
@@ -250,7 +254,19 @@ public final class PdfReport {
         paint.setTextAlign(align);
         paint.setFakeBoldText(bold);
         paint.setTypeface(android.graphics.Typeface.DEFAULT);
-        canvas.drawText(value, x, baseline, paint);
+        // Shape mixed Arabic/numeric text with an explicit RTL paragraph direction.
+        android.text.TextPaint rtlPaint=new android.text.TextPaint(paint);
+        rtlPaint.setTextAlign(Paint.Align.LEFT);
+        int width=Math.max(1,(int)Math.ceil(rtlPaint.measureText(value))+4);
+        android.text.StaticLayout layout=android.text.StaticLayout.Builder.obtain(value,0,value.length(),rtlPaint,width)
+                .setTextDirection(android.text.TextDirectionHeuristics.RTL)
+                .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                .setIncludePad(false).build();
+        float left=align==Paint.Align.RIGHT?x-width:(align==Paint.Align.CENTER?x-width/2f:x);
+        canvas.save();
+        canvas.translate(left,baseline-layout.getLineBaseline(0));
+        layout.draw(canvas);
+        canvas.restore();
         paint.setFakeBoldText(false);
     }
 
