@@ -24,6 +24,7 @@ public final class PdfReport {
         newPage();
         header(shiftId);
         readings(shiftId);
+        fuelLitres(shiftId);
         movements(shiftId);
         totals(shiftId);
         signatures();
@@ -78,6 +79,26 @@ public final class PdfReport {
             }
         }
         y += 12;
+    }
+
+    private void fuelLitres(long shiftId){
+        section("إجمالي اللترات حسب نوع الوقود");
+        java.util.LinkedHashMap<String,double[]> grouped=new java.util.LinkedHashMap<>();
+        try(Cursor c=db.shiftReadings(shiftId)){
+            while(c.moveToNext()){
+                String fuel=c.getString(2).trim();
+                double[] sum=grouped.get(fuel);
+                if(sum==null){sum=new double[2];grouped.put(fuel,sum);}
+                if(c.isNull(4)||c.getDouble(4)<c.getDouble(3)){sum[1]++;continue;}
+                sum[0]+=c.getDouble(4)-c.getDouble(3);
+            }
+        }
+        for(java.util.Map.Entry<String,double[]> item:grouped.entrySet()){
+            line(item.getKey(),money(item.getValue()[0])+" لتر");
+            if(item.getValue()[1]>0)line("قراءات متبقية",String.valueOf((int)item.getValue()[1]));
+        }
+        if(grouped.isEmpty())line("اللترات","لا توجد قراءات");
+        y+=12;
     }
 
     private void movements(long shiftId){

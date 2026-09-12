@@ -136,7 +136,7 @@ public class ShiftActivity extends Activity {
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
-        String[] names={"ورديتي","الحركات","الأرشيف","الإعدادات"};
+        String[] names={"ورديتي","الحركات","الأرشيف","الضبط"};
         int[] destinations={0,1,3,4};
         for(int i=0;i<4;i++){
             final int n=destinations[i];
@@ -289,15 +289,25 @@ public class ShiftActivity extends Activity {
         EditText name=dialogInput("اسم الطرمبة",oldName,false);
         EditText fuel=dialogInput("نوع الوقود (ديزل / بترول / غاز)",oldFuel,false);
         EditText price=dialogInput(creating?"سعر اللتر (فارغ = سعر النوع)":"سعر اللتر",creating?"":fmt(oldPrice),true);
-        EditText reading=dialogInput("قراءة العداد الحالية",creating?"":fmt(oldReading),true);
+        EditText reading=dialogInput("القراءة السابقة للوردية",creating?"":fmt(oldReading),true);
         box.addView(name);box.addView(fuel);box.addView(price);box.addView(reading);
         AlertDialog d=new AlertDialog.Builder(this).setTitle(creating?"طرمبة جديدة":"تعديل الطرمبة").setView(box)
             .setPositiveButton(creating?"إضافة":"حفظ",null).setNegativeButton("إلغاء",null).create();
         d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             if(name.getText().toString().trim().isEmpty()){name.setError("الاسم مطلوب");return;}
             if(fuel.getText().toString().trim().isEmpty()){fuel.setError("نوع الوقود مطلوب");return;}
+            double opening=Util.number(reading.getText().toString());
+            if(Double.isNaN(opening)||Double.isInfinite(opening)||opening<0){reading.setError("أدخل قراءة صحيحة");return;}
+            if(!creating){
+                try(Cursor recorded=db.getReadableDatabase().rawQuery("SELECT current FROM readings WHERE shift_id=? AND pump_id=? AND current IS NOT NULL",new String[]{String.valueOf(shiftId),String.valueOf(id)})){
+                    if(recorded.moveToFirst()&&opening>recorded.getDouble(0)){reading.setError("السابقة أكبر من الحالية المحفوظة. صحّح الحالية أولًا.");return;}
+                }
+            }
             if(creating)db.addPump(name.getText().toString(),fuel.getText().toString(),Util.number(price.getText().toString()),Util.number(reading.getText().toString()),workerId);
             else db.updatePump(id,name.getText().toString(),fuel.getText().toString(),Util.number(price.getText().toString()),Util.number(reading.getText().toString()),workerId);
+            if(!creating){
+                db.getWritableDatabase().execSQL("UPDATE readings SET previous=?,sales=CASE WHEN current IS NULL THEN 0 ELSE (current-?)*price END WHERE shift_id=? AND pump_id=? AND EXISTS(SELECT 1 FROM shifts WHERE id=? AND status='OPEN')",new Object[]{opening,opening,shiftId,id,shiftId});
+            }
             d.dismiss();refreshAll();}));
         d.show();
     }
@@ -358,7 +368,38 @@ public class ShiftActivity extends Activity {
     private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setTextDirection(View.TEXT_DIRECTION_RTL);t.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,1);return t;}
     private TextView heading(String name){TextView t=text(name,26,0xff141922,true);t.setGravity(Gravity.CENTER);t.setPadding(0,dp(20),0,dp(20));return t;}
     private Button action(String name,boolean primary){Button b=new Button(this);b.setText(name);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(Util.NAVY);b.setTypeface(android.graphics.Typeface.DEFAULT,primary?1:0);b.setMinHeight(dp(50));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setStateListAnimator(null);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x22000000),Util.round(primary?Util.GOLD:0xffe7e8e9,dp(12)),null));return b;}
-    private void styleInput(EditText e){e.setTextSize(18);e.setTextColor(Util.NAVY);e.setSingleLine(true);e.setPadding(dp(12),dp(10),dp(12),dp(10));android.graphics.drawable.GradientDrawable bg=Util.round(Color.WHITE,dp(10));bg.setStroke(dp(1),0xffdedfe2);e.setBackground(bg);e.setMinHeight(dp(48));}
+    private void styleInput(EditText e){e.setTextSize(18);e.setTextColor(Util.NAVY);e.setSingleLine(true);e.setPadding(dp(12),dp(10),dp(12),dp(10));android.graphics.drawable.GradientDrawable bg=Util.round(Color.WHITE,dp(10));bg.setStroke(dp(1),0xffdedfe2);e.setBackground(bg);e.setMinHeight(dp(48));configureNext(e);}
+    private void configureNext(EditText input){
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+        input.setOnEditorActionListener((v,action,event)->{
+            boolean enter=event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER;
+            if(action!=android.view.inputmethod.EditorInfo.IME_ACTION_NEXT&&!enter)return false;
+            if(enter&&event.getAction()!=KeyEvent.ACTION_DOWN)return true;
+            ArrayList<EditText> fields=new ArrayList<>();
+            collectEditable(input.getRootView(),fields);
+            int current=fields.indexOf(input);
+            for(int offset=1;offset<fields.size();offset++){
+                EditText target=fields.get((current+offset)%fields.size());
+                if(target.getText().toString().trim().isEmpty()){
+                    target.requestFocus();
+                    target.post(()->target.requestRectangleOnScreen(new android.graphics.Rect(0,0,target.getWidth(),target.getHeight()),false));
+                    return true;
+                }
+            }
+            ((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);
+            input.clearFocus();return true;
+        });
+    }
+    private void collectEditable(View view,ArrayList<EditText> fields){
+        if(view.getVisibility()!=View.VISIBLE)return;
+        if(view instanceof EditText){
+            EditText edit=(EditText)view;
+            if(edit.isEnabled()&&edit.isFocusable()&&edit.getKeyListener()!=null)fields.add(edit);
+        }else if(view instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++)collectEditable(group.getChildAt(i),fields);
+        }
+    }
     private void refreshNames(){ArrayList<String> names=new ArrayList<>();try(Cursor c=db.getReadableDatabase().rawQuery("SELECT DISTINCT name FROM remembered_names ORDER BY name",null)){while(c.moveToNext())names.add(c.getString(0));}movementName.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,names));}
     private void loadReadings(){
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
@@ -373,12 +414,17 @@ public class ShiftActivity extends Activity {
             LinearLayout pair=new LinearLayout(this);pair.setGravity(Gravity.CENTER_VERTICAL);
             LinearLayout prevBox=column();prevBox.addView(text("القراءة السابقة",12,0xff7c8186,false));
             EditText previous=new EditText(this);styleInput(previous);previous.setHint("السابقة");previous.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);previous.setTextDirection(View.TEXT_DIRECTION_LTR);
-            previous.setText(fmt(c.getDouble(3)));prevBox.addView(previous);
+            previous.setText(fmt(c.getDouble(3)));
+            previous.setKeyListener(null);previous.setFocusable(false);previous.setFocusableInTouchMode(false);
+            previous.setCursorVisible(false);previous.setLongClickable(false);
+            previous.setBackground(Util.round(0xffeceef0,dp(10)));
+            previous.setContentDescription("القراءة السابقة، تُعدّل من الضبط ثم الطرمبات");
+            prevBox.addView(previous);
             LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff7c8186,false));
             EditText current=new EditText(this);styleInput(current);current.setHint("الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
             if(!c.isNull(4))current.setText(fmt(c.getDouble(4)));currBox.addView(current);
             if(!stopped){
-                restoreAndWatchDraft(previous,c.getLong(0),"previous");
+                readingDrafts().edit().remove(draftKey(c.getLong(0),"previous")).apply();
                 restoreAndWatchDraft(current,c.getLong(0),"current");
             }
             LinearLayout.LayoutParams half=new LinearLayout.LayoutParams(0,-2,1);half.setMargins(dp(3),0,dp(3),0);
@@ -412,13 +458,9 @@ public class ShiftActivity extends Activity {
         boolean ok=true;
         for(ReadingInput r:inputs){
             if(!r.current.isEnabled())continue;
-            String prev=r.previous.getText().toString().trim();
-            boolean previousSaved=prev.isEmpty()||db.savePrevious(r.id,Util.number(prev));
-            if(!previousSaved)ok=false;
-            else if(!prev.isEmpty())readingDrafts().edit().remove(draftKey(r.id,"previous")).apply();
             String curr=r.current.getText().toString().trim();
             if(!curr.isEmpty()){
-                if(previousSaved&&db.saveReading(r.id,Util.number(curr)))
+                if(db.saveReading(r.id,Util.number(curr)))
                     readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
                 else ok=false;
             }
