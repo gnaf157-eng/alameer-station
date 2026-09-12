@@ -105,17 +105,67 @@ public final class PdfReport {
     }
 
     private void movements(long shiftId){
-        section("الحركات");
-        columns(new String[]{"النوع", "الاسم", "المبلغ", "", "", ""});
-        int count = 0;
-        try (Cursor c = db.syncMovements(shiftId)) {
-            while (c.moveToNext()) {
-                count++;
-                row(new String[]{arabicType(c.getString(0)), c.getString(1), money(c.getDouble(2)), "", "", ""});
+        java.util.LinkedHashMap<String,java.util.List<String[]>> groups=new java.util.LinkedHashMap<>();
+        for(String type:new String[]{"COLLECTION","CASH","DEBT","EXPENSE"})
+            groups.put(type,new java.util.ArrayList<>());
+        try(Cursor c=db.syncMovements(shiftId)){
+            while(c.moveToNext()){
+                String type=c.getString(0);
+                if(!groups.containsKey(type))groups.put(type,new java.util.ArrayList<>());
+                groups.get(type).add(new String[]{c.getString(1),money(c.getDouble(2))});
             }
         }
-        if (count == 0) row(new String[]{"لا توجد حركات مسجلة", "", "", "", "", ""});
-        y += 12;
+        ensure(100);
+        section("الحركات");
+        boolean any=false;
+        for(java.util.Map.Entry<String,java.util.List<String[]>> group:groups.entrySet()){
+            if(group.getValue().isEmpty())continue;
+            any=true;
+            ensure(74);
+            movementHeading(group.getKey(),false);
+            for(String[] movement:group.getValue()){
+                android.text.TextPaint namePaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+                namePaint.setTextSize(11);namePaint.setColor(0xff2b2f33);
+                android.text.StaticLayout name=android.text.StaticLayout.Builder.obtain(
+                        movement[0]==null?"":movement[0],0,movement[0]==null?0:movement[0].length(),
+                        namePaint,345)
+                        .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                        .setTextDirection(android.text.TextDirectionHeuristics.RTL)
+                        .setIncludePad(false).build();
+                int height=Math.max(26,name.getHeight()+12);
+                if(y+height>HEIGHT-MARGIN){
+                    newPage();
+                    movementHeading(group.getKey(),true);
+                }
+                canvas.save();
+                canvas.translate(WIDTH-MARGIN-351,y+6);
+                name.draw(canvas);
+                canvas.restore();
+                text(movement[1],11,0xff2b2f33,false,MARGIN+145,y+17,Paint.Align.RIGHT);
+                y+=height;
+                paint.setColor(0xffe4e6e8);paint.setStrokeWidth(0.6f);
+                canvas.drawLine(MARGIN,y,WIDTH-MARGIN,y,paint);
+            }
+            y+=8;
+        }
+        if(!any)row(new String[]{"لا توجد حركات مسجلة"});
+        y+=12;
+    }
+
+    private void movementHeading(String type,boolean continued){
+        int background=0xffeef0f2;
+        if("COLLECTION".equals(type))background=0xffedf5ee;
+        else if("CASH".equals(type))background=0xffedf2f8;
+        else if("DEBT".equals(type))background=0xfffcf0f0;
+        else if("EXPENSE".equals(type))background=0xfffbf3e8;
+        paint.setColor(background);paint.setStyle(Paint.Style.FILL);
+        canvas.drawRect(MARGIN,y,WIDTH-MARGIN,y+26,paint);
+        text(arabicType(type)+(continued?" — تابع":""),12,Util.NAVY,true,
+                WIDTH-MARGIN-6,y+18,Paint.Align.RIGHT);
+        y+=26;
+        text("الاسم / البيان",10,0xff5f6469,true,WIDTH-MARGIN-6,y+16,Paint.Align.RIGHT);
+        text("المبلغ (ر.ي)",10,0xff5f6469,true,MARGIN+145,y+16,Paint.Align.RIGHT);
+        y+=24;
     }
 
     private void totals(long shiftId){
