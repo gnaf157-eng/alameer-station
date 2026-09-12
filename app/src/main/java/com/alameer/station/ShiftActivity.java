@@ -77,12 +77,6 @@ public class ShiftActivity extends Activity {
         greetingText=text("مرحبًا، "+workerName,18,Util.NAVY,true);greeting.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
         pages[0].addView(greeting,space());
-        LinearLayout hero=panel(Util.NAVY);
-        boolean night=db.isNightWorker(workerId);int count;try(Cursor c=db.shiftReadings(shiftId)){count=c.getCount();}
-        hero.addView(text(night?"☾  وردية الليل":"☀  وردية النهار",24,Color.WHITE,true));
-        hero.addView(text(night?"7 مساءً — 7 صباحًا":"7 صباحًا — 7 مساءً",18,0xffe2e3e3,false),space());
-        hero.addView(text(count+" طرمبات  •  وردية رقم "+shiftId,14,Color.WHITE,false));
-        pages[0].addView(hero,space());
         fuelLitresBox=panel(Color.WHITE);pages[0].addView(fuelLitresBox,space());
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
         Button save=action("حفظ القراءات ومتابعة الوردية",true);
@@ -451,6 +445,7 @@ public class ShiftActivity extends Activity {
             public void afterTextChanged(android.text.Editable value){
                 // Persist exact input, including a cleared field, separately from validated sales.
                 prefs.edit().putString(key,value.toString()).apply();
+                refreshTotals();
             }
         });
     }
@@ -459,7 +454,10 @@ public class ShiftActivity extends Activity {
         for(ReadingInput r:inputs){
             if(!r.current.isEnabled())continue;
             String curr=r.current.getText().toString().trim();
-            if(!curr.isEmpty()){
+            if(curr.isEmpty()){
+                if(db.clearReading(r.id,shiftId))readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
+                else ok=false;
+            }else{
                 if(db.saveReading(r.id,Util.number(curr)))
                     readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
                 else ok=false;
@@ -490,9 +488,35 @@ public class ShiftActivity extends Activity {
         }}
         if(count==0)movementsBox.addView(text("لا توجد حركات في هذه القائمة",15,0xff777d84,false));
     }
+    private Double visibleCurrent(Cursor c){
+        String key=draftKey(c.getLong(0),"current");
+        // A stopped meter displays only its stored reading.
+        if(c.getInt(7)!=0&&readingDrafts().contains(key)){
+            String draft=readingDrafts().getString(key,"").trim();
+            if(draft.isEmpty())return null;
+            double value=Util.number(draft);
+            return Double.isNaN(value)||Double.isInfinite(value)?null:value;
+        }
+        return c.isNull(4)?null:c.getDouble(4);
+    }
+    private boolean hasReadingDrafts(){
+        try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext())if(c.getInt(7)!=0&&readingDrafts().contains(draftKey(c.getLong(0),"current")))return true;}
+        return false;
+    }
+    private double visibleSales(){
+        double total=0;
+        try(Cursor c=db.shiftReadings(shiftId)){
+            while(c.moveToNext()){
+                Double current=visibleCurrent(c);
+                if(current!=null&&current>=c.getDouble(3)&&c.getDouble(5)>0)total+=(current-c.getDouble(3))*c.getDouble(5);
+            }
+        }
+        return total;
+    }
     private void refreshTotals(){
-        double[] values={db.sales(shiftId),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
-        double bal=db.balance(shiftId);String issue=db.validateShift(shiftId);
+        double[] values={visibleSales(),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
+        double bal=Calc.balance(values[0],values[1],values[2],values[3],values[4]);String issue=db.validateShift(shiftId);
+        if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
         if(headerBalance!=null){
             headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
             headerBalance.setTextColor(!issue.isEmpty()?Util.GOLD:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
@@ -518,8 +542,9 @@ public class ShiftActivity extends Activity {
                 String fuel=c.getString(2).trim();
                 double[] total=totals.get(fuel);
                 if(total==null){total=new double[2];totals.put(fuel,total);}
-                if(c.isNull(4)||c.getDouble(4)<c.getDouble(3)){total[1]++;continue;}
-                total[0]+=c.getDouble(4)-c.getDouble(3);
+                Double current=visibleCurrent(c);
+                if(current==null||current<c.getDouble(3)){total[1]++;continue;}
+                total[0]+=current-c.getDouble(3);
             }
         }
         for(LinearLayout box:new LinearLayout[]{fuelLitresBox,reconciliationLitresBox}){
@@ -535,7 +560,7 @@ public class ShiftActivity extends Activity {
                 box.addView(row,space());
                 if(total[1]>0)box.addView(text("غير مكتمل — "+(int)total[1]+" قراءة متبقية",12,0xff8a6200,false));
             }
-            box.addView(text("من فرق القراءات المحفوظة لهذه الوردية",11,0xff777d84,false),space());
+            box.addView(text("من فرق القراءات الظاهرة لهذه الوردية",11,0xff777d84,false),space());
         }
     }
     private String money(double value){return String.format(Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);}
