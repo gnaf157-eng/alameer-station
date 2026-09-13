@@ -7,13 +7,13 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE workers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,pin_hash TEXT NOT NULL UNIQUE,role TEXT NOT NULL,shift_kind TEXT NOT NULL DEFAULT 'DAY',active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE pumps(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,fuel TEXT NOT NULL,price REAL NOT NULL DEFAULT 0,last_reading REAL NOT NULL DEFAULT 0,worker_id INTEGER,active INTEGER NOT NULL DEFAULT 1)");
-        db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,shift_date TEXT NOT NULL DEFAULT '',historical INTEGER NOT NULL DEFAULT 0,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE readings(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,pump_id INTEGER NOT NULL,previous REAL NOT NULL,current REAL,price REAL NOT NULL,sales REAL NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE movements(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,type TEXT NOT NULL,name TEXT NOT NULL,amount REAL NOT NULL,created_at TEXT NOT NULL)");
         db.execSQL("CREATE TABLE remembered_names(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,name TEXT NOT NULL,UNIQUE(type,name))");
@@ -40,6 +40,11 @@ public class Db extends SQLiteOpenHelper {
     public static String hash(String pin){ return Calc.hash(pin); }
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<5){
+            db.execSQL("ALTER TABLE shifts ADD COLUMN shift_date TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE shifts ADD COLUMN historical INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("UPDATE shifts SET shift_date=substr(opened_at,1,10)");
+        }
         if (oldVersion < 2) {
             try { db.execSQL("ALTER TABLE shifts ADD COLUMN manager_note TEXT DEFAULT ''"); } catch (Exception ignored) {}
         }
@@ -83,7 +88,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=db.rawQuery("SELECT id FROM shifts WHERE worker_id=? AND status IN ('OPEN','RETURNED') ORDER BY id DESC LIMIT 1",new String[]{String.valueOf(workerId)})){
             if(c.moveToFirst())return c.getLong(0);
         }
-        ContentValues s=new ContentValues();s.put("worker_id",workerId);s.put("opened_at",Util.now());
+        ContentValues s=new ContentValues();s.put("worker_id",workerId);s.put("opened_at",Util.now());s.put("shift_date",ShiftDates.today());
         long shiftId=db.insertOrThrow("shifts",null,s);
         try(Cursor c=db.rawQuery("SELECT id,last_reading,price FROM pumps WHERE active=1 ORDER BY id",null)){
             while(c.moveToNext()){
@@ -98,6 +103,7 @@ public class Db extends SQLiteOpenHelper {
     }
     /** يسحب أسعار الطرمبات المحدّثة إلى وردية مفتوحة ويعيد حساب مبيعاتها. */
     public void refreshShiftPrices(long shiftId){
+        if(isHistorical(shiftId))return;
         SQLiteDatabase db=getWritableDatabase();
         db.execSQL("UPDATE readings SET price=(SELECT p.price FROM pumps p WHERE p.id=readings.pump_id) WHERE shift_id=?",new Object[]{shiftId});
         db.execSQL("UPDATE readings SET sales=(current-previous)*price WHERE shift_id=? AND current IS NOT NULL",new Object[]{shiftId});
@@ -108,6 +114,7 @@ public class Db extends SQLiteOpenHelper {
      * لا نلمس طرمبة أدخل لها العامل قراءة حالية، حتى لا تضيع مبيعاته.
      */
     public void refreshShiftPrevious(long shiftId){
+        if(isHistorical(shiftId))return;
         getWritableDatabase().execSQL(
             "UPDATE readings SET previous=(SELECT p.last_reading FROM pumps p WHERE p.id=readings.pump_id) "+
             "WHERE shift_id=? AND current IS NULL",new Object[]{shiftId});
@@ -115,12 +122,14 @@ public class Db extends SQLiteOpenHelper {
 
     /** يزامن الوردية المفتوحة مع أي تغيير في الإعدادات: طرمبات جديدة، أسعار، وعدّادات. */
     public void syncShiftWithSettings(long shiftId){
+        if(isHistorical(shiftId))return;
         syncShiftPumps(shiftId);
         refreshShiftPrevious(shiftId);
         refreshShiftPrices(shiftId);
     }
     /** يضمّ أي طرمبة نشطة أُضيفت بعد فتح الوردية. */
     public int syncShiftPumps(long shiftId){
+        if(isHistorical(shiftId))return 0;
         SQLiteDatabase db=getWritableDatabase();int added=0;
         try(Cursor c=db.rawQuery("SELECT id,last_reading,price FROM pumps WHERE active=1 AND id NOT IN (SELECT pump_id FROM readings WHERE shift_id=?) ORDER BY id",new String[]{String.valueOf(shiftId)})){
             while(c.moveToNext()){
@@ -175,7 +184,7 @@ public class Db extends SQLiteOpenHelper {
     public long openShift(int workerId, boolean night) {
         SQLiteDatabase db=getWritableDatabase();
         try(Cursor c=db.rawQuery("SELECT id FROM shifts WHERE worker_id=? AND status IN ('OPEN','SUBMITTED','RETURNED') ORDER BY id DESC LIMIT 1",new String[]{String.valueOf(workerId)})){if(c.moveToFirst())return c.getLong(0);}
-        ContentValues s=new ContentValues(); s.put("worker_id",workerId); s.put("opened_at",Util.now());
+        ContentValues s=new ContentValues(); s.put("worker_id",workerId); s.put("opened_at",Util.now());s.put("shift_date",ShiftDates.today());
         long shiftId=db.insertOrThrow("shifts",null,s);
         String sql=night ? "SELECT id,last_reading,price FROM pumps WHERE active=1" : "SELECT id,last_reading,price FROM pumps WHERE active=1 AND worker_id=?";
         try(Cursor c=db.rawQuery(sql,night?null:new String[]{String.valueOf(workerId)})){
@@ -204,7 +213,7 @@ public class Db extends SQLiteOpenHelper {
             if(hasCurrent)v.put("sales",Calc.pumpSales(previous,current,price));
             db.update("readings",v,"id=?",new String[]{String.valueOf(readingId)});
             // نُبقي عدّاد الطرمبة متوافقًا مع أحدث بداية أدخلها العامل.
-            db.execSQL("UPDATE pumps SET last_reading=? WHERE id=(SELECT pump_id FROM readings WHERE id=?)",new Object[]{previous,readingId});
+            db.execSQL("UPDATE pumps SET last_reading=? WHERE id=(SELECT r.pump_id FROM readings r JOIN shifts s ON s.id=r.shift_id WHERE r.id=? AND s.historical=0)",new Object[]{previous,readingId});
             return true;
         }
     }
@@ -220,7 +229,7 @@ public class Db extends SQLiteOpenHelper {
     public double sales(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(CASE WHEN r.current IS NOT NULL AND r.current>=r.previous AND r.price>0 THEN (r.current-r.previous)*r.price ELSE 0 END),0) FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP,new String[]{String.valueOf(shiftId)})){c.moveToFirst();return c.getDouble(0);}}
     public double balance(long shiftId){return Calc.balance(sales(shiftId),total(shiftId,"COLLECTION"),total(shiftId,"CASH"),total(shiftId,"DEBT"),total(shiftId,"EXPENSE"));}
     public void submit(long shiftId,int workerId,String reason){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("sales",sales(shiftId));v.put("collections",total(shiftId,"COLLECTION"));v.put("cash_delivered",total(shiftId,"CASH"));v.put("debts",total(shiftId,"DEBT"));v.put("expenses",total(shiftId,"EXPENSE"));v.put("balance",balance(shiftId));v.put("difference_reason",reason);v.put("manager_note","");v.put("status","SUBMITTED");v.put("closed_at",Util.now());v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,workerId,"SUBMIT","إرسال/تعديل الوردية؛ السبب: "+reason);}
-    public Cursor archive(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.status,s.sales,s.balance,s.sync_state,COALESCE(s.manager_note,'') FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
+    public Cursor archive(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.status,s.sales,s.balance,s.sync_state,COALESCE(s.manager_note,''),COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
     public Cursor submitted(){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.sales,s.balance,s.difference_reason FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.status='SUBMITTED' ORDER BY s.id",null);}
     public int pendingCount(){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE status='SUBMITTED'",null)){c.moveToFirst();return c.getInt(0);}}
     public int pendingSyncCount(){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE sync_state='PENDING'",null)){c.moveToFirst();return c.getInt(0);}}
@@ -228,7 +237,7 @@ public class Db extends SQLiteOpenHelper {
     public void markSynced(long shiftId){ContentValues v=new ContentValues();v.put("sync_state","SYNCED");getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});}
     public Cursor syncReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT p.name,p.fuel,r.previous,r.current,r.price,r.sales FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY p.id",new String[]{String.valueOf(shiftId)});}
     public Cursor syncMovements(long shiftId){return getReadableDatabase().rawQuery("SELECT type,name,amount FROM movements WHERE shift_id=? ORDER BY id",new String[]{String.valueOf(shiftId)});}
-    public void approve(long shiftId){SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});ContentValues v=new ContentValues();v.put("status","APPROVED");v.put("sync_state","PENDING");db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"APPROVE","اعتماد المدير");db.setTransactionSuccessful();}finally{db.endTransaction();}}
+    public void approve(long shiftId){SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{if(!isHistorical(shiftId))db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});ContentValues v=new ContentValues();v.put("status","APPROVED");v.put("sync_state","PENDING");db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"APPROVE","اعتماد المدير");db.setTransactionSuccessful();}finally{db.endTransaction();}}
     public void returnToWorker(long shiftId,String note){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("status","RETURNED");v.put("manager_note",note);v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"RETURN","إرجاع للعامل: "+note);}
     public String shiftStatus(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){return c.moveToFirst()?c.getString(0):"OPEN";}}
     public String managerNote(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(manager_note,'') FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){return c.moveToFirst()?c.getString(0):"";}}
@@ -257,15 +266,48 @@ public class Db extends SQLiteOpenHelper {
         }finally{db.endTransaction();}
         return changed;}
     /** قائمة الأشهر التي فيها ورديات، الأحدث أولًا. */
-    public ArrayList<String> months(){ArrayList<String> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT DISTINCT substr(opened_at,1,7) FROM shifts ORDER BY 1 DESC",null)){while(c.moveToNext())out.add(c.getString(0));}return out;}
+    public ArrayList<String> months(){ArrayList<String> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT DISTINCT substr(COALESCE(NULLIF(shift_date,''),opened_at),1,7) FROM shifts ORDER BY 1 DESC",null)){while(c.moveToNext())out.add(c.getString(0));}return out;}
     /** تجميع شهري لكل عامل: عدد الورديات والمبيعات والفروقات. */
     public Cursor monthlyByWorker(String month){return getReadableDatabase().rawQuery(
         "SELECT w.name,COUNT(*),COALESCE(SUM(s.sales),0),COALESCE(SUM(s.collections),0),COALESCE(SUM(s.cash_delivered),0),"+
         "COALESCE(SUM(s.debts),0),COALESCE(SUM(s.expenses),0),COALESCE(SUM(s.balance),0),"+
         "SUM(CASE WHEN ABS(s.balance)>=0.01 THEN 1 ELSE 0 END) "+
-        "FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE substr(s.opened_at,1,7)=? AND s.status IN ('SUBMITTED','APPROVED','RETURNED') "+
+        "FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE substr(COALESCE(NULLIF(s.shift_date,''),s.opened_at),1,7)=? AND s.status IN ('SUBMITTED','APPROVED','RETURNED') "+
         "GROUP BY w.id,w.name ORDER BY 3 DESC",new String[]{month});}
-    public Cursor shiftHeader(long shiftId){return getReadableDatabase().rawQuery("SELECT w.name,s.opened_at,COALESCE(s.closed_at,''),s.status,COALESCE(s.difference_reason,''),COALESCE(s.manager_note,'') FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.id=?",new String[]{String.valueOf(shiftId)});}
-    public Cursor exportShifts(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,COALESCE(s.closed_at,''),s.status,s.sales,s.collections,s.cash_delivered,s.debts,s.expenses,s.balance,COALESCE(s.difference_reason,''),COALESCE(s.manager_note,''),s.sync_state FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
+    public Cursor shiftHeader(long shiftId){return getReadableDatabase().rawQuery("SELECT w.name,s.opened_at,COALESCE(s.closed_at,''),s.status,COALESCE(s.difference_reason,''),COALESCE(s.manager_note,''),COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.id=?",new String[]{String.valueOf(shiftId)});}
+    public Cursor exportShifts(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,COALESCE(s.closed_at,''),s.status,s.sales,s.collections,s.cash_delivered,s.debts,s.expenses,s.balance,COALESCE(s.difference_reason,''),COALESCE(s.manager_note,''),s.sync_state FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
+    public String shiftDate(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(NULLIF(shift_date,''),substr(opened_at,1,10)) FROM shifts WHERE id=?",new String[]{String.valueOf(id)})){
+            return c.moveToFirst()?c.getString(0):ShiftDates.today();
+        }
+    }
+    public boolean isHistorical(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT historical FROM shifts WHERE id=?",new String[]{String.valueOf(id)})){
+            return c.moveToFirst()&&c.getInt(0)==1;
+        }
+    }
+    public void setShiftDate(long id,String date){
+        ShiftDates.validate(date);
+        SQLiteDatabase database=getWritableDatabase();
+        database.beginTransaction();
+        try(Cursor c=database.rawQuery("SELECT opened_at,historical,status FROM shifts WHERE id=?",new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst()||!("OPEN".equals(c.getString(2))||"RETURNED".equals(c.getString(2))))throw new IllegalStateException("الوردية مغلقة");
+            boolean historical=c.getInt(1)==1||date.compareTo(c.getString(0).substring(0,10))<0;
+            ContentValues values=new ContentValues();values.put("shift_date",date);values.put("historical",historical?1:0);
+            database.update("shifts",values,"id=?",new String[]{String.valueOf(id)});
+            audit(database,id,0,"SHIFT_DATE",date);
+            database.setTransactionSuccessful();
+        }finally{database.endTransaction();}
+    }
+    public boolean saveHistoricalBaseline(long shiftId,long readingId,double previous,double price){
+        if(!isHistorical(shiftId)||!Double.isFinite(previous)||!Double.isFinite(price)||previous<0||price<=0)return false;
+        SQLiteDatabase database=getWritableDatabase();
+        try(Cursor c=database.rawQuery("SELECT r.current FROM readings r JOIN shifts s ON s.id=r.shift_id WHERE r.id=? AND r.shift_id=? AND s.status IN ('OPEN','RETURNED')",new String[]{String.valueOf(readingId),String.valueOf(shiftId)})){
+            if(!c.moveToFirst()||(!c.isNull(0)&&c.getDouble(0)<previous))return false;
+            ContentValues values=new ContentValues();values.put("previous",previous);values.put("price",price);
+            values.put("sales",c.isNull(0)?0:(c.getDouble(0)-previous)*price);
+            return database.update("readings",values,"id=? AND shift_id=?",new String[]{String.valueOf(readingId),String.valueOf(shiftId)})==1;
+        }
+    }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }

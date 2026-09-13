@@ -38,7 +38,8 @@ final class ReportTable {
         }
         add(true,"محطة الأمير — تقرير الوردية","","","","");
         add(false,"رقم الوردية",id,"العامل",worker,"");
-        add(false,"وقت الفتح",opened,"وقت الإغلاق",closed,"");
+        add(false,"تاريخ الوردية",db.shiftDate(id),ShiftDates.day(db.shiftDate(id)),"","");
+        add(false,"تاريخ الإدخال",opened,"وقت الإغلاق",closed,"");
         add(false,"الحالة",state,"سبب الفرق",reason,"");
         add(true,"سعر البترول","سعر الديزل","سعر الغاز","","");
         int priceRow=add(false,price(prices.get("بترول")),price(prices.get("ديزل")),price(prices.get("غاز")),"ريال / لتر","");

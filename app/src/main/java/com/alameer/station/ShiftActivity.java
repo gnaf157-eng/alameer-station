@@ -37,6 +37,7 @@ public class ShiftActivity extends Activity {
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance;
+    Button shiftDateButton;
     LinearLayout fuelLitresBox, reconciliationLitresBox;
     boolean askNameOnFirstRun=false;
     LinearLayout totalsBox;
@@ -88,6 +89,10 @@ public class ShiftActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
         for(int i=0;i<5;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
         pages[0].addView(heading("ورديتي"));
+        shiftDateButton=action("",false);
+        shiftDateButton.setOnClickListener(v->chooseShiftDate());
+        pages[0].addView(shiftDateButton,space());
+        refreshShiftDate();
         LinearLayout greeting=new LinearLayout(this);greeting.setGravity(Gravity.CENTER_VERTICAL);
         greetingText=text("مرحبًا، "+workerName,18,Util.NAVY,true);greeting.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
@@ -341,6 +346,45 @@ public class ShiftActivity extends Activity {
         if(selected==3)loadArchive();
         refreshTotals();
     }
+    private void refreshShiftDate(){
+        if(shiftDateButton==null)return;
+        String date=db.shiftDate(shiftId);
+        shiftDateButton.setText(ShiftDates.day(date)+"  "+date+"  •  تغيير التاريخ"+
+            (db.isHistorical(shiftId)?"\nوردية للأرشيف — لا تغيّر عدادات الطرمبات":""));
+    }
+    private void chooseShiftDate(){
+        java.time.LocalDate date=java.time.LocalDate.parse(db.shiftDate(shiftId));
+        DatePickerDialog picker=new DatePickerDialog(this,(view,year,month,day)->{
+            String value=java.time.LocalDate.of(year,month+1,day).toString();
+            try{
+                db.setShiftDate(shiftId,value);loadReadings();refreshTotals();
+                if(db.isHistorical(shiftId))new AlertDialog.Builder(this).setTitle("وردية قديمة")
+                    .setMessage("ستُحفظ للأرشفة فقط. اضغط على القراءة السابقة لتعديل قراءة وسعر كل طرمبة لهذه الوردية، دون تغيير العدادات الحالية.")
+                    .setPositiveButton("حسنًا",null).show();
+            }catch(Exception e){Toast.makeText(this,"تعذر تغيير تاريخ الوردية",Toast.LENGTH_LONG).show();}
+        },date.getYear(),date.getMonthValue()-1,date.getDayOfMonth());
+        picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();
+    }
+    private void historicalBaseline(long readingId,double previous,double price){
+        LinearLayout box=column();box.setPadding(dp(20),dp(8),dp(20),0);
+        EditText prev=new EditText(this),rate=new EditText(this);
+        styleInput(prev);styleInput(rate);
+        prev.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        rate.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        prev.setText(fmt(previous));rate.setText(fmt(price));
+        box.addView(text("القراءة السابقة للوردية القديمة",14,Util.NAVY,true));box.addView(prev);
+        box.addView(text("سعر اللتر وقت الوردية",14,Util.NAVY,true));box.addView(rate);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("تعديل هذه الوردية فقط").setView(box)
+            .setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
+        dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button->{
+            if(prev.getText().toString().trim().isEmpty()||rate.getText().toString().trim().isEmpty()||
+                !db.saveHistoricalBaseline(shiftId,readingId,Util.number(prev.getText().toString()),Util.number(rate.getText().toString()))){
+                Toast.makeText(this,"راجع القراءة والسعر؛ السابقة لا تتجاوز الحالية المحفوظة",Toast.LENGTH_LONG).show();return;
+            }
+            dialog.dismiss();loadReadings();refreshTotals();
+        }));
+        dialog.show();
+    }
     private void loadArchive(){
         pages[3].removeAllViews();pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         try(Cursor c=db.archive(workerId,false)){
@@ -349,9 +393,14 @@ public class ShiftActivity extends Activity {
                 String state=c.getString(3);
                 String label="OPEN".equals(state)?"جارية الآن":"مُغلقة";
                 final long archivedId=c.getLong(0);
-                TextView card=Util.card(this,"وردية #"+archivedId+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال\n\nاضغط لمشاركة PDF أو Excel");
-                card.setClickable(true);
-                card.setOnClickListener(v->chooseReport(archivedId));
+                LinearLayout card=panel(Color.WHITE);
+                card.addView(text(ShiftDates.day(c.getString(8)),21,0xff16733c,true),space());
+                card.addView(text("وردية #"+archivedId+"  •  "+label,16,Util.NAVY,true));
+                card.addView(text("تاريخ الوردية: "+c.getString(8),15,Util.NAVY,true));
+                card.addView(text("تاريخ الإدخال: "+c.getString(2),13,0xff667078,false));
+                card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
+                card.addView(text("اضغط لمشاركة PDF أو Excel",12,0xff667078,false));
+                card.setClickable(true);card.setOnClickListener(v->chooseReport(archivedId));
                 pages[3].addView(card,Util.spaced());
             }
         }
@@ -437,6 +486,7 @@ public class ShiftActivity extends Activity {
     }
     private void refreshNames(){ArrayList<String> names=new ArrayList<>();try(Cursor c=db.getReadableDatabase().rawQuery("SELECT DISTINCT name FROM remembered_names ORDER BY name",null)){while(c.moveToNext())names.add(c.getString(0));}movementName.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,names));}
     private void loadReadings(){
+        refreshShiftDate();
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
         readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){
@@ -454,6 +504,12 @@ public class ShiftActivity extends Activity {
             previous.setCursorVisible(false);previous.setLongClickable(false);
             previous.setBackground(Util.round(0xffeceef0,dp(10)));
             previous.setContentDescription("القراءة السابقة، تُعدّل من الضبط ثم الطرمبات");
+            if(db.isHistorical(shiftId)){
+                final long historicalReading=c.getLong(0);
+                final double historicalPrevious=c.getDouble(3),historicalPrice=c.getDouble(5);
+                previous.setContentDescription("تعديل قراءة وسعر هذه الوردية القديمة فقط");
+                previous.setOnClickListener(v->historicalBaseline(historicalReading,historicalPrevious,historicalPrice));
+            }
             prevBox.addView(previous);
             LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff7c8186,false));
             EditText current=new EditText(this);styleInput(current);current.setHint("الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -686,7 +742,7 @@ public class ShiftActivity extends Activity {
         double bal=db.balance(shiftId);
         if(Math.abs(bal)<0.01){
             new AlertDialog.Builder(this).setTitle("إغلاق الوردية")
-                .setMessage("الوردية مطابقة. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق.")
+                .setMessage(db.isHistorical(shiftId)?"ستُحفظ الوردية القديمة في الأرشيف دون تغيير قراءات الطرمبات الحالية.":"الوردية مطابقة. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق.")
                 .setPositiveButton("إغلاق",(d,w)->finishShift(""))
                 .setNegativeButton("إلغاء",null).show();
             return;
@@ -707,12 +763,13 @@ public class ShiftActivity extends Activity {
     /** يؤرشف الوردية الحالية ويبدأ واحدة جديدة، ثم يعرض حفظ التقرير. */
     private void finishShift(String reason){
         final long closed=shiftId;
+        final boolean historical=db.isHistorical(closed);
         db.submit(closed,workerId,reason);
         db.approve(closed);
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
         new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed)
-            .setMessage("بدأت وردية جديدة بقراءات الإغلاق. تستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
+            .setMessage(historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق. تستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
             .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
             .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
             .setNegativeButton("لاحقًا",null).show();
