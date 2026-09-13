@@ -49,8 +49,8 @@ public final class PdfReport {
 
     private void header(long shiftId){
         paint.setColor(Util.NAVY);paint.setStyle(Paint.Style.FILL);
-        canvas.drawRect(0, 0, WIDTH, 92, paint);
-        right("محطة الأمير — تقرير وردية", 22, Util.GOLD, true, 34);
+        canvas.drawRect(0, 0, WIDTH, 72, paint);
+        right("محطة الأمير — تقرير وردية", 18, Util.GOLD, true, 28);
         String worker = "", opened = "", closed = "", status = "", reason = "", note = "";
         try (Cursor c = db.shiftHeader(shiftId)) {
             if (c.moveToFirst()) {
@@ -58,10 +58,8 @@ public final class PdfReport {
                 status = arabicStatus(c.getString(3)); reason = c.getString(4); note = c.getString(5);
             }
         }
-        right("وردية رقم " + shiftId + "  •  " + worker, 13, Color.WHITE, false, 60);
-        y = 118;
-        line("العامل", worker);
-        line("وقت الفتح", opened);
+        right("وردية رقم " + shiftId + "  •  " + worker + "  •  " + opened, 11, Color.WHITE, false, 54);
+        y = 82;
         line("وقت الإغلاق", closed.isEmpty() ? "—" : closed);
         line("الحالة", status);
         if (!reason.isEmpty()) line("سبب الفرق", reason);
@@ -78,7 +76,7 @@ public final class PdfReport {
                         money(c.getDouble(3)), money(c.getDouble(4)), money(c.getDouble(5))});
             }
         }
-        y += 12;
+        y += 6;
     }
 
     private void fuelLitres(long shiftId){
@@ -101,75 +99,79 @@ public final class PdfReport {
         String[] values=new String[grouped.size()];int index=0;
         for(double litres:grouped.values())values[index++]=money(litres)+" لتر";
         row(values);
-        y+=12;
+        y+=6;
     }
+
+    private static final String[] MOVEMENT_TYPES={"EXPENSE","COLLECTION","DEBT","CASH"};
+    private static final String[] MOVEMENT_HEADERS={"المخاريج","المقبوضات","الديون","الفلوس","البيان"};
 
     private void movements(long shiftId){
-        java.util.LinkedHashMap<String,java.util.List<String[]>> groups=new java.util.LinkedHashMap<>();
-        for(String type:new String[]{"COLLECTION","CASH","DEBT","EXPENSE"})
-            groups.put(type,new java.util.ArrayList<>());
-        java.util.Map<String,Double> groupTotals=new java.util.HashMap<>();
+        java.util.List<String[]> rows=new java.util.ArrayList<>();
+        double[] sums=new double[4];
+        // Keep rows grouped by type, with the amount in its own column only.
         try(Cursor c=db.syncMovements(shiftId)){
             while(c.moveToNext()){
-                String type=c.getString(0);
-                if(!groups.containsKey(type))groups.put(type,new java.util.ArrayList<>());
-                groups.get(type).add(new String[]{c.getString(1),money(c.getDouble(2))});
-                groupTotals.put(type,groupTotals.containsKey(type)?groupTotals.get(type)+c.getDouble(2):c.getDouble(2));
+                String[] values={"","","","",c.getString(1)};
+                int column=-1;
+                for(int i=0;i<MOVEMENT_TYPES.length;i++)
+                    if(MOVEMENT_TYPES[i].equals(c.getString(0))){column=i;break;}
+                if(column<0)throw new IllegalStateException("نوع حركة غير معروف: "+c.getString(0));
+                values[column]=money(c.getDouble(2));
+                sums[column]+=c.getDouble(2);
+                rows.add(values);
             }
         }
-        ensure(100);
-        section("الحركات");
-        boolean any=false;
-        for(java.util.Map.Entry<String,java.util.List<String[]>> group:groups.entrySet()){
-            if(group.getValue().isEmpty())continue;
-            any=true;
-            ensure(74);
-            movementHeading(group.getKey(),groupTotals.get(group.getKey()),false);
-            for(String[] movement:group.getValue()){
-                android.text.TextPaint namePaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
-                namePaint.setTextSize(11);namePaint.setColor(0xff2b2f33);
-                android.text.StaticLayout name=android.text.StaticLayout.Builder.obtain(
-                        movement[0]==null?"":movement[0],0,movement[0]==null?0:movement[0].length(),
-                        namePaint,345)
-                        .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
-                        .setTextDirection(android.text.TextDirectionHeuristics.RTL)
-                        .setIncludePad(false).build();
-                int height=Math.max(26,name.getHeight()+12);
-                if(y+height>HEIGHT-MARGIN){
-                    newPage();
-                    movementHeading(group.getKey(),groupTotals.get(group.getKey()),true);
-                }
-                canvas.save();
-                canvas.translate(WIDTH-MARGIN-351,y+6);
-                name.draw(canvas);
-                canvas.restore();
-                text(movement[1],11,0xff2b2f33,false,MARGIN+145,y+17,Paint.Align.RIGHT);
-                y+=height;
-                paint.setColor(0xffe4e6e8);paint.setStrokeWidth(0.6f);
-                canvas.drawLine(MARGIN,y,WIDTH-MARGIN,y,paint);
-            }
-            y+=8;
-        }
-        if(!any)row(new String[]{"لا توجد حركات مسجلة"});
-        y+=12;
+        java.util.Collections.sort(rows,(left,right)->Integer.compare(movementColumn(left),movementColumn(right)));
+        ensure(66);
+        section("الحركات — المبالغ بالريال اليمني");
+        movementTableRow(MOVEMENT_HEADERS,true);
+        if(rows.isEmpty())movementTableRow(new String[]{"","","","","لا توجد حركات مسجلة"},false);
+        for(String[] values:rows)movementTableRow(values,false);
+        movementTableRow(new String[]{money(sums[0]),money(sums[1]),money(sums[2]),money(sums[3]),"الإجمالي"},true);
+        y+=6;
     }
 
-    private void movementHeading(String type,double total,boolean continued){
-        int background=0xffeef0f2;
-        if("COLLECTION".equals(type))background=0xffedf5ee;
-        else if("CASH".equals(type))background=0xffedf2f8;
-        else if("DEBT".equals(type))background=0xfffcf0f0;
-        else if("EXPENSE".equals(type))background=0xfffbf3e8;
-        paint.setColor(background);paint.setStyle(Paint.Style.FILL);
-        canvas.drawRect(MARGIN,y,WIDTH-MARGIN,y+26,paint);
-        text(arabicType(type)+(continued?" — تابع":""),12,Util.NAVY,true,
-                WIDTH-MARGIN-6,y+18,Paint.Align.RIGHT);
-        text("الإجمالي: "+money(total)+" ر.ي",11,Util.NAVY,true,
-                MARGIN+245,y+18,Paint.Align.RIGHT);
-        y+=26;
-        text("الاسم / البيان",10,0xff5f6469,true,WIDTH-MARGIN-6,y+16,Paint.Align.RIGHT);
-        text("المبلغ (ر.ي)",10,0xff5f6469,true,MARGIN+145,y+16,Paint.Align.RIGHT);
-        y+=24;
+    private static int movementColumn(String[] row){
+        for(int i=0;i<4;i++)if(!row[i].isEmpty())return i;
+        return 4;
+    }
+
+    private void movementTableRow(String[] values,boolean highlighted){
+        android.text.StaticLayout[] layouts=new android.text.StaticLayout[5];
+        int height=20;
+        for(int i=0;i<5;i++){
+            int width=i<4?78:WIDTH-MARGIN*2-312;
+            android.text.TextPaint cellPaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+            cellPaint.setTextSize(10);cellPaint.setColor(Util.NAVY);cellPaint.setFakeBoldText(highlighted);
+            String value=values[i]==null?"":values[i];
+            layouts[i]=android.text.StaticLayout.Builder.obtain(value,0,value.length(),cellPaint,width-8)
+                    .setTextDirection(android.text.TextDirectionHeuristics.RTL)
+                    .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                    .setIncludePad(false).build();
+            height=Math.max(height,layouts[i].getHeight()+8);
+        }
+        if(y+height>HEIGHT-MARGIN){
+            newPage();
+            if(values!=MOVEMENT_HEADERS)movementTableRow(MOVEMENT_HEADERS,true);
+        }
+        float right=WIDTH-MARGIN;
+        int[] colors={0xfffbf3e8,0xffedf5ee,0xfffcf0f0,0xffedf2f8,0xffeef0f2};
+        for(int i=0;i<5;i++){
+            int width=i<4?78:WIDTH-MARGIN*2-312;
+            if(highlighted){
+                paint.setStyle(Paint.Style.FILL);paint.setColor(colors[i]);
+                canvas.drawRect(right-width,y,right,y+height,paint);
+            }
+            canvas.save();
+            canvas.translate(right-width+4,y+4);
+            layouts[i].draw(canvas);
+            canvas.restore();
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(0.5f);paint.setColor(0xffc8ccd0);
+            canvas.drawRect(right-width,y,right,y+height,paint);
+            right-=width;
+        }
+        paint.setStyle(Paint.Style.FILL);
+        y+=height;
     }
 
     private void totals(long shiftId){
@@ -204,11 +206,11 @@ public final class PdfReport {
     }
 
     private void section(String name){
-        ensure(40);
+        ensure(30);
         paint.setColor(Util.NAVY);paint.setStyle(Paint.Style.FILL);
         canvas.drawRoundRect(MARGIN, y, WIDTH - MARGIN, y + 26, 6, 6, paint);
         right(name, 13, Util.GOLD, true, y + 18);
-        y += 38;
+        y += 30;
     }
 
     private void columns(String[] headers){
