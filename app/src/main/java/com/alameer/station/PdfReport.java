@@ -14,7 +14,8 @@ public final class PdfReport {
         File dir=new File(context.getCacheDir(),"exports");
         if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("تعذر إنشاء مجلد التقرير");
         File file=new File(dir,"alameer-shift-"+id+"-"+System.currentTimeMillis()+".pdf");
-        try(PdfDocument document=new PdfDocument()){
+        PdfDocument document=new PdfDocument();
+        try{
             PdfDocument.Page page=null;Canvas canvas=null;int y=MARGIN,pageNo=0;
             for(int i=0;i<table.rows.size();i++){
                 ReportTable.Row row=table.rows.get(i);
@@ -39,7 +40,7 @@ public final class PdfReport {
             }
             if(page!=null)document.finishPage(page);
             try(FileOutputStream out=new FileOutputStream(file)){document.writeTo(out);}
-        }
+        }finally{document.close();}
         return file;
     }
     private static StaticLayout[] layouts(ReportTable.Row row){
