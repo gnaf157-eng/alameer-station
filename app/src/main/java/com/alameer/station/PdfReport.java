@@ -26,6 +26,11 @@ public final class PdfReport {
         for(int i=0;i<table.rows.size();i++){
             ReportTable.Row row=table.rows.get(i);
             int kind=i==0?1:"الباقي".equals(row.cells[0])?2:row.heading?3:0;
+            if(i>table.movementHeader&&i<table.totalsStart){
+                for(int column=0;column<4;column++){
+                    if(row.cells[column] instanceof Number){kind=4+column;break;}
+                }
+            }
             blocks.add(new Block(row,kind));
         }
         File dir=new File(context.getCacheDir(),"exports");
@@ -73,8 +78,8 @@ public final class PdfReport {
             Object value=i<row.cells.length?row.cells[i]:null;
             if(value instanceof XlsxWorkbook.Formula)value=((XlsxWorkbook.Formula)value).value;
             String text=value==null?"":value instanceof Number?ReportTable.format(((Number)value).doubleValue()):value.toString();
-            int size=kind==1?21:kind==2&&i==1?20:kind==2?12:10;
-            int color=kind==1?Color.WHITE:kind==2?balanceColor(row):kind==3?INK:value instanceof Number?INK:MUTED;
+            int size=kind==1?21:kind==2&&i==1?20:kind==2?12:11;
+            int color=kind==1?Color.WHITE:kind==2?balanceColor(row):kind==3||kind>=4?INK:value instanceof Number?INK:MUTED;
             TextPaint p=paint(size,kind!=0,color);
             result[i]=StaticLayout.Builder.obtain(text,0,text.length(),p,(kind==1?COLUMN*5:COLUMN)-20)
                 .setTextDirection(value instanceof Number?TextDirectionHeuristics.LTR:TextDirectionHeuristics.RTL)
@@ -91,7 +96,12 @@ public final class PdfReport {
     private static void draw(Canvas canvas,Block b,int y){
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
         int left=WIDTH-MARGIN-COLUMN*5,right=WIDTH-MARGIN;
-        if(b.kind==1){
+        if(b.kind>=4){
+            // EXPENSE, COLLECTION, DEBT, CASH — match the amount column, including zero.
+            int[] backgrounds={0xffffedd9,0xffe4f2e7,0xfff7e5eb,0xffe3edf9};
+            p.setColor(backgrounds[b.kind-4]);
+            canvas.drawRect(left,y,right,y+b.height,p);
+        }else if(b.kind==1){
             p.setColor(INK);canvas.drawRoundRect(left,y,right,y+b.height-6,9,9,p);
             p.setColor(GOLD);canvas.drawRoundRect(right-7,y+10,right-3,y+b.height-16,2,2,p);
         }else if(b.kind==2){
@@ -108,9 +118,9 @@ public final class PdfReport {
             canvas.save();canvas.translate(cellLeft+10,y+(b.height-b.cells[i].getHeight())/2f);
             b.cells[i].draw(canvas);canvas.restore();
         }
-        if(b.kind==0){
-            p.setColor(0xffe9ecee);p.setStrokeWidth(0.35f);
-            canvas.drawLine(left+8,y+b.height,right-8,y+b.height,p);
+        if(b.kind==0||b.kind>=4){
+            p.setColor(0xffbac2c8);p.setStrokeWidth(0.65f);
+            canvas.drawLine(left,y+b.height,right,y+b.height,p);
         }
     }
     static String arabicType(String t){return Calc.arabicType(t);}
