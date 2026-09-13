@@ -38,10 +38,10 @@ public class ShiftActivity extends Activity {
     int page=0;
     TextView headerBalance;
     Button shiftDateButton;
-    LinearLayout fuelLitresBox, reconciliationLitresBox;
+    LinearLayout fuelLitresBox, reconciliationLitresBox, pinnedSummaries, movementSummary;
     boolean askNameOnFirstRun=false;
     LinearLayout totalsBox;
-    String movementFilter="";
+
     AutoCompleteTextView movementName;
     EditText movementAmount;
     Spinner movementType;
@@ -84,6 +84,12 @@ public class ShiftActivity extends Activity {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
 
+        pinnedSummaries=column();
+        pinnedSummaries.setPadding(dp(16),dp(4),dp(16),dp(4));
+        shell.addView(pinnedSummaries);
+        movementSummary=panel(Color.WHITE);
+        movementSummary.setVisibility(View.GONE);
+        pinnedSummaries.addView(movementSummary);
         ScrollView scroll=new ScrollView(this);screenScroll=scroll;
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
@@ -97,17 +103,11 @@ public class ShiftActivity extends Activity {
         greetingText=text("مرحبًا، "+workerName,18,Util.NAVY,true);greeting.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
         pages[0].addView(greeting,space());
-        fuelLitresBox=panel(Color.WHITE);pages[0].addView(fuelLitresBox,space());
+        fuelLitresBox=panel(Color.WHITE);pinnedSummaries.addView(fuelLitresBox);
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
         Button save=action("حفظ القراءات ومتابعة الوردية",true);
         save.setOnClickListener(v->{if(saveReadings())showPage(2);});pages[0].addView(save,space());
         pages[1].addView(heading("الحركات"));
-        HorizontalScrollView filters=new HorizontalScrollView(this);filters.setHorizontalScrollBarEnabled(false);
-        LinearLayout chips=new LinearLayout(this);
-        String[] filterNames={"الكل","مقبوضات","نقد مسلّم","ديون","مخاريج"};
-        String[] filterTypes={"","COLLECTION","CASH","DEBT","EXPENSE"};
-        for(int i=0;i<5;i++){final String type=filterTypes[i];Button chip=action(filterNames[i],i==0);chip.setTextSize(13);chip.setMinWidth(dp(72));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(44));cp.setMargins(dp(3),0,dp(3),0);chips.addView(chip,cp);chip.setOnClickListener(v->{movementFilter=type;for(int j=0;j<chips.getChildCount();j++)chips.getChildAt(j).setBackground(Util.round(chips.getChildAt(j)==v?Util.GOLD:0xffe7e8e9,dp(12)));loadMovements();});}
-        filters.addView(chips);
         movementsBox=panel(Color.WHITE);
         LinearLayout form=panel(Color.WHITE);form.addView(text("＋  إضافة حركة",21,Util.NAVY,true),space());
         form.addView(text("نوع الحركة",13,Util.NAVY,false));
@@ -119,7 +119,7 @@ public class ShiftActivity extends Activity {
         Button add=action("حفظ الحركة  ▣",true);add.setOnClickListener(v->{String name=movementName.getText().toString().trim();double amount=Util.number(movementAmount.getText().toString());if(name.isEmpty()){movementName.setError("أدخل الاسم");return;}if(amount<=0||Double.isNaN(amount)||Double.isInfinite(amount)){movementAmount.setError("أدخل مبلغًا صحيحًا");return;}db.addMovement(shiftId,movementTypes[movementType.getSelectedItemPosition()],name,amount);movementName.setText("");movementAmount.setText("");refreshNames();loadMovements();refreshTotals();Toast.makeText(this,"حُفظت الحركة على الجهاز",Toast.LENGTH_SHORT).show();});
         form.addView(add,space());pages[1].addView(form,space());
         pages[1].addView(text("الحركات المسجّلة",18,Util.NAVY,true),space());
-        pages[1].addView(filters,space());
+
         pages[1].addView(movementsBox,space());
         Button review=action("مطابقة وتسليم الوردية",false);review.setOnClickListener(v->showPage(2));pages[1].addView(review,space());
         pages[2].addView(heading("مطابقة الوردية"));
@@ -334,6 +334,9 @@ public class ShiftActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void showPage(int selected){
         page=selected;
+        pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
+        fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
+        movementSummary.setVisibility(selected==1?View.VISIBLE:View.GONE);
         for(int i=0;i<5;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         int active=selected==2?0:selected==3?2:selected==4?-1:selected;
         for(int i=0;i<tabs.length;i++){
@@ -567,7 +570,7 @@ public class ShiftActivity extends Activity {
     private void loadMovements(){
         movementsBox.removeAllViews();int count=0;
         try(Cursor c=db.movements(shiftId)){while(c.moveToNext()){
-            String type=c.getString(1);if(!movementFilter.isEmpty()&&!movementFilter.equals(type))continue;count++;
+            String type=c.getString(1);count++;
             LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(12),0,dp(12));
             LinearLayout words=column();words.addView(text(c.getString(2),17,Util.NAVY,true));
             int color="COLLECTION".equals(type)?Util.GREEN:"EXPENSE".equals(type)?0xffa85a1a:Util.RED;
@@ -611,6 +614,7 @@ public class ShiftActivity extends Activity {
         return total;
     }
     private void refreshTotals(){
+        refreshMovementSummary();
         double[] values={visibleSales(),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
         double bal=Calc.balance(values[0],values[1],values[2],values[3],values[4]);String issue=db.validateShift(shiftId);
         if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
@@ -632,6 +636,27 @@ public class ShiftActivity extends Activity {
         }
     }
     /** Uses the same visible reading rows as sales; missing counters stay incomplete. */
+    private void refreshMovementSummary(){
+        if(movementSummary==null)return;
+        movementSummary.removeAllViews();
+        LinearLayout headers=new LinearLayout(this),values=new LinearLayout(this);
+        headers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        values.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        headers.setBackgroundColor(0xfffff3bf);
+        String[] names={"المخاريج","المقبوضات","الديون","الفلوس"};
+        String[] types={"EXPENSE","COLLECTION","DEBT","CASH"};
+        for(int i=0;i<types.length;i++){
+            TextView name=text(names[i],13,Util.NAVY,true);
+            name.setGravity(Gravity.CENTER);name.setPadding(dp(2),dp(5),dp(2),dp(5));
+            TextView amount=text(money(db.total(shiftId,types[i])),16,Util.NAVY,true);
+            amount.setTextDirection(View.TEXT_DIRECTION_LTR);amount.setGravity(Gravity.CENTER);
+            amount.setPadding(dp(2),dp(6),dp(2),dp(6));amount.setMaxLines(1);
+            amount.setAutoSizeTextTypeUniformWithConfiguration(10,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+            headers.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+            values.addView(amount,new LinearLayout.LayoutParams(0,dp(36),1));
+        }
+        movementSummary.addView(headers);movementSummary.addView(values);
+    }
     private void refreshFuelLitres(){
         LinkedHashMap<String,double[]> totals=new LinkedHashMap<>();
         try(Cursor c=db.shiftReadings(shiftId)){

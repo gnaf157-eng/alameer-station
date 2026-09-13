@@ -80,7 +80,7 @@ final class ReportTable {
                 totals[col]+=c.getDouble(2);movements.add(values);
             }
         }
-        Collections.sort(movements,(a,b)->Integer.compare(column(a),column(b)));
+        Collections.sort(movements,(a,b)->Integer.compare(movementOrder(column(a)),movementOrder(column(b))));
         first=rows.size()+1;
         for(Object[] movement:movements)add(false,movement);
         if(movements.isEmpty())add(false,null,null,null,null,"لا توجد حركات");
@@ -89,6 +89,9 @@ final class ReportTable {
         add(true,"المبيعات","المقبوضات","النقد المسلّم","الديون","المخاريج");
         add(false,f("E"+salesRow,sales),f("B"+tr,totals[1]),f("D"+tr,totals[3]),f("C"+tr,totals[2]),f("A"+tr,totals[0]));
         add(true,"الباقي",f("E"+salesRow+"+B"+tr+"-D"+tr+"-C"+tr+"-A"+tr,sales+totals[1]-totals[3]-totals[2]-totals[0]),"سبب الفرق",reason,"");
+    }
+    private static int movementOrder(int column){
+        switch(column){case 2:return 0;case 1:return 1;case 0:return 2;case 3:return 3;default:return 4;}
     }
     private static int column(Object[] a){for(int i=0;i<4;i++)if(a[i]!=null)return i;return 4;}
     private static Object price(Set<Double> values){
