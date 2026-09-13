@@ -32,7 +32,9 @@ public class ShiftActivity extends Activity {
         }
     }
     LinearLayout[] pages=new LinearLayout[5];
-    Button[] tabs=new Button[4];
+    Button[] tabs=new Button[3];
+    int settingsReturnPage=0;
+    ScrollView screenScroll;
     int page=0;
     TextView headerBalance;
     LinearLayout fuelLitresBox, reconciliationLitresBox;
@@ -64,11 +66,24 @@ public class ShiftActivity extends Activity {
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brand.addView(headerBalance,new LinearLayout.LayoutParams(0,dp(66),1));
+        ImageButton settingsGear=new ImageButton(this);
+        settingsGear.setContentDescription("الضبط");
+        settingsGear.setTooltipText("الضبط");
+        settingsGear.setPadding(dp(12),dp(12),dp(12),dp(12));
+        settingsGear.setImageDrawable(new SettingsGear());
+        settingsGear.setBackground(new android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(0x33ffce00),null,Util.round(Color.WHITE,dp(24))));
+        brand.addView(settingsGear,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        settingsGear.setOnClickListener(v->{
+            if(page==4){showPage(settingsReturnPage);}
+            else{settingsReturnPage=page;showPage(4);}
+            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
+        });
         shell.addView(brand);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
 
-        ScrollView scroll=new ScrollView(this);
+        ScrollView scroll=new ScrollView(this);screenScroll=scroll;
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
         for(int i=0;i<5;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
@@ -131,9 +146,9 @@ public class ShiftActivity extends Activity {
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
-        String[] names={"ورديتي","الحركات","الأرشيف","الضبط"};
-        int[] destinations={0,1,3,4};
-        for(int i=0;i<4;i++){
+        String[] names={"ورديتي","الحركات","الأرشيف"};
+        int[] destinations={0,1,3};
+        for(int i=0;i<tabs.length;i++){
             final int n=destinations[i];
             Button tab=new Button(this);tabs[i]=tab;
             tab.setText(names[i]);tab.setAllCaps(false);tab.setTextSize(12);
@@ -315,8 +330,8 @@ public class ShiftActivity extends Activity {
     private void showPage(int selected){
         page=selected;
         for(int i=0;i<5;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
-        int active=selected==2?0:selected==3?2:selected==4?3:selected;
-        for(int i=0;i<4;i++){
+        int active=selected==2?0:selected==3?2:selected==4?-1:selected;
+        for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
             tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.GOLD:Color.WHITE,dp(17)),null));
             tabs[i].setTextColor(i==active?Util.NAVY:Color.rgb(98,104,109));
@@ -340,6 +355,31 @@ public class ShiftActivity extends Activity {
                 pages[3].addView(card,Util.spaced());
             }
         }
+    }
+    @Override public void onBackPressed(){
+        if(page==4){
+            showPage(settingsReturnPage);
+            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
+        }else super.onBackPressed();
+    }
+    private class SettingsGear extends android.graphics.drawable.Drawable{
+        final android.graphics.Paint ink=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        public void draw(android.graphics.Canvas c){
+            c.save();c.translate(getBounds().left,getBounds().top);
+            c.scale(getBounds().width()/24f,getBounds().height()/24f);
+            ink.setColor(Util.GOLD);ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setStrokeWidth(2.3f);ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            c.drawCircle(12,12,7,ink);c.drawCircle(12,12,2.8f,ink);
+            for(int i=0;i<8;i++){
+                double a=Math.PI*i/4;
+                c.drawLine(12+(float)Math.cos(a)*7,12+(float)Math.sin(a)*7,
+                    12+(float)Math.cos(a)*9.5f,12+(float)Math.sin(a)*9.5f,ink);
+            }
+            c.restore();
+        }
+        public void setAlpha(int a){ink.setAlpha(a);}
+        public void setColorFilter(android.graphics.ColorFilter f){ink.setColorFilter(f);}
+        public int getOpacity(){return android.graphics.PixelFormat.TRANSLUCENT;}
     }
     private class NavIcon extends android.graphics.drawable.Drawable {
         final int kind;final android.graphics.Paint paint=new android.graphics.Paint(3);
