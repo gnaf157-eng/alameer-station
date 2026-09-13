@@ -121,6 +121,7 @@ public class ShiftActivity extends Activity {
         Button details=action("مراجعة التفاصيل  ▤",false);details.setOnClickListener(v->showPage(0));pages[2].addView(details,space());
         TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
+        Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
         Button close=action("إغلاق الوردية وبدء وردية جديدة",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
@@ -333,9 +334,9 @@ public class ShiftActivity extends Activity {
                 String state=c.getString(3);
                 String label="OPEN".equals(state)?"جارية الآن":"مُغلقة";
                 final long archivedId=c.getLong(0);
-                TextView card=Util.card(this,"وردية #"+archivedId+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال\n\nاضغط لحفظ PDF");
+                TextView card=Util.card(this,"وردية #"+archivedId+"  •  "+label+"\n"+c.getString(2)+"\nالمبيعات: "+money(c.getDouble(4))+" ريال\nالباقي: "+money(c.getDouble(5))+" ريال\n\nاضغط لمشاركة PDF أو Excel");
                 card.setClickable(true);
-                card.setOnClickListener(v->sharePdf(archivedId));
+                card.setOnClickListener(v->chooseReport(archivedId));
                 pages[3].addView(card,Util.spaced());
             }
         }
@@ -571,6 +572,40 @@ public class ShiftActivity extends Activity {
             sharePdfOrThrow(shiftId);
         }catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
     }
+    private void exportExcel(){
+        if(!saveReadings())return;
+        shareExcel(shiftId);
+    }
+    private void chooseReport(long id){
+        new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
+            .setItems(new String[]{"PDF","Excel (.xlsx)"},(d,which)->{
+                if(id==shiftId&&!saveReadings())return;
+                if(which==0)sharePdf(id);else shareExcel(id);
+            }).show();
+    }
+    private void shareExcel(long id){
+        Toast.makeText(this,"جارٍ تجهيز ملف Excel",Toast.LENGTH_SHORT).show();
+        new Thread(()->{
+            try{
+                java.io.File file=new ExcelReport(this,db).build(id);
+                runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed())return;
+                    try{
+                        android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".files",file);
+                        Intent intent=new Intent(Intent.ACTION_SEND);
+                        intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                        intent.putExtra(Intent.EXTRA_STREAM,uri);
+                        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية محطة الأمير #"+id);
+                        intent.setClipData(android.content.ClipData.newRawUri("تقرير الوردية",uri));
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(intent,"حفظ أو مشاركة Excel"));
+                    }catch(Exception e){Toast.makeText(this,"تعذرت مشاركة ملف Excel",Toast.LENGTH_LONG).show();}
+                });
+            }catch(Exception e){
+                runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())Toast.makeText(this,"تعذر إنشاء ملف Excel",Toast.LENGTH_LONG).show();});
+            }
+        }).start();
+    }
     private void sharePdf(long id){
         try{ sharePdfOrThrow(id); }
         catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
@@ -621,6 +656,7 @@ public class ShiftActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed)
             .setMessage("بدأت وردية جديدة بقراءات الإغلاق. تستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
             .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
+            .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
             .setNegativeButton("لاحقًا",null).show();
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
