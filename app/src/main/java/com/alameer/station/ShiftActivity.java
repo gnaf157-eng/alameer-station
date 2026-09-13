@@ -550,7 +550,25 @@ public class ShiftActivity extends Activity {
         }
         for(LinearLayout box:new LinearLayout[]{fuelLitresBox,reconciliationLitresBox}){
             if(box==null)continue;
-            box.removeAllViews();box.addView(text("إجمالي اللترات حسب النوع",18,Util.NAVY,true),space());
+            box.removeAllViews();
+            if(box==fuelLitresBox){
+                LinearLayout headers=new LinearLayout(this),numbers=new LinearLayout(this);
+                headers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                numbers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                headers.setBackgroundColor(0xfffff3bf);
+                for(Map.Entry<String,double[]> entry:totals.entrySet()){
+                    TextView label=text(entry.getKey(),16,Util.NAVY,true);
+                    label.setGravity(Gravity.CENTER);label.setPadding(dp(4),dp(5),dp(4),dp(5));
+                    TextView value=text(money(entry.getValue()[0]),18,Util.NAVY,true);
+                    value.setTextDirection(View.TEXT_DIRECTION_LTR);value.setGravity(Gravity.CENTER);
+                    value.setPadding(dp(4),dp(6),dp(4),dp(6));
+                    headers.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+                    numbers.addView(value,new LinearLayout.LayoutParams(0,-2,1));
+                }
+                box.addView(headers);box.addView(numbers);
+                continue;
+            }
+            box.addView(text("إجمالي اللترات حسب النوع",18,Util.NAVY,true),space());
             if(totals.isEmpty())box.addView(text("لا توجد طرمبات في الوردية",14,0xff777d84,false));
             for(Map.Entry<String,double[]> entry:totals.entrySet()){
                 double[] total=entry.getValue();
