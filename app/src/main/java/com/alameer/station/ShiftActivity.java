@@ -36,7 +36,9 @@ public class ShiftActivity extends Activity {
     int settingsReturnPage=0;
     ScrollView screenScroll;
     int page=0;
-    TextView headerBalance;
+    TextView headerBalance,stationTitle;
+    ImageView stationLogo;
+    static final int PICK_STATION_LOGO=7301;
     Button shiftDateButton;
     LinearLayout fuelLitresBox, reconciliationLitresBox, pinnedSummaries, movementSummary;
     boolean askNameOnFirstRun=false;
@@ -57,10 +59,15 @@ public class ShiftActivity extends Activity {
         shell.setPadding(0,0,0,0);
         LinearLayout brand=new LinearLayout(this);brand.setGravity(Gravity.CENTER_VERTICAL);
         brand.setPadding(dp(20),dp(10),dp(20),dp(12));brand.setBackgroundColor(Util.NAVY);
-        TextView drop=text("",32,Util.GOLD,true);drop.setBackground(new android.graphics.drawable.Drawable(){public void draw(android.graphics.Canvas c){android.graphics.Paint p=new android.graphics.Paint(3);p.setColor(Util.GOLD);android.graphics.Path path=new android.graphics.Path();float w=getBounds().width(),h=getBounds().height();path.moveTo(w*.5f,h*.12f);path.cubicTo(w*.4f,h*.35f,w*.15f,h*.5f,w*.15f,h*.64f);path.cubicTo(w*.15f,h*.98f,w*.85f,h*.98f,w*.85f,h*.64f);path.cubicTo(w*.85f,h*.5f,w*.6f,h*.3f,w*.5f,h*.12f);c.drawPath(path,p);}public void setAlpha(int a){}public void setColorFilter(android.graphics.ColorFilter f){}public int getOpacity(){return android.graphics.PixelFormat.TRANSLUCENT;}});brand.addView(drop,new LinearLayout.LayoutParams(dp(44),dp(52)));
+        stationLogo=new ImageView(this);stationLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        stationLogo.setContentDescription("شعار المحطة");
+        brand.addView(stationLogo,new LinearLayout.LayoutParams(dp(44),dp(52)));
         LinearLayout brandWords=column();
-        brandWords.addView(text("محطة الأمير",20,Color.WHITE,true));
-        brandWords.addView(text("مطابقة الورديات",12,0xffd2d5d5,false));
+        stationTitle=text("",20,Color.WHITE,true);stationTitle.setMaxLines(2);
+        stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
+        refreshStationBrand();
+        brandWords.addView(text("وردية • مطابقة الورديات",11,0xffd2d5d5,false));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
         headerBalance=text("",15,Util.GOLD,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
@@ -173,6 +180,7 @@ public class ShiftActivity extends Activity {
     private void buildSettingsPage(){
         pages[4].removeAllViews();
         pages[4].addView(heading("الإعدادات"));
+        buildStationSettings();
 
         pages[4].addView(sectionTitle("اسم العامل"));
         LinearLayout nameBox=panel(Color.WHITE);
@@ -259,7 +267,62 @@ public class ShiftActivity extends Activity {
         Button backupBtn=action("نسخة احتياطية",false);
         backupBtn.setOnClickListener(v->new Backup(this).export());
         pages[4].addView(backupBtn,space());
+        pages[4].addView(sectionTitle("حول التطبيق"));
+        LinearLayout about=panel(Color.WHITE);
+        about.addView(text("وردية  •  "+BuildConfig.VERSION_NAME,19,Util.NAVY,true));
+        about.addView(text("تطوير: أبوقناف للأتمتة",16,Util.NAVY,true),space());
+        TextView contact=text("للتواصل: 777808020",16,Util.NAVY,false);contact.setTextIsSelectable(true);about.addView(contact);
+        Button call=action("تواصل مع المطوّر",false);
+        call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
+        about.addView(call,space());pages[4].addView(about,space());
     }
+
+    private void refreshStationBrand(){
+        if(stationTitle!=null)stationTitle.setText(Branding.stationName(db));
+        if(stationLogo!=null){
+            android.graphics.Bitmap logo=Branding.logo(this);
+            if(logo==null)stationLogo.setImageResource(R.drawable.ic_wardiya_mark);else stationLogo.setImageBitmap(logo);
+        }
+    }
+    private void buildStationSettings(){
+        pages[4].addView(sectionTitle("المحطة"));
+        LinearLayout box=panel(Color.WHITE);
+        box.addView(text(Branding.stationName(db),20,Util.NAVY,true));
+        box.addView(text("اسم المحطة وشعارها يظهران في الواجهة والتقرير",13,0xff7c8186,false));
+        Button rename=action("تغيير اسم المحطة",false);
+        rename.setOnClickListener(v->{
+            EditText input=new EditText(this);styleInput(input);input.setSingleLine(true);
+            input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(60)});
+            input.setText(Branding.stationName(db));input.setSelectAllOnFocus(true);
+            LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);form.addView(input);
+            AlertDialog dialog=new AlertDialog.Builder(this).setTitle("اسم المحطة").setView(form).setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
+            dialog.setOnShowListener(a->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b->{
+                String name=input.getText().toString().trim();
+                if(name.isEmpty()){input.setError("أدخل اسم المحطة");return;}
+                db.setSetting("station_name",name);refreshStationBrand();buildSettingsPage();dialog.dismiss();
+            }));dialog.show();
+        });box.addView(rename,space());
+        Button logo=action("اختيار شعار المحطة",false);
+        logo.setOnClickListener(v->{try{
+            Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(pick,PICK_STATION_LOGO);
+        }catch(ActivityNotFoundException e){Toast.makeText(this,"لا يوجد تطبيق لاختيار الصور",Toast.LENGTH_LONG).show();}});
+        box.addView(logo,space());
+        Button remove=action("استخدام شعار وردية",false);
+        remove.setOnClickListener(v->{Branding.removeLogo(this);refreshStationBrand();Toast.makeText(this,"تم استخدام شعار وردية",Toast.LENGTH_SHORT).show();});
+        box.addView(remove,space());pages[4].addView(box,space());
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=PICK_STATION_LOGO||result!=RESULT_OK||data==null||data.getData()==null)return;
+        android.net.Uri uri=data.getData();
+        new Thread(()->{
+            try{Branding.importLogo(getApplicationContext(),uri);
+                runOnUiThread(()->{if(!isDestroyed()){refreshStationBrand();Toast.makeText(this,"حُفظ شعار المحطة",Toast.LENGTH_SHORT).show();}});
+            }catch(Exception e){runOnUiThread(()->{if(!isDestroyed())Toast.makeText(this,"تعذر حفظ الشعار. اختر صورة أخرى.",Toast.LENGTH_LONG).show();});}
+        },"station-logo").start();
+    }
+
     private void refreshGreeting(){if(greetingText!=null)greetingText.setText("مرحبًا، "+workerName);}
     private void nameDialog(){
         EditText input=new EditText(this);styleInput(input);
@@ -734,7 +797,7 @@ public class ShiftActivity extends Activity {
                         Intent intent=new Intent(Intent.ACTION_SEND);
                         intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                         intent.putExtra(Intent.EXTRA_STREAM,uri);
-                        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية محطة الأمير #"+id);
+                        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية "+Branding.stationName(db)+" #"+id);
                         intent.setClipData(android.content.ClipData.newRawUri("تقرير الوردية",uri));
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         startActivity(Intent.createChooser(intent,"حفظ أو مشاركة Excel"));
@@ -755,7 +818,7 @@ public class ShiftActivity extends Activity {
         Intent intent=new Intent(Intent.ACTION_SEND);
         intent.setType("application/pdf");
         intent.putExtra(Intent.EXTRA_STREAM,uri);
-        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية محطة الأمير #"+id);
+        intent.putExtra(Intent.EXTRA_SUBJECT,"وردية "+Branding.stationName(db)+" #"+id);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(Intent.createChooser(intent,"حفظ أو مشاركة الوردية"));
     }

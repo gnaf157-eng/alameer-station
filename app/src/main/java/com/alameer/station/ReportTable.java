@@ -36,7 +36,7 @@ final class ReportTable {
                 readings.add(new Object[]{c.getString(1),type,c.getDouble(3),c.isNull(4)?null:c.getDouble(4),c.getDouble(5)});
             }
         }
-        add(true,"محطة الأمير — تقرير الوردية","","","","");
+        add(true,Branding.stationName(db)+" — تقرير الوردية","","","","");
         add(false,"رقم الوردية",id,"العامل",worker,"");
         add(false,"تاريخ الوردية",db.shiftDate(id),ShiftDates.day(db.shiftDate(id)),"","");
         add(false,"تاريخ الإدخال",opened,"وقت الإغلاق",closed,"");

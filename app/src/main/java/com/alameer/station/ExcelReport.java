@@ -8,6 +8,7 @@ public final class ExcelReport {
         ReportTable table=new ReportTable(db,id);
         XlsxWorkbook book=new XlsxWorkbook();book.mergeTitle();
         for(ReportTable.Row row:table.rows)book.row(row.heading,row.cells);
+        book.row(false,Branding.CREDIT,"","","","");
         File dir=new File(context.getCacheDir(),"exports");
         if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("تعذر إنشاء مجلد التقرير");
         File file=new File(dir,"alameer-shift-"+id+"-"+System.currentTimeMillis()+".xlsx");

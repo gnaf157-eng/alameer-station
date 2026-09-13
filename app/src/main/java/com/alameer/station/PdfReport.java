@@ -8,6 +8,7 @@ import java.io.*;
 /** Print-friendly report with restrained dividers, separate from the Excel styling. */
 public final class PdfReport {
     private final Context context;private final Db db;
+    private Bitmap logo;
     private static final int WIDTH=842,HEIGHT=595,MARGIN=28,COLUMN=(WIDTH-2*MARGIN)/5;
     private static final int INK=0xff252a2e,MUTED=0xff667078,GOLD=0xffe6b900;
     public PdfReport(Context context,Db db){this.context=context;this.db=db;}
@@ -21,7 +22,7 @@ public final class PdfReport {
         }
     }
     public File build(long id)throws Exception{
-        ReportTable table=new ReportTable(db,id);
+        ReportTable table=new ReportTable(db,id);logo=Branding.logo(context);
         java.util.List<Block> blocks=new java.util.ArrayList<>();
         for(int i=0;i<table.rows.size();i++){
             ReportTable.Row row=table.rows.get(i);
@@ -52,13 +53,16 @@ public final class PdfReport {
                     canvas=page.getCanvas();y=MARGIN;
                     if(pageNo>1){
                         TextPaint label=paint(10,true,MUTED);
-                        canvas.drawText("ALAMEER  /  #"+id,MARGIN,y+10,label);y+=22;
+                        canvas.drawText("WARDIYA  /  #"+id,MARGIN,y+10,label);y+=22;
                     }
                     if(i>table.movementHeader&&i<table.totalsStart){
                         Block heading=blocks.get(table.movementHeader);draw(canvas,heading,y);y+=heading.height;
                     }
                     TextPaint footer=paint(8,false,MUTED);
                     canvas.drawText("#"+id+"   /   "+pageNo,MARGIN,HEIGHT-12,footer);
+                    StaticLayout signature=StaticLayout.Builder.obtain(Branding.CREDIT,0,Branding.CREDIT.length(),footer,400)
+                        .setTextDirection(TextDirectionHeuristics.RTL).setAlignment(Layout.Alignment.ALIGN_CENTER).setIncludePad(false).build();
+                    canvas.save();canvas.translate((WIDTH-400)/2f,HEIGHT-22);signature.draw(canvas);canvas.restore();
                 }
                 draw(canvas,block,y);y+=block.height;
             }
@@ -81,7 +85,7 @@ public final class PdfReport {
             int size=kind==1?21:kind==2&&i==1?20:kind==2?12:11;
             int color=kind==1?Color.WHITE:kind==2?balanceColor(row):kind==3||kind>=4?INK:value instanceof Number?INK:MUTED;
             TextPaint p=paint(size,kind!=0,color);
-            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),p,(kind==1?COLUMN*5:COLUMN)-20)
+            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),p,(kind==1?COLUMN*5-60:COLUMN)-20)
                 .setTextDirection(value instanceof Number?TextDirectionHeuristics.LTR:TextDirectionHeuristics.RTL)
                 .setAlignment(kind==1?Layout.Alignment.ALIGN_NORMAL:Layout.Alignment.ALIGN_CENTER)
                 .setIncludePad(false).build();
@@ -93,7 +97,7 @@ public final class PdfReport {
         double n=v instanceof XlsxWorkbook.Formula?((XlsxWorkbook.Formula)v).value:v instanceof Number?((Number)v).doubleValue():0;
         return Math.abs(n)<0.01?0xff286342:0xffa34132;
     }
-    private static void draw(Canvas canvas,Block b,int y){
+    private void draw(Canvas canvas,Block b,int y){
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
         int left=WIDTH-MARGIN-COLUMN*5,right=WIDTH-MARGIN;
         if(b.kind>=4){
@@ -103,6 +107,15 @@ public final class PdfReport {
             canvas.drawRect(left,y,right,y+b.height,p);
         }else if(b.kind==1){
             p.setColor(INK);canvas.drawRoundRect(left,y,right,y+b.height-6,9,9,p);
+            if(logo!=null){
+                p.setColor(Color.WHITE);canvas.drawRoundRect(left+8,y+5,left+54,y+45,5,5,p);
+                float scale=Math.min(40f/logo.getWidth(),34f/logo.getHeight());
+                float w=logo.getWidth()*scale,h=logo.getHeight()*scale;
+                p.setFilterBitmap(true);canvas.drawBitmap(logo,null,new RectF(left+31-w/2,y+25-h/2,left+31+w/2,y+25+h/2),p);
+            }else{
+                android.graphics.drawable.Drawable mark=context.getDrawable(R.drawable.ic_wardiya_mark);
+                mark.setBounds(left+8,y+3,left+54,y+47);mark.draw(canvas);
+            }
             p.setColor(GOLD);canvas.drawRoundRect(right-7,y+10,right-3,y+b.height-16,2,2,p);
         }else if(b.kind==2){
             p.setColor(balanceColor(b.row)==0xff286342?0xffedf5ef:0xfffcf0ed);
@@ -114,7 +127,7 @@ public final class PdfReport {
         }
         for(int i=0;i<b.cells.length;i++){
             int width=b.kind==1?COLUMN*5:COLUMN;
-            int cellLeft=right-i*width-width;
+            int cellLeft=right-i*width-width+(b.kind==1?60:0);
             canvas.save();canvas.translate(cellLeft+10,y+(b.height-b.cells[i].getHeight())/2f);
             b.cells[i].draw(canvas);canvas.restore();
         }
