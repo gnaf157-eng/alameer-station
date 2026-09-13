@@ -6,7 +6,7 @@ public final class ExcelReport {
     public ExcelReport(Context context,Db db){this.context=context;this.db=db;}
     public File build(long id)throws Exception{
         ReportTable table=new ReportTable(db,id);
-        XlsxWorkbook book=new XlsxWorkbook();
+        XlsxWorkbook book=new XlsxWorkbook();book.mergeTitle();
         for(ReportTable.Row row:table.rows)book.row(row.heading,row.cells);
         File dir=new File(context.getCacheDir(),"exports");
         if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("تعذر إنشاء مجلد التقرير");

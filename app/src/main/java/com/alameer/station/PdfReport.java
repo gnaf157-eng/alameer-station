@@ -43,15 +43,16 @@ public final class PdfReport {
         return file;
     }
     private static StaticLayout[] layouts(ReportTable.Row row){
-        StaticLayout[] result=new StaticLayout[5];
-        for(int i=0;i<5;i++){
+        boolean title="محطة الأمير — تقرير الوردية".equals(row.cells[0]);
+        StaticLayout[] result=new StaticLayout[title?1:5];
+        for(int i=0;i<result.length;i++){
             Object value=i<row.cells.length?row.cells[i]:null;
             if(value instanceof XlsxWorkbook.Formula)value=((XlsxWorkbook.Formula)value).value;
             String text=value==null?"":value instanceof Number?ReportTable.format(((Number)value).doubleValue()):value.toString();
-            TextPaint paint=new TextPaint(Paint.ANTI_ALIAS_FLAG);paint.setTextSize(10);
+            TextPaint paint=new TextPaint(Paint.ANTI_ALIAS_FLAG);paint.setTextSize(title?15:10);
             paint.setTypeface(Typeface.create("sans-serif",row.heading?Typeface.BOLD:Typeface.NORMAL));
             paint.setColor(0xff252a2e);
-            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),paint,COLUMN-8)
+            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),paint,(title?COLUMN*5:COLUMN)-8)
                 .setTextDirection(value instanceof Number?TextDirectionHeuristics.LTR:TextDirectionHeuristics.RTL)
                 .setAlignment(Layout.Alignment.ALIGN_CENTER).setIncludePad(false).build();
         }
@@ -62,8 +63,9 @@ public final class PdfReport {
     }
     private static void draw(Canvas canvas,StaticLayout[] cells,boolean heading,int y){
         Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);int h=height(cells);
-        for(int i=0;i<5;i++){
-            int right=WIDTH-MARGIN-i*COLUMN,left=right-COLUMN;
+        for(int i=0;i<cells.length;i++){
+            int width=cells.length==1?COLUMN*5:COLUMN;
+            int right=WIDTH-MARGIN-i*width,left=right-width;
             if(heading){paint.setStyle(Paint.Style.FILL);paint.setColor(0xffffe99a);canvas.drawRect(left,y,right,y+h,paint);}
             canvas.save();canvas.translate(left+4,y+(h-cells[i].getHeight())/2f);cells[i].draw(canvas);canvas.restore();
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(0.5f);paint.setColor(0xffcccccc);canvas.drawRect(left,y,right,y+h,paint);
