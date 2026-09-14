@@ -101,7 +101,7 @@ public class AppUpdater {
             if(Build.VERSION.SDK_INT>=33)app.registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED);
             else app.registerReceiver(receiver,filter);
             DownloadManager.Request request=new DownloadManager.Request(address);
-            request.setTitle("تحديث محطة الأمير");
+            request.setTitle("تحديث طابق ورحّل");
             request.setMimeType("application/vnd.android.package-archive");
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
             request.setDestinationInExternalFilesDir(activity,Environment.DIRECTORY_DOWNLOADS,"station-"+System.currentTimeMillis()+".apk");

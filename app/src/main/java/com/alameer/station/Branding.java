@@ -6,7 +6,7 @@ import android.util.AtomicFile;
 import java.io.*;
 
 final class Branding {
-    static final String CREDIT="وردية | أبوقناف للأتمتة";
+    static final String CREDIT="طابق ورحّل | أبوقناف للأتمتة";
     static String stationName(Db db){return db.setting("station_name","محطة الأمير");}
     private static File file(Context c){return new File(c.getFilesDir(),"station-logo.png");}
     static Bitmap logo(Context c){

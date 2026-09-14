@@ -67,9 +67,9 @@ public class ShiftActivity extends Activity {
         stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
         refreshStationBrand();
-        brandWords.addView(text("وردية • مطابقة الورديات",11,0xffd2d5d5,false));
+        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffBBD4F5,false));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
-        headerBalance=text("",15,Util.GOLD,true);
+        headerBalance=text("",15,0xffBBD4F5,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
@@ -136,7 +136,7 @@ public class ShiftActivity extends Activity {
             final int dest=i==1?1:i==2?2:0;
             TextView step=text(stepNames[i],14,i==2?Util.NAVY:0xff777d84,i==2);
             step.setGravity(Gravity.CENTER);step.setPadding(0,dp(8),0,dp(8));
-            step.setBackground(Util.round(i==2?0xffffedaa:0xffe7e8e9,dp(14)));
+            step.setBackground(Util.round(i==2?Util.ACCENT_SOFT:0xffedf0f4,dp(14)));
             step.setOnClickListener(v->showPage(dest));
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,-2,1);
             sp.setMargins(dp(4),0,dp(4),0);steps.addView(step,sp);
@@ -404,7 +404,7 @@ public class ShiftActivity extends Activity {
         int active=selected==2?0:selected==3?2:selected==4?-1:selected;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
-            tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.GOLD:Color.WHITE,dp(17)),null));
+            tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.ACCENT:Color.WHITE,dp(17)),null));
             tabs[i].setTextColor(i==active?Util.NAVY:Color.rgb(98,104,109));
             tabs[i].setTypeface(android.graphics.Typeface.DEFAULT,i==active?1:0);
             tabs[i].setSelected(i==active);
@@ -482,7 +482,7 @@ public class ShiftActivity extends Activity {
         public void draw(android.graphics.Canvas c){
             c.save();c.translate(getBounds().left,getBounds().top);
             c.scale(getBounds().width()/24f,getBounds().height()/24f);
-            ink.setColor(Util.GOLD);ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setColor(Color.WHITE);ink.setStyle(android.graphics.Paint.Style.STROKE);
             ink.setStrokeWidth(2.3f);ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
             c.drawCircle(12,12,7,ink);c.drawCircle(12,12,2.8f,ink);
             for(int i=0;i<8;i++){
@@ -517,7 +517,7 @@ public class ShiftActivity extends Activity {
     private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(7),0,dp(7));return p;}
     private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setTextDirection(View.TEXT_DIRECTION_RTL);t.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,1);return t;}
     private TextView heading(String name){TextView t=text(name,26,0xff141922,true);t.setGravity(Gravity.CENTER);t.setPadding(0,dp(20),0,dp(20));return t;}
-    private Button action(String name,boolean primary){Button b=new Button(this);b.setText(name);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(Util.NAVY);b.setTypeface(android.graphics.Typeface.DEFAULT,primary?1:0);b.setMinHeight(dp(50));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setStateListAnimator(null);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x22000000),Util.round(primary?Util.GOLD:0xffe7e8e9,dp(12)),null));return b;}
+    private Button action(String name,boolean primary){Button b=new Button(this);b.setText(name);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(primary?Color.WHITE:Util.NAVY);b.setTypeface(android.graphics.Typeface.DEFAULT,primary?1:0);b.setMinHeight(dp(50));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setStateListAnimator(null);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33FFFFFF),Util.round(primary?Util.ACCENT:Util.ACCENT_SOFT,dp(12)),null));return b;}
     private void styleInput(EditText e){e.setTextSize(18);e.setTextColor(Util.NAVY);e.setSingleLine(true);e.setPadding(dp(12),dp(10),dp(12),dp(10));android.graphics.drawable.GradientDrawable bg=Util.round(Color.WHITE,dp(10));bg.setStroke(dp(1),0xffdedfe2);e.setBackground(bg);e.setMinHeight(dp(48));configureNext(e);}
     private void configureNext(EditText input){
         input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
@@ -683,7 +683,7 @@ public class ShiftActivity extends Activity {
         if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
         if(headerBalance!=null){
             headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
-            headerBalance.setTextColor(!issue.isEmpty()?Util.GOLD:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
+            headerBalance.setTextColor(!issue.isEmpty()?0xffBBD4F5:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
             headerBalance.setContentDescription("باقي الوردية الحالية "+money(bal)+" ريال");
         }
         refreshFuelLitres();
@@ -692,7 +692,7 @@ public class ShiftActivity extends Activity {
             String nl=System.lineSeparator();
             balanceText.setText((!issue.isEmpty()?"الوردية غير مكتملة":matched?"✓ الوردية مطابقة":"يوجد فرق في الوردية")+nl+nl+"الباقي"+nl+money(bal)+" ر.ي"+(!issue.isEmpty()?nl+issue:""));
             balanceText.setTextColor(matched?0xff3f7542:!issue.isEmpty()?Util.NAVY:Util.RED);
-            balanceText.setBackground(Util.round(matched?0xffe3efe3:!issue.isEmpty()?0xfffff4ce:0xfffce9e8,dp(16)));
+            balanceText.setBackground(Util.round(matched?0xffe3efe3:!issue.isEmpty()?Util.ACCENT_SOFT:0xfffce9e8,dp(16)));
         }
         if(totalsBox!=null){totalsBox.removeAllViews();String[] labels={"المبيعات","المقبوضات","النقد المسلّم","الديون","المخاريج"};
             for(int i=0;i<5;i++){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(13),0,dp(13));row.addView(text(labels[i],17,Util.NAVY,false),new LinearLayout.LayoutParams(0,-2,1));TextView amount=text((i==0?"":i==1?"+ ":"− ")+money(values[i]),18,i==0?Util.NAVY:i==1?Util.GREEN:Util.RED,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);totalsBox.addView(row);if(i<4){View line=new View(this);line.setBackgroundColor(0xffeceef0);totalsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));}}
@@ -705,7 +705,7 @@ public class ShiftActivity extends Activity {
         LinearLayout headers=new LinearLayout(this),values=new LinearLayout(this);
         headers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         values.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        headers.setBackgroundColor(0xfffff3bf);
+        headers.setBackgroundColor(Util.ACCENT_SOFT);
         String[] names={"المخاريج","المقبوضات","الديون","الفلوس"};
         String[] types={"EXPENSE","COLLECTION","DEBT","CASH"};
         for(int i=0;i<types.length;i++){
@@ -739,7 +739,7 @@ public class ShiftActivity extends Activity {
                 LinearLayout headers=new LinearLayout(this),numbers=new LinearLayout(this);
                 headers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
                 numbers.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-                headers.setBackgroundColor(0xfffff3bf);
+                headers.setBackgroundColor(Util.ACCENT_SOFT);
                 for(Map.Entry<String,double[]> entry:totals.entrySet()){
                     TextView label=text(entry.getKey(),16,Util.NAVY,true);
                     label.setGravity(Gravity.CENTER);label.setPadding(dp(4),dp(5),dp(4),dp(5));
