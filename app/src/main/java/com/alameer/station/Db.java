@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 7;
+    private static final int DB_VERSION = 8;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -21,6 +21,8 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(CASHBOXES_SQL);
         db.execSQL(CASHBOX_ENTRIES_SQL);
         db.execSQL(MATERIAL_ENTRIES_SQL);
+        db.execSQL(DEBTORS_SQL);
+        db.execSQL(DEBT_ENTRIES_SQL);
         db.execSQL("CREATE TABLE audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER,worker_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL)");
         seed(db);
     }
@@ -45,7 +47,12 @@ public class Db extends SQLiteOpenHelper {
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
+    static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
+    static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<8){
+            try{db.execSQL(DEBTORS_SQL);db.execSQL(DEBT_ENTRIES_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<7){
             try{db.execSQL(MATERIAL_ENTRIES_SQL);}catch(Exception ignored){}
         }
@@ -400,6 +407,81 @@ public class Db extends SQLiteOpenHelper {
             "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,b.name FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             boxId>0?new String[]{String.valueOf(boxId)}:null);
+    }
+    // ==================== حركة الديون ====================
+    public long addDebtor(String name,String phone,double opening){
+        String clean=name.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم المدين");
+        if(!Double.isFinite(opening)||opening<0)throw new IllegalArgumentException("الدين الافتتاحي غير صالح");
+        ContentValues v=new ContentValues();
+        v.put("name",clean);v.put("phone",phone.trim());v.put("opening",opening);v.put("created_at",Util.now());
+        long id=getWritableDatabase().insertWithOnConflict("debtors",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        if(id==-1)throw new IllegalArgumentException("يوجد مدين بهذا الاسم");
+        return id;
+    }
+    public void updateDebtor(long id,String name,String phone,double opening){
+        String clean=name.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم المدين");
+        if(!Double.isFinite(opening)||opening<0)throw new IllegalArgumentException("الدين الافتتاحي غير صالح");
+        ContentValues v=new ContentValues();v.put("name",clean);v.put("phone",phone.trim());v.put("opening",opening);
+        if(getWritableDatabase().updateWithOnConflict("debtors",v,"id=?",new String[]{String.valueOf(id)},SQLiteDatabase.CONFLICT_IGNORE)!=1)
+            throw new IllegalArgumentException("يوجد مدين بهذا الاسم");
+    }
+    public void setDebtorActive(long id,boolean active){
+        ContentValues v=new ContentValues();v.put("active",active?1:0);
+        getWritableDatabase().update("debtors",v,"id=?",new String[]{String.valueOf(id)});
+    }
+    public int debtEntryCount(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM debt_entries WHERE debtor_id=?",new String[]{String.valueOf(id)})){
+            c.moveToFirst();return c.getInt(0);
+        }
+    }
+    public boolean deleteDebtor(long id){
+        if(debtEntryCount(id)>0)return false;
+        return getWritableDatabase().delete("debtors","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    /** id,name,phone,opening,active,debt,paid,balance */
+    public Cursor debtors(boolean onlyActive){
+        return getReadableDatabase().rawQuery(
+            "SELECT d.id,d.name,d.phone,d.opening,d.active,"+
+            "COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='DEBT'),0),"+
+            "COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='PAID'),0),"+
+            "d.opening+COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='DEBT'),0)"+
+            "-COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='PAID'),0) "+
+            "FROM debtors d "+(onlyActive?"WHERE d.active=1 ":"")+"ORDER BY d.active DESC,d.id",null);
+    }
+    public double debtorBalance(long id){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT d.opening+COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='DEBT'),0)"+
+            "-COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='PAID'),0) FROM debtors d WHERE d.id=?",
+            new String[]{String.valueOf(id)})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+    /** إجمالي الديون غير المسدّدة على المدينين النشطين. */
+    public double debtsTotal(){
+        double total=0;
+        try(Cursor c=debtors(true)){while(c.moveToNext())total+=c.getDouble(7);}
+        return total;
+    }
+    public long addDebtEntry(long debtorId,String direction,double amount,String note,String date){
+        if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        ContentValues v=new ContentValues();
+        v.put("debtor_id",debtorId);v.put("direction",direction);v.put("amount",amount);
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+        return getWritableDatabase().insertOrThrow("debt_entries",null,v);
+    }
+    public boolean deleteDebtEntry(long id){
+        return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    /** id,direction,amount,note,entry_date,debtor_name */
+    public Cursor debtEntries(long debtorId,int limit){
+        String where=debtorId>0?"WHERE e.debtor_id=? ":"";
+        return getReadableDatabase().rawQuery(
+            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,d.name FROM debt_entries e JOIN debtors d ON d.id=e.debtor_id "+
+            where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
+            debtorId>0?new String[]{String.valueOf(debtorId)}:null);
     }
     // ==================== حركة المواد ====================
     public static final String[] MATERIALS={"بترول","ديزل","غاز"};

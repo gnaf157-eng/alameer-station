@@ -14,7 +14,7 @@ import java.util.Locale;
 /** واجهة المدير: حركة الصناديق وحركة المواد بعد تجاوز كلمة السر. */
 public class ManagerActivity extends Activity {
     private Db db;
-    private TextView cashTotal, stockTotal;
+    private TextView cashTotal, stockTotal, debtTotal;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -54,6 +54,10 @@ public class ManagerActivity extends Activity {
                 v -> startActivity(new Intent(this, MaterialActivity.class)));
         stockTotal = (TextView) stockTile.getTag();
         row.addView(stockTile, cell());
+        LinearLayout debtTile = tile("حركة الديون", "ديون وسداد المدينين", 2,
+                v -> startActivity(new Intent(this, DebtActivity.class)));
+        debtTotal = (TextView) debtTile.getTag();
+        row.addView(debtTile, cell());
         content.addView(row);
 
         TextView hint = text("الأرقام تحت كل أيقونة محدّثة الآن", 12, 0xff8b9097, false);
@@ -79,11 +83,12 @@ public class ManagerActivity extends Activity {
         double stock = 0;
         for (String material : Db.MATERIALS) stock += db.materialSummary(material)[3];
         stockTotal.setText(money(stock) + " لتر");
+        debtTotal.setText(money(db.debtsTotal()) + " ر.ي");
     }
 
     private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(190), 1);
-        p.setMargins(dp(6), 0, dp(6), 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(184), 1);
+        p.setMargins(dp(4), 0, dp(4), 0);
         return p;
     }
 
@@ -91,7 +96,7 @@ public class ManagerActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(10), dp(16), dp(10), dp(16));
+        box.setPadding(dp(6), dp(14), dp(6), dp(14));
         box.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
         box.setElevation(dp(3));
@@ -99,26 +104,28 @@ public class ManagerActivity extends Activity {
         box.setOnClickListener(action);
 
         FrameLayout disc = new FrameLayout(this);
-        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(29)));
+        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(26)));
         ImageView art = new ImageView(this);
         ManagerIcon drawable = new ManagerIcon(icon);
-        drawable.setBounds(0, 0, dp(32), dp(32));
+        drawable.setBounds(0, 0, dp(29), dp(29));
         art.setImageDrawable(drawable);
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(32), dp(32));
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(29), dp(29));
         ip.gravity = Gravity.CENTER;
         disc.addView(art, ip);
-        box.addView(disc, new LinearLayout.LayoutParams(dp(58), dp(58)));
+        box.addView(disc, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
-        TextView name = text(title, 15, Util.NAVY, true);
+        TextView name = text(title, 14, Util.NAVY, true);
+        name.setMaxLines(2);
         name.setGravity(Gravity.CENTER);
         name.setPadding(0, dp(12), 0, dp(3));
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 11, 0xff7c8186, false);
+        TextView caption = text(note, 10, 0xff7c8186, false);
+        caption.setMaxLines(2);
         caption.setGravity(Gravity.CENTER);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView total = text("", 14, Util.NAVY, true);
+        TextView total = text("", 13, Util.NAVY, true);
         total.setGravity(Gravity.CENTER);
         total.setTextDirection(View.TEXT_DIRECTION_LTR);
         total.setPadding(dp(10), dp(5), dp(10), dp(5));
@@ -169,7 +176,7 @@ public class ManagerActivity extends Activity {
                 paint.setStyle(android.graphics.Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawCircle(12, 15.5f, 3, paint);
-            } else {
+            } else if (kind == 1) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);
                 drop.cubicTo(17.5f, 9, 20, 12.5f, 20, 15.5f);
@@ -182,6 +189,13 @@ public class ManagerActivity extends Activity {
                 paint.setColor(Util.ACCENT);
                 c.drawRect(8, 13.5f, 16, 15.2f, paint);
                 c.drawRect(11.1f, 10.4f, 12.9f, 18.3f, paint);
+            } else {
+                c.drawRoundRect(2.5f, 5.5f, 21.5f, 15.5f, 1.8f, 1.8f, paint);
+                c.drawLine(6.5f, 19, 19, 19, paint);
+                c.drawLine(8.5f, 21.5f, 17, 21.5f, paint);
+                paint.setStyle(android.graphics.Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawCircle(12, 10.5f, 2.6f, paint);
             }
             c.restore();
         }
