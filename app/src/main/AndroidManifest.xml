@@ -22,6 +22,7 @@
         </activity>
         <activity android:name=".ShiftActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".CashboxActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".MaterialActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ArchiveActivity" android:screenOrientation="portrait" />
         <activity android:name=".DashboardActivity" android:screenOrientation="portrait" />
         <activity android:name=".AdminActivity" android:screenOrientation="portrait" />

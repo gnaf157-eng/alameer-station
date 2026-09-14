@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 7;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -20,6 +20,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
         db.execSQL(CASHBOXES_SQL);
         db.execSQL(CASHBOX_ENTRIES_SQL);
+        db.execSQL(MATERIAL_ENTRIES_SQL);
         db.execSQL("CREATE TABLE audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER,worker_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL)");
         seed(db);
     }
@@ -43,7 +44,11 @@ public class Db extends SQLiteOpenHelper {
 
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
+    static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<7){
+            try{db.execSQL(MATERIAL_ENTRIES_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<6){
             try{db.execSQL(CASHBOXES_SQL);db.execSQL(CASHBOX_ENTRIES_SQL);}catch(Exception ignored){}
         }
@@ -395,6 +400,49 @@ public class Db extends SQLiteOpenHelper {
             "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,b.name FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             boxId>0?new String[]{String.valueOf(boxId)}:null);
+    }
+    // ==================== حركة المواد ====================
+    public static final String[] MATERIALS={"بترول","ديزل","غاز"};
+    public long addMaterialEntry(String material,String direction,double litres,String note,String date){
+        if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
+        if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
+        ContentValues v=new ContentValues();
+        v.put("material",material);v.put("direction",direction);v.put("litres",litres);
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+        return getWritableDatabase().insertOrThrow("material_entries",null,v);
+    }
+    public boolean deleteMaterialEntry(long id){
+        return getWritableDatabase().delete("material_entries","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    /** الوارد والصادر والرصيد المخزني لمادة واحدة. المبيعات المحفوظة تُخصم كصادر. */
+    public double[] materialSummary(String material){
+        double in=0,out=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT COALESCE(SUM(CASE WHEN direction='IN' THEN litres ELSE 0 END),0),"+
+            "COALESCE(SUM(CASE WHEN direction='OUT' THEN litres ELSE 0 END),0) FROM material_entries WHERE material=?",
+            new String[]{material})){
+            if(c.moveToFirst()){in=c.getDouble(0);out=c.getDouble(1);}
+        }
+        double sold=soldLitres(material);
+        return new double[]{in,out,sold,in-out-sold};
+    }
+    /** اللترات المباعة فعليًا من الورديات المغلقة لهذه المادة. */
+    public double soldLitres(String material){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT COALESCE(SUM(CASE WHEN r.current IS NOT NULL AND r.current>=r.previous THEN r.current-r.previous ELSE 0 END),0) "+
+            "FROM readings r JOIN pumps p ON p.id=r.pump_id JOIN shifts s ON s.id=r.shift_id "+
+            "WHERE s.status<>'OPEN' AND TRIM(p.fuel) IN (?,?)",
+            new String[]{material,"ال"+material})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+    /** id,material,direction,litres,note,entry_date */
+    public Cursor materialEntries(String material,int limit){
+        boolean all=material==null||material.isEmpty();
+        return getReadableDatabase().rawQuery(
+            "SELECT id,material,direction,litres,note,entry_date FROM material_entries "+
+            (all?"":"WHERE material=? ")+"ORDER BY entry_date DESC,id DESC LIMIT "+Math.max(1,limit),
+            all?null:new String[]{material});
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }

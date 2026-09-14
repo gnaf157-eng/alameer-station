@@ -51,17 +51,15 @@ public class HomeActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, -2, 1);
-        half.setMargins(dp(6), 0, dp(6), 0);
-        row.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0, false,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), half);
-        LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, -2, 1);
-        half2.setMargins(dp(6), 0, dp(6), 0);
-        row.addView(tile("مطابقة الصناديق", "الوارد والصادر وأرصدة الصناديق", 1, true,
-                v -> askPin()), half2);
+        row.addView(tile("مطابقة العامل", "الورديات والتقارير", 0, false,
+                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
+        row.addView(tile("حركة الصناديق", "وارد وصادر النقد", 1, true,
+                v -> askPin(CashboxActivity.class)), cell());
+        row.addView(tile("حركة المواد", "وارد وصادر اللترات", 2, true,
+                v -> askPin(MaterialActivity.class)), cell());
         shell.addView(row);
 
-        TextView hint = text("مطابقة الصناديق للمدير وتفتح بكلمة سر", 13, 0xff7c8186, false);
+        TextView hint = text("حركة الصناديق وحركة المواد للمدير وتفتحان بكلمة سر", 13, 0xff7c8186, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(24), 0, 0);
         shell.addView(hint);
@@ -92,46 +90,57 @@ public class HomeActivity extends Activity {
     }
 
     /** بطاقة كبيرة قابلة للنقر تمثّل أحد المدخلين. */
+    private LinearLayout.LayoutParams cell() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(184), 1);
+        p.setMargins(dp(5), 0, dp(5), 0);
+        return p;
+    }
+
     private LinearLayout tile(String title, String note, int icon, boolean locked, View.OnClickListener action) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(14), dp(26), dp(14), dp(22));
+        box.setPadding(dp(8), dp(14), dp(8), dp(14));
         box.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
         box.setElevation(dp(3));
         box.setClickable(true);
         box.setOnClickListener(action);
 
+        FrameLayout disc = new FrameLayout(this);
+        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(27)));
         ImageView art = new ImageView(this);
         HomeIcon drawable = new HomeIcon(icon);
-        drawable.setBounds(0, 0, dp(64), dp(64));
+        drawable.setBounds(0, 0, dp(30), dp(30));
         art.setImageDrawable(drawable);
-        box.addView(art, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(30), dp(30));
+        ip.gravity = Gravity.CENTER;
+        disc.addView(art, ip);
+        box.addView(disc, new LinearLayout.LayoutParams(dp(54), dp(54)));
 
-        TextView name = text(title, 17, Util.NAVY, true);
+        TextView name = text(title, 14, Util.NAVY, true);
         name.setGravity(Gravity.CENTER);
-        name.setPadding(0, dp(14), 0, dp(4));
-        box.addView(name);
+        name.setPadding(0, dp(12), 0, dp(3));
+        name.setMaxLines(2);
+        box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 12, 0xff7c8186, false);
+        TextView caption = text(note, 11, 0xff7c8186, false);
         caption.setGravity(Gravity.CENTER);
-        box.addView(caption);
+        caption.setMaxLines(2);
+        box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
-        if (locked) {
-            TextView badge = text("🔒 بكلمة سر", 11, Util.NAVY, true);
-            badge.setGravity(Gravity.CENTER);
-            badge.setPadding(dp(10), dp(5), dp(10), dp(5));
-            badge.setBackground(Util.round(Util.ACCENT_SOFT, dp(10)));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.setMargins(0, dp(12), 0, 0);
-            box.addView(badge, lp);
-        }
+        TextView badge = text(locked ? "🔒 بكلمة سر" : "مفتوح", 10, locked ? Util.NAVY : 0xff8b9097, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(8), dp(4), dp(8), dp(4));
+        if (locked) badge.setBackground(Util.round(Util.ACCENT_SOFT, dp(9)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.setMargins(0, dp(9), 0, 0);
+        box.addView(badge, lp);
         return box;
     }
 
     /** لا تُفتح الصناديق إلا بكلمة السر الثابتة. */
-    private void askPin() {
+    private void askPin(final Class<?> target) {
         EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         input.setTextSize(22);
@@ -142,7 +151,7 @@ public class HomeActivity extends Activity {
         box.setPadding(dp(28), dp(12), dp(28), 0);
         box.addView(input);
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("مطابقة الصناديق")
+                .setTitle("دخول المدير")
                 .setMessage("اكتب كلمة سر المدير للدخول.")
                 .setView(box)
                 .setPositiveButton("دخول", null)
@@ -155,7 +164,7 @@ public class HomeActivity extends Activity {
                 return;
             }
             dialog.dismiss();
-            startActivity(new Intent(this, CashboxActivity.class));
+            startActivity(new Intent(this, target));
         }));
         dialog.show();
     }
@@ -197,6 +206,19 @@ public class HomeActivity extends Activity {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawRoundRect(6, 5.5f, 12, 10, 1, 1, paint);
+            } else if (kind == 2) {
+                android.graphics.Path drop = new android.graphics.Path();
+                drop.moveTo(12, 2.5f);
+                drop.cubicTo(17.5f, 9, 20, 12.5f, 20, 15.5f);
+                drop.cubicTo(20, 19.6f, 16.4f, 22, 12, 22);
+                drop.cubicTo(7.6f, 22, 4, 19.6f, 4, 15.5f);
+                drop.cubicTo(4, 12.5f, 6.5f, 9, 12, 2.5f);
+                drop.close();
+                c.drawPath(drop, paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawRect(8, 13.5f, 16, 15.2f, paint);
+                c.drawRect(11.1f, 10.4f, 12.9f, 18.3f, paint);
             } else {
                 c.drawRoundRect(2.5f, 7, 21.5f, 20, 2, 2, paint);
                 c.drawLine(2.5f, 11, 21.5f, 11, paint);

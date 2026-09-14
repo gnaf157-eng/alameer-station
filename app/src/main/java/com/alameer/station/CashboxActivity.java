@@ -18,7 +18,7 @@ import java.util.Locale;
 public class CashboxActivity extends Activity {
     private Db db;
     private LinearLayout summaryBox, listBox, entriesBox;
-    private TextView totalText;
+    private TextView totalText, entriesTitle;
     private long filterBox = 0;
 
     @Override protected void onCreate(Bundle state) {
@@ -35,7 +35,7 @@ public class CashboxActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("مطابقة الصناديق", 19, Color.WHITE, true));
+        words.addView(text("حركة الصناديق", 19, Color.WHITE, true));
         words.addView(text(Branding.stationName(db) + " • الريال اليمني", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         totalText = text("", 17, 0xffCFE2FA, true);
@@ -47,23 +47,20 @@ public class CashboxActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(8), dp(16), dp(20));
 
-        content.addView(sectionTitle("ملخص أرصدة الصناديق"));
-        summaryBox = panel();
+        summaryBox = new LinearLayout(this);
+        summaryBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(summaryBox, space());
 
-        Button add = action("تسجيل وارد أو صادر", true);
-        add.setOnClickListener(v -> entryDialog());
-        content.addView(add, space());
-
-        content.addView(sectionTitle("الصناديق"));
-        listBox = panel();
+        listBox = new LinearLayout(this);
+        listBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(listBox, space());
 
-        Button newBox = action("إضافة صندوق جديد", false);
+        Button newBox = action("＋  إضافة صندوق جديد", false);
         newBox.setOnClickListener(v -> boxDialog(0, "", 0));
         content.addView(newBox, space());
 
-        content.addView(sectionTitle("آخر الحركات"));
+        entriesTitle = sectionTitle("آخر الحركات");
+        content.addView(entriesTitle);
         entriesBox = panel();
         content.addView(entriesBox, space());
 
@@ -81,53 +78,58 @@ public class CashboxActivity extends Activity {
         refreshEntries();
     }
 
-    /** أرصدة الصناديق النشطة مع الإجمالي العام. */
+    /** بطاقة الإجمالي العام أعلى الشاشة. */
     private void refreshSummary() {
         summaryBox.removeAllViews();
         double total = 0;
         int count = 0;
+        double totalIn = 0, totalOut = 0;
         try (Cursor c = db.cashboxes(true)) {
-            while (c.moveToNext()) {
-                count++;
-                double balance = c.getDouble(6);
-                total += balance;
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(11), 0, dp(11));
-                LinearLayout words = new LinearLayout(this);
-                words.setOrientation(LinearLayout.VERTICAL);
-                words.addView(text(c.getString(1), 17, Util.NAVY, true));
-                words.addView(text("وارد " + money(c.getDouble(4)) + "  •  صادر " + money(c.getDouble(5)), 12, 0xff7c8186, false));
-                row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView amount = text(money(balance), 19, balance < 0 ? Util.RED : Util.GREEN, true);
-                amount.setTextDirection(View.TEXT_DIRECTION_LTR);
-                row.addView(amount);
-                summaryBox.addView(row);
-                View line = new View(this);
-                line.setBackgroundColor(0xffeceef0);
-                summaryBox.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
-            }
+            while (c.moveToNext()) { count++; total += c.getDouble(6); totalIn += c.getDouble(4); totalOut += c.getDouble(5); }
         }
-        if (count == 0) {
-            summaryBox.addView(text("لا توجد صناديق بعد. أضف صندوقًا لتبدأ.", 15, 0xff777d84, false));
-            totalText.setText("");
-            return;
-        }
-        LinearLayout sum = new LinearLayout(this);
-        sum.setGravity(Gravity.CENTER_VERTICAL);
-        sum.setPadding(dp(10), dp(13), dp(10), dp(13));
-        sum.setBackground(Util.round(Util.ACCENT_SOFT, dp(12)));
-        sum.addView(text("إجمالي الأرصدة", 17, Util.NAVY, true), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView grand = text(money(total) + " ر.ي", 20, total < 0 ? Util.RED : Util.NAVY, true);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        card.setBackground(Util.round(Util.NAVY, dp(18)));
+        card.addView(text("إجمالي أرصدة الصناديق", 13, 0xffCFE2FA, false));
+        TextView grand = text(money(total) + "  ر.ي", 30, Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
-        sum.addView(grand);
-        summaryBox.addView(sum, space());
-        totalText.setText(money(total) + " ر.ي");
+        grand.setPadding(0, dp(4), 0, dp(12));
+        card.addView(grand);
+        LinearLayout stats = new LinearLayout(this);
+        stats.addView(stat("الصناديق", String.valueOf(count)), statCell());
+        stats.addView(stat("إجمالي الوارد", money(totalIn)), statCell());
+        stats.addView(stat("إجمالي الصادر", money(totalOut)), statCell());
+        card.addView(stats);
+        summaryBox.addView(card);
+        totalText.setText(count == 0 ? "" : money(total) + " ر.ي");
     }
 
-    /** قائمة الصناديق مع تعديل كل صندوق. */
+    private LinearLayout.LayoutParams statCell() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        return p;
+    }
+
+    private LinearLayout stat(String label, String value) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(8), dp(9), dp(8), dp(9));
+        box.setBackground(Util.round(0x22FFFFFF, dp(11)));
+        TextView v = text(value, 15, Color.WHITE, true);
+        v.setGravity(Gravity.CENTER);
+        v.setTextDirection(View.TEXT_DIRECTION_LTR);
+        box.addView(v);
+        TextView l = text(label, 10, 0xffCFE2FA, false);
+        l.setGravity(Gravity.CENTER);
+        box.addView(l);
+        return box;
+    }
+
+    /** بطاقة لكل صندوق: الضغط عليها يسجّل حركة، والضغط المطوّل يفتح خياراته. */
     private void refreshBoxes() {
         listBox.removeAllViews();
+        listBox.addView(sectionTitle("الصناديق — اضغط على الصندوق لتسجيل حركة"));
         int count = 0;
         try (Cursor c = db.cashboxes(false)) {
             while (c.moveToNext()) {
@@ -136,30 +138,84 @@ public class CashboxActivity extends Activity {
                 final String name = c.getString(1);
                 final double opening = c.getDouble(2);
                 final boolean active = c.getInt(3) == 1;
-                LinearLayout row = new LinearLayout(this);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(10), 0, dp(10));
+                final double balance = c.getDouble(6);
+
+                LinearLayout card = new LinearLayout(this);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setPadding(dp(16), dp(15), dp(16), dp(15));
+                card.setBackground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x22000000),
+                        Util.round(Color.WHITE, dp(16)), null));
+                card.setElevation(dp(2));
+                card.setClickable(true);
+
+                LinearLayout top = new LinearLayout(this);
+                top.setGravity(Gravity.CENTER_VERTICAL);
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
-                words.addView(text(name + (active ? "" : "  •  موقوف"), 16, active ? Util.NAVY : 0xff9aa0a6, true));
-                words.addView(text("افتتاحي " + money(opening) + "  •  الرصيد " + money(c.getDouble(6)), 12, 0xff7c8186, false));
-                row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-                Button edit = action("تعديل", false);
-                edit.setTextSize(13);
-                edit.setOnClickListener(v -> boxDialog(id, name, opening));
-                row.addView(edit);
-                listBox.addView(row);
+                words.addView(text(name, 18, active ? Util.NAVY : 0xff9aa0a6, true));
+                words.addView(text(active ? "اضغط لتسجيل وارد أو صادر" : "موقوف — لا تُسجَّل عليه حركات", 11, 0xff8b9097, false));
+                top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+                LinearLayout amountBox = new LinearLayout(this);
+                amountBox.setOrientation(LinearLayout.VERTICAL);
+                TextView amount = text(money(balance), 22, balance < 0 ? Util.RED : Util.NAVY, true);
+                amount.setTextDirection(View.TEXT_DIRECTION_LTR);
+                amount.setGravity(Gravity.LEFT);
+                amountBox.addView(amount);
+                TextView unit = text("ريال يمني", 10, 0xff8b9097, false);
+                unit.setGravity(Gravity.LEFT);
+                amountBox.addView(unit);
+                top.addView(amountBox);
+                card.addView(top);
+
                 View line = new View(this);
                 line.setBackgroundColor(0xffeceef0);
-                listBox.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+                lp.setMargins(0, dp(12), 0, dp(10));
+                card.addView(line, lp);
+
+                LinearLayout foot = new LinearLayout(this);
+                foot.addView(chip("افتتاحي", money(opening), Util.NAVY), statCell());
+                foot.addView(chip("وارد", money(c.getDouble(4)), Util.GREEN), statCell());
+                foot.addView(chip("صادر", money(c.getDouble(5)), Util.RED), statCell());
+                card.addView(foot);
+
+                card.setOnClickListener(v -> {
+                    if (!active) { Toast.makeText(this, "الصندوق موقوف. فعّله أولًا.", Toast.LENGTH_SHORT).show(); return; }
+                    entryDialog(id, name);
+                });
+                card.setOnLongClickListener(v -> { boxOptions(id, name, opening); return true; });
+                listBox.addView(card, space());
             }
         }
-        if (count == 0) listBox.addView(text("لم تُضف صناديق بعد.", 15, 0xff777d84, false));
+        if (count == 0) {
+            LinearLayout empty = panel();
+            empty.addView(text("لم تُضف صناديق بعد. أضف صندوقًا لتبدأ تسجيل الوارد والصادر.", 15, 0xff777d84, false));
+            listBox.addView(empty, space());
+        } else {
+            listBox.addView(text("اضغط مطوّلًا على الصندوق لتعديله أو إيقافه", 11, 0xff8b9097, false));
+        }
+    }
+
+    private LinearLayout chip(String label, String value, int color) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(8), dp(8), dp(8), dp(8));
+        box.setBackground(Util.round(0xfff4f7fb, dp(10)));
+        TextView v = text(value, 14, color, true);
+        v.setGravity(Gravity.CENTER);
+        v.setTextDirection(View.TEXT_DIRECTION_LTR);
+        box.addView(v);
+        TextView l = text(label, 10, 0xff8b9097, false);
+        l.setGravity(Gravity.CENTER);
+        box.addView(l);
+        return box;
     }
 
     /** آخر الحركات مع إمكانية الحذف بضغطة مطوّلة. */
     private void refreshEntries() {
         entriesBox.removeAllViews();
+        if (entriesTitle != null) entriesTitle.setText(filterBox > 0 ? "حركات الصندوق المختار" : "آخر الحركات");
         int count = 0;
         try (Cursor c = db.cashboxEntries(filterBox, 40)) {
             while (c.moveToNext()) {
@@ -222,13 +278,12 @@ public class CashboxActivity extends Activity {
         box.addView(text("الرصيد الافتتاحي (ريال يمني)", 13, 0xff7c8186, false), space());
         box.addView(openingInput);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(isNew ? "صندوق جديد" : "تعديل الصندوق")
                 .setView(box)
                 .setPositiveButton("حفظ", null)
-                .setNegativeButton("إلغاء", null);
-        if (!isNew) builder.setNeutralButton("خيارات", null);
-        AlertDialog dialog = builder.create();
+                .setNegativeButton("إلغاء", null)
+                .create();
         dialog.setOnShowListener(x -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 String value = nameInput.getText().toString().trim();
@@ -241,23 +296,21 @@ public class CashboxActivity extends Activity {
                 dialog.dismiss();
                 refresh();
             });
-            if (!isNew) dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-                dialog.dismiss();
-                boxOptions(id, name);
-            });
         });
         dialog.show();
     }
 
     /** إيقاف الصندوق أو حذفه إن كان بلا حركات. */
-    private void boxOptions(long id, String name) {
+    private void boxOptions(long id, String name, double opening) {
         int entries = db.cashboxEntryCount(id);
         new AlertDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{"عرض حركات هذا الصندوق", "إيقاف الصندوق", "تفعيل الصندوق", "حذف الصندوق"},
+                .setItems(new String[]{"تعديل الاسم والرصيد الافتتاحي", "عرض حركات هذا الصندوق", "كل الحركات", "إيقاف الصندوق", "تفعيل الصندوق", "حذف الصندوق"},
                         (d, which) -> {
-                            if (which == 0) { filterBox = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
-                            else if (which == 1) { db.setCashboxActive(id, false); refresh(); }
-                            else if (which == 2) { db.setCashboxActive(id, true); refresh(); }
+                            if (which == 0) { boxDialog(id, name, opening); }
+                            else if (which == 1) { filterBox = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
+                            else if (which == 2) { filterBox = 0; refreshEntries(); }
+                            else if (which == 3) { db.setCashboxActive(id, false); refresh(); }
+                            else if (which == 4) { db.setCashboxActive(id, true); refresh(); }
                             else {
                                 if (entries > 0) {
                                     new AlertDialog.Builder(this).setTitle("لا يمكن الحذف")
@@ -271,28 +324,26 @@ public class CashboxActivity extends Activity {
                         }).show();
     }
 
-    /** تسجيل وارد أو صادر على صندوق. */
-    private void entryDialog() {
-        final List<Long> ids = new ArrayList<>();
-        final List<String> names = new ArrayList<>();
-        try (Cursor c = db.cashboxes(true)) {
-            while (c.moveToNext()) { ids.add(c.getLong(0)); names.add(c.getString(1)); }
-        }
-        if (ids.isEmpty()) {
-            new AlertDialog.Builder(this).setTitle("لا توجد صناديق")
-                    .setMessage("أضف صندوقًا أولًا ثم سجّل الوارد والصادر.")
-                    .setPositiveButton("حسنًا", null).show();
-            return;
-        }
-        Spinner boxPicker = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, names);
-        boxPicker.setAdapter(adapter);
+    /** تسجيل وارد أو صادر على صندوق محدّد، مع عرض رصيده قبل الحفظ. */
+    private void entryDialog(final long boxId, String boxName) {
+        final double opening = db.cashboxBalance(boxId);
+
+        LinearLayout balanceCard = new LinearLayout(this);
+        balanceCard.setOrientation(LinearLayout.VERTICAL);
+        balanceCard.setPadding(dp(14), dp(12), dp(14), dp(12));
+        balanceCard.setBackground(Util.round(Util.ACCENT_SOFT, dp(14)));
+        balanceCard.addView(text("الرصيد الحالي لصندوق " + boxName, 12, 0xff5a6672, false));
+        TextView balanceText = text(money(opening) + "  ر.ي", 24, opening < 0 ? Util.RED : Util.NAVY, true);
+        balanceText.setTextDirection(View.TEXT_DIRECTION_LTR);
+        balanceCard.addView(balanceText);
+        final TextView afterText = text("", 13, 0xff5a6672, true);
+        balanceCard.addView(afterText);
 
         Spinner kind = new Spinner(this);
         kind.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"وارد (دخول نقد)", "صادر (خروج نقد)"}));
 
-        EditText amount = new EditText(this);
+        final EditText amount = new EditText(this);
         styleInput(amount);
         amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amount.setHint("المبلغ بالريال اليمني");
@@ -312,11 +363,28 @@ public class CashboxActivity extends Activity {
             }, Integer.parseInt(parts[0]), Integer.parseInt(parts[1]) - 1, Integer.parseInt(parts[2])).show();
         });
 
+        // الرصيد المتوقّع يتحدّث مع الكتابة.
+        final Runnable preview = () -> {
+            double value = Calc.number(amount.getText().toString());
+            if (!(value > 0)) { afterText.setText(""); return; }
+            double after = kind.getSelectedItemPosition() == 0 ? opening + value : opening - value;
+            afterText.setText("الرصيد بعد الحركة: " + money(after) + " ر.ي");
+            afterText.setTextColor(after < 0 ? Util.RED : Util.GREEN);
+        };
+        amount.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
+            public void onTextChanged(CharSequence t, int a, int b, int c) {}
+            public void afterTextChanged(android.text.Editable e) { preview.run(); }
+        });
+        kind.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { preview.run(); }
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(24), dp(8), dp(24), 0);
-        box.addView(text("الصندوق", 13, 0xff7c8186, false));
-        box.addView(boxPicker);
+        box.setPadding(dp(24), dp(10), dp(24), 0);
+        box.addView(balanceCard);
         box.addView(text("نوع الحركة", 13, 0xff7c8186, false), space());
         box.addView(kind);
         box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
@@ -324,21 +392,22 @@ public class CashboxActivity extends Activity {
         box.addView(text("البيان", 13, 0xff7c8186, false), space());
         box.addView(note);
         box.addView(dateButton, space());
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("تسجيل حركة صندوق")
-                .setView(box)
+                .setTitle(boxName)
+                .setView(form)
                 .setPositiveButton("حفظ", null)
                 .setNegativeButton("إلغاء", null)
                 .create();
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             double value = Calc.number(amount.getText().toString());
             if (!(value > 0)) { amount.setError("اكتب مبلغًا أكبر من صفر"); return; }
-            long boxId = ids.get(boxPicker.getSelectedItemPosition());
             String direction = kind.getSelectedItemPosition() == 0 ? "IN" : "OUT";
-            if ("OUT".equals(direction) && db.cashboxBalance(boxId) < value) {
+            if ("OUT".equals(direction) && opening < value) {
                 new AlertDialog.Builder(this).setTitle("رصيد غير كافٍ")
-                        .setMessage("رصيد الصندوق " + money(db.cashboxBalance(boxId)) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
+                        .setMessage("رصيد الصندوق " + money(opening) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
                         .setPositiveButton("سجّل", (d, w) -> {
                             db.addCashboxEntry(boxId, direction, value, note.getText().toString(), date[0]);
                             dialog.dismiss();
