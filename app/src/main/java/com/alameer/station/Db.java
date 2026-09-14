@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 5;
+    private static final int DB_VERSION = 6;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -18,6 +18,8 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE movements(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,type TEXT NOT NULL,name TEXT NOT NULL,amount REAL NOT NULL,created_at TEXT NOT NULL)");
         db.execSQL("CREATE TABLE remembered_names(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,name TEXT NOT NULL,UNIQUE(type,name))");
         db.execSQL("CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+        db.execSQL(CASHBOXES_SQL);
+        db.execSQL(CASHBOX_ENTRIES_SQL);
         db.execSQL("CREATE TABLE audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER,worker_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL)");
         seed(db);
     }
@@ -39,7 +41,12 @@ public class Db extends SQLiteOpenHelper {
 
     public static String hash(String pin){ return Calc.hash(pin); }
 
+    static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
+    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<6){
+            try{db.execSQL(CASHBOXES_SQL);db.execSQL(CASHBOX_ENTRIES_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<5){
             db.execSQL("ALTER TABLE shifts ADD COLUMN shift_date TEXT NOT NULL DEFAULT ''");
             db.execSQL("ALTER TABLE shifts ADD COLUMN historical INTEGER NOT NULL DEFAULT 0");
@@ -308,6 +315,86 @@ public class Db extends SQLiteOpenHelper {
             values.put("sales",c.isNull(0)?0:(c.getDouble(0)-previous)*price);
             return database.update("readings",values,"id=? AND shift_id=?",new String[]{String.valueOf(readingId),String.valueOf(shiftId)})==1;
         }
+    }
+    // ==================== الصناديق ====================
+    public long addCashbox(String name,double opening){
+        String clean=name.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم الصندوق");
+        if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
+        ContentValues v=new ContentValues();v.put("name",clean);v.put("opening",opening);v.put("created_at",Util.now());
+        long id=getWritableDatabase().insertWithOnConflict("cashboxes",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+        if(id==-1)throw new IllegalArgumentException("يوجد صندوق بهذا الاسم");
+        return id;
+    }
+    public void renameCashbox(long id,String name){
+        String clean=name.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم الصندوق");
+        ContentValues v=new ContentValues();v.put("name",clean);
+        if(getWritableDatabase().updateWithOnConflict("cashboxes",v,"id=?",new String[]{String.valueOf(id)},SQLiteDatabase.CONFLICT_IGNORE)!=1)
+            throw new IllegalArgumentException("يوجد صندوق بهذا الاسم");
+    }
+    public void setCashboxOpening(long id,double opening){
+        if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
+        ContentValues v=new ContentValues();v.put("opening",opening);
+        getWritableDatabase().update("cashboxes",v,"id=?",new String[]{String.valueOf(id)});
+    }
+    public void setCashboxActive(long id,boolean active){
+        ContentValues v=new ContentValues();v.put("active",active?1:0);
+        getWritableDatabase().update("cashboxes",v,"id=?",new String[]{String.valueOf(id)});
+    }
+    /** يُحذف الصندوق فقط إذا لم تُسجَّل عليه أي حركة، حفاظًا على سلامة الأرشيف. */
+    public boolean deleteCashbox(long id){
+        if(cashboxEntryCount(id)>0)return false;
+        return getWritableDatabase().delete("cashboxes","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    public int cashboxEntryCount(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM cashbox_entries WHERE box_id=?",new String[]{String.valueOf(id)})){
+            c.moveToFirst();return c.getInt(0);
+        }
+    }
+    /** id,name,opening,active,in,out,balance */
+    public Cursor cashboxes(boolean onlyActive){
+        return getReadableDatabase().rawQuery(
+            "SELECT b.id,b.name,b.opening,b.active,"+
+            "COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='IN'),0),"+
+            "COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='OUT'),0),"+
+            "b.opening+COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='IN'),0)"+
+            "-COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='OUT'),0) "+
+            "FROM cashboxes b "+(onlyActive?"WHERE b.active=1 ":"")+"ORDER BY b.active DESC,b.id",null);
+    }
+    public double cashboxBalance(long id){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT b.opening+COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='IN'),0)"+
+            "-COALESCE((SELECT SUM(e.amount) FROM cashbox_entries e WHERE e.box_id=b.id AND e.direction='OUT'),0) FROM cashboxes b WHERE b.id=?",
+            new String[]{String.valueOf(id)})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+    /** إجمالي أرصدة الصناديق النشطة. */
+    public double cashboxesTotal(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT COALESCE(SUM(b.opening),0)+COALESCE((SELECT SUM(CASE WHEN e.direction='IN' THEN e.amount ELSE -e.amount END) FROM cashbox_entries e JOIN cashboxes x ON x.id=e.box_id WHERE x.active=1),0) FROM cashboxes b WHERE b.active=1",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+    public long addCashboxEntry(long boxId,String direction,double amount,String note,String date){
+        if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        ContentValues v=new ContentValues();
+        v.put("box_id",boxId);v.put("direction",direction);v.put("amount",amount);
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+        return getWritableDatabase().insertOrThrow("cashbox_entries",null,v);
+    }
+    public boolean deleteCashboxEntry(long id){
+        return getWritableDatabase().delete("cashbox_entries","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    /** id,direction,amount,note,entry_date,box_name */
+    public Cursor cashboxEntries(long boxId,int limit){
+        String where=boxId>0?"WHERE e.box_id=? ":"";
+        return getReadableDatabase().rawQuery(
+            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,b.name FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
+            where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
+            boxId>0?new String[]{String.valueOf(boxId)}:null);
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }

@@ -100,7 +100,7 @@ public class ShiftActivity extends Activity {
         ScrollView scroll=new ScrollView(this);screenScroll=scroll;
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
-        for(int i=0;i<5;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
+        for(int i=0;i<pages.length;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
         pages[0].addView(heading("ورديتي"));
         shiftDateButton=action("",false);
         shiftDateButton.setOnClickListener(v->chooseShiftDate());
@@ -257,6 +257,26 @@ public class ShiftActivity extends Activity {
         addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
         pages[4].addView(addPump,space());
 
+        pages[4].addView(sectionTitle("الصناديق"));
+        LinearLayout cashBox=panel(Color.WHITE);
+        int boxes=0;double boxesTotal=0;
+        try(Cursor c=db.cashboxes(true)){
+            while(c.moveToNext()){
+                boxes++;boxesTotal+=c.getDouble(6);
+                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(9),0,dp(9));
+                row.addView(text(c.getString(1),16,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
+                TextView amount=text(money(c.getDouble(6))+" ر.ي",16,c.getDouble(6)<0?Util.RED:Util.GREEN,true);
+                amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
+                cashBox.addView(row);
+            }
+        }
+        if(boxes==0)cashBox.addView(text("لا توجد صناديق بعد. أضف صندوقًا لتسجيل الوارد والصادر.",14,0xff777d84,false));
+        else cashBox.addView(text("إجمالي أرصدة الصناديق "+money(boxesTotal)+" ر.ي",13,0xff7c8186,false),space());
+        pages[4].addView(cashBox,space());
+        Button addBox=action("＋  إضافة صندوق",true);
+        addBox.setOnClickListener(v->cashboxDialog());
+        pages[4].addView(addBox,space());
+
         Button startShift=action("ابدأ المطابقة  ➤",true);
         startShift.setOnClickListener(v->{db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
         pages[4].addView(startShift,space());
@@ -269,7 +289,7 @@ public class ShiftActivity extends Activity {
         pages[4].addView(backupBtn,space());
         pages[4].addView(sectionTitle("حول التطبيق"));
         LinearLayout about=panel(Color.WHITE);
-        about.addView(text("وردية  •  "+BuildConfig.VERSION_NAME,19,Util.NAVY,true));
+        about.addView(text("طابق ورحّل  •  "+BuildConfig.VERSION_NAME,19,Util.NAVY,true));
         about.addView(text("تطوير: أبوقناف للأتمتة",16,Util.NAVY,true),space());
         TextView contact=text("للتواصل: 777808020",16,Util.NAVY,false);contact.setTextIsSelectable(true);about.addView(contact);
         Button call=action("تواصل مع المطوّر",false);
@@ -341,6 +361,27 @@ public class ShiftActivity extends Activity {
             buildSettingsPage();refreshGreeting();}));
         d.show();
     }
+    /** إضافة صندوق من الضبط؛ التفاصيل والحركات في شاشة مطابقة الصناديق. */
+    private void cashboxDialog(){
+        EditText nameInput=new EditText(this);styleInput(nameInput);nameInput.setHint("اسم الصندوق");
+        EditText openingInput=new EditText(this);styleInput(openingInput);
+        openingInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        openingInput.setHint("الرصيد الافتتاحي");
+        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);
+        form.addView(text("اسم الصندوق",13,0xff7c8186,false));form.addView(nameInput);
+        form.addView(text("الرصيد الافتتاحي (ريال يمني)",13,0xff7c8186,false),space());form.addView(openingInput);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("صندوق جديد").setView(form)
+            .setPositiveButton("حفظ",null).setNegativeButton("إلغاء",null).create();
+        dialog.setOnShowListener(x->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String name=nameInput.getText().toString().trim();
+            if(name.isEmpty()){nameInput.setError("اكتب اسم الصندوق");return;}
+            try{db.addCashbox(name,Calc.number(openingInput.getText().toString()));}
+            catch(IllegalArgumentException e){nameInput.setError(e.getMessage());return;}
+            dialog.dismiss();buildSettingsPage();
+            Toast.makeText(this,"أُضيف الصندوق. سجّل حركاته من مطابقة الصناديق.",Toast.LENGTH_LONG).show();
+        }));
+        dialog.show();
+    }
     private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
     private void refreshAll(){db.syncShiftWithSettings(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
     private void fuelPriceDialog(String fuel,double current){
@@ -400,7 +441,7 @@ public class ShiftActivity extends Activity {
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
         movementSummary.setVisibility(selected==1?View.VISIBLE:View.GONE);
-        for(int i=0;i<5;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
+        for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         int active=selected==2?0:selected==3?2:selected==4?-1:selected;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);

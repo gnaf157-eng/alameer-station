@@ -14,12 +14,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <activity android:name=".ShiftActivity" android:exported="true" android:screenOrientation="portrait">
+        <activity android:name=".HomeActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".ShiftActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".CashboxActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ArchiveActivity" android:screenOrientation="portrait" />
         <activity android:name=".DashboardActivity" android:screenOrientation="portrait" />
         <activity android:name=".AdminActivity" android:screenOrientation="portrait" />
