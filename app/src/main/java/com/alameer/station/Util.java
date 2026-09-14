@@ -8,7 +8,7 @@ import java.text.*;
 import java.util.*;
 
 public final class Util {
-    public static final int NAVY=Color.rgb(11,42,86), NAVY_LIGHT=Color.rgb(24,72,140), GOLD=Color.rgb(24,72,140), ACCENT=Color.rgb(46,124,214), ACCENT_SOFT=Color.rgb(226,236,250), GREEN=Color.rgb(18,128,92), RED=Color.rgb(180,35,53), BG=Color.rgb(244,247,251);
+    public static final int NAVY=Color.rgb(21,62,118), NAVY_LIGHT=Color.rgb(36,96,176), GOLD=Color.rgb(36,96,176), ACCENT=Color.rgb(65,145,232), ACCENT_SOFT=Color.rgb(232,241,253), GREEN=Color.rgb(18,128,92), RED=Color.rgb(180,35,53), BG=Color.rgb(244,247,251);
     public static String now(){return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.US).format(new Date());}
     public static TextView title(android.content.Context c,String text){TextView v=new TextView(c);v.setText(text);v.setTextSize(25);v.setTextColor(Color.WHITE);v.setTypeface(android.graphics.Typeface.DEFAULT,1);v.setGravity(Gravity.CENTER);v.setPadding(20,38,20,38);v.setBackground(round(NAVY,22));return v;}
     public static TextView label(android.content.Context c,String text){TextView v=new TextView(c);v.setText(text);v.setTextSize(17);v.setTextColor(NAVY);v.setPadding(16,16,16,12);v.setTextDirection(View.TEXT_DIRECTION_RTL);return v;}

@@ -10,7 +10,7 @@ public final class PdfReport {
     private final Context context;private final Db db;
     private Bitmap logo;
     private static final int WIDTH=842,HEIGHT=595,MARGIN=28,COLUMN=(WIDTH-2*MARGIN)/5;
-    private static final int INK=0xff0b2a56,MUTED=0xff667078,GOLD=0xff2e7cd6;
+    private static final int INK=0xff153e76,MUTED=0xff667078,GOLD=0xff4191e8;
     public PdfReport(Context context,Db db){this.context=context;this.db=db;}
     private static final class Block{
         final ReportTable.Row row;final StaticLayout[] cells;final int kind,height;

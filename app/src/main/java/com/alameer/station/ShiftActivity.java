@@ -67,9 +67,9 @@ public class ShiftActivity extends Activity {
         stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
         refreshStationBrand();
-        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffBBD4F5,false));
+        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffCFE2FA,false));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
-        headerBalance=text("",15,0xffBBD4F5,true);
+        headerBalance=text("",15,0xffCFE2FA,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
@@ -683,7 +683,7 @@ public class ShiftActivity extends Activity {
         if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
         if(headerBalance!=null){
             headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
-            headerBalance.setTextColor(!issue.isEmpty()?0xffBBD4F5:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
+            headerBalance.setTextColor(!issue.isEmpty()?0xffCFE2FA:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
             headerBalance.setContentDescription("باقي الوردية الحالية "+money(bal)+" ريال");
         }
         refreshFuelLitres();
