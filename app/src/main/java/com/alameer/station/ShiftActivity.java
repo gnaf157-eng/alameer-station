@@ -465,7 +465,7 @@ public class ShiftActivity extends Activity {
                 card.addView(text("تاريخ الوردية: "+c.getString(8),15,Util.NAVY,true));
                 card.addView(text("تاريخ الإدخال: "+c.getString(2),13,0xff667078,false));
                 card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
-                card.addView(text("اضغط لمشاركة PDF أو Excel",12,0xff667078,false));
+                card.addView(text(Math.abs(c.getDouble(5))<0.01?"اضغط لمشاركة PDF أو Excel":"غير مطابقة — لا يمكن إخراج تقرير",12,Math.abs(c.getDouble(5))<0.01?0xff667078:0xffb3261e,false));
                 card.setClickable(true);card.setOnClickListener(v->chooseReport(archivedId));
                 pages[3].addView(card,Util.spaced());
             }
@@ -770,15 +770,35 @@ public class ShiftActivity extends Activity {
     /** يحفظ تقرير الوردية PDF ويفتح قائمة المشاركة. */
     private void exportPdf(){
         if(!saveReadings())return;
+        if(!reportAllowed(shiftId))return;
         try{
             sharePdfOrThrow(shiftId);
         }catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
     }
     private void exportExcel(){
         if(!saveReadings())return;
+        if(!reportAllowed(shiftId))return;
         shareExcel(shiftId);
     }
+    /** لا يُصدَّر تقرير إلا لوردية مطابقة تمامًا (الباقي = صفر). */
+    private boolean reportAllowed(long id){
+        String issue=db.validateShift(id);
+        if(!issue.isEmpty()){
+            new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير")
+                .setMessage(issue).setPositiveButton("حسنًا",null).show();
+            return false;
+        }
+        double bal=db.balance(id);
+        if(Math.abs(bal)>=0.01){
+            new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير")
+                .setMessage("الوردية غير مطابقة. الباقي "+money(bal)+" ريال.\nيجب أن يكون الباقي صفرًا قبل حفظ أو مشاركة PDF أو Excel.")
+                .setPositiveButton("حسنًا",null).show();
+            return false;
+        }
+        return true;
+    }
     private void chooseReport(long id){
+        if(!reportAllowed(id))return;
         new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
             .setItems(new String[]{"PDF","Excel (.xlsx)"},(d,which)->{
                 if(id==shiftId&&!saveReadings())return;
@@ -856,11 +876,18 @@ public class ShiftActivity extends Activity {
         db.approve(closed);
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
-        new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed)
-            .setMessage(historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق. تستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
-            .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
-            .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
-            .setNegativeButton("لاحقًا",null).show();
+        String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
+        AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
+        if(reason.isEmpty()){
+            done.setMessage(base+"\nتستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
+                .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
+                .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
+                .setNegativeButton("لاحقًا",null);
+        }else{
+            done.setMessage(base+"\nالوردية غير مطابقة، لذلك لا يمكن إخراج تقرير PDF أو Excel لها.")
+                .setPositiveButton("حسنًا",null);
+        }
+        done.show();
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
