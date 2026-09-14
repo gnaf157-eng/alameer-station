@@ -51,15 +51,13 @@ public class HomeActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER);
-        row.addView(tile("مطابقة العامل", "الورديات والتقارير", 0, false,
+        row.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0, false,
                 v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
-        row.addView(tile("حركة الصناديق", "وارد وصادر النقد", 1, true,
-                v -> askPin(CashboxActivity.class)), cell());
-        row.addView(tile("حركة المواد", "وارد وصادر اللترات", 2, true,
-                v -> askPin(MaterialActivity.class)), cell());
+        row.addView(tile("واجهة المدير", "الصناديق والمواد", 1, true,
+                v -> askPin(ManagerActivity.class)), cell());
         shell.addView(row);
 
-        TextView hint = text("حركة الصناديق وحركة المواد للمدير وتفتحان بكلمة سر", 13, 0xff7c8186, false);
+        TextView hint = text("واجهة المدير تفتح بكلمة سر وتضم حركة الصناديق وحركة المواد", 13, 0xff7c8186, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(24), 0, 0);
         shell.addView(hint);
@@ -91,8 +89,8 @@ public class HomeActivity extends Activity {
 
     /** بطاقة كبيرة قابلة للنقر تمثّل أحد المدخلين. */
     private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(184), 1);
-        p.setMargins(dp(5), 0, dp(5), 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(200), 1);
+        p.setMargins(dp(6), 0, dp(6), 0);
         return p;
     }
 
@@ -100,7 +98,7 @@ public class HomeActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(8), dp(14), dp(8), dp(14));
+        box.setPadding(dp(10), dp(16), dp(10), dp(16));
         box.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
         box.setElevation(dp(3));
@@ -108,23 +106,23 @@ public class HomeActivity extends Activity {
         box.setOnClickListener(action);
 
         FrameLayout disc = new FrameLayout(this);
-        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(27)));
+        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(32)));
         ImageView art = new ImageView(this);
         HomeIcon drawable = new HomeIcon(icon);
-        drawable.setBounds(0, 0, dp(30), dp(30));
+        drawable.setBounds(0, 0, dp(36), dp(36));
         art.setImageDrawable(drawable);
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(30), dp(30));
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(36), dp(36));
         ip.gravity = Gravity.CENTER;
         disc.addView(art, ip);
-        box.addView(disc, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        box.addView(disc, new LinearLayout.LayoutParams(dp(64), dp(64)));
 
-        TextView name = text(title, 14, Util.NAVY, true);
+        TextView name = text(title, 16, Util.NAVY, true);
         name.setGravity(Gravity.CENTER);
         name.setPadding(0, dp(12), 0, dp(3));
         name.setMaxLines(2);
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 11, 0xff7c8186, false);
+        TextView caption = text(note, 12, 0xff7c8186, false);
         caption.setGravity(Gravity.CENTER);
         caption.setMaxLines(2);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
@@ -206,7 +204,7 @@ public class HomeActivity extends Activity {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawRoundRect(6, 5.5f, 12, 10, 1, 1, paint);
-            } else if (kind == 2) {
+            } else if (kind == 9) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);
                 drop.cubicTo(17.5f, 9, 20, 12.5f, 20, 15.5f);
@@ -220,14 +218,21 @@ public class HomeActivity extends Activity {
                 c.drawRect(8, 13.5f, 16, 15.2f, paint);
                 c.drawRect(11.1f, 10.4f, 12.9f, 18.3f, paint);
             } else {
-                c.drawRoundRect(2.5f, 7, 21.5f, 20, 2, 2, paint);
-                c.drawLine(2.5f, 11, 21.5f, 11, paint);
-                c.drawLine(7, 7, 7, 4.5f, paint);
-                c.drawLine(17, 7, 17, 4.5f, paint);
-                c.drawLine(7, 4.5f, 17, 4.5f, paint);
-                paint.setStyle(Paint.Style.FILL);
+                android.graphics.Path shield = new android.graphics.Path();
+                shield.moveTo(12, 2.2f);
+                shield.lineTo(20.5f, 5.6f);
+                shield.lineTo(20.5f, 12.4f);
+                shield.cubicTo(20.5f, 17.4f, 16.9f, 20.6f, 12, 22.3f);
+                shield.cubicTo(7.1f, 20.6f, 3.5f, 17.4f, 3.5f, 12.4f);
+                shield.lineTo(3.5f, 5.6f);
+                shield.close();
+                c.drawPath(shield, paint);
+                paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(Util.ACCENT);
-                c.drawCircle(12, 15.5f, 3, paint);
+                c.drawRoundRect(8, 11.4f, 16, 17, 1.2f, 1.2f, paint);
+                android.graphics.Path arc = new android.graphics.Path();
+                arc.addArc(9.6f, 7.4f, 14.4f, 13.4f, 180, 180);
+                c.drawPath(arc, paint);
             }
             c.restore();
         }
