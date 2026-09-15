@@ -42,6 +42,22 @@ public class HomeActivity extends Activity {
         words.addView(text(Branding.stationName(db), 19, Color.WHITE, true));
         words.addView(text("طابق ورحّل • مطابقة الورديات والصناديق", 11, 0xffCFE2FA, false));
         brand.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+
+        // الترس انتقل إلى هنا؛ يفتح صفحة الإعدادات مباشرة بدل أن يزحم شاشة العامل.
+        ImageButton gear = new ImageButton(this);
+        gear.setContentDescription("الضبط");
+        gear.setTooltipText("الضبط");
+        gear.setPadding(dp(11), dp(11), dp(11), dp(11));
+        gear.setImageDrawable(new SettingsGear());
+        gear.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(0x22FFFFFF, dp(23)), Util.round(Color.WHITE, dp(23))));
+        gear.setOnClickListener(v -> {
+            Intent intent = new Intent(this, ShiftActivity.class);
+            intent.putExtra("openSettings", true);
+            startActivity(intent);
+        });
+        brand.addView(gear, new LinearLayout.LayoutParams(dp(46), dp(46)));
         shell.addView(brand);
 
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
@@ -66,7 +82,7 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), wide);
         shell.addView(second);
 
-        TextView hint = text("لوحة التحكم مفتوحة بلا كلمة سر • واجهة المدير محمية", 13, 0xff7c8186, false);
+        TextView hint = text("الترس في الأعلى يفتح الإعدادات • لوحة التحكم بلا كلمة سر", 13, 0xff7c8186, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(24), 0, 0);
         shell.addView(hint);
@@ -184,6 +200,31 @@ public class HomeActivity extends Activity {
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
         return t;
+    }
+
+    /** ترس الضبط الأبيض في ترويسة الشاشة. */
+    private static class SettingsGear extends Drawable {
+        final Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG);
+        public void draw(Canvas c) {
+            c.save();
+            c.translate(getBounds().left, getBounds().top);
+            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+            ink.setColor(Color.WHITE);
+            ink.setStyle(Paint.Style.STROKE);
+            ink.setStrokeWidth(2.1f);
+            ink.setStrokeCap(Paint.Cap.ROUND);
+            c.drawCircle(12, 12, 6.6f, ink);
+            c.drawCircle(12, 12, 2.7f, ink);
+            for (int i = 0; i < 8; i++) {
+                double a = Math.PI * i / 4;
+                c.drawLine(12 + (float) Math.cos(a) * 6.6f, 12 + (float) Math.sin(a) * 6.6f,
+                        12 + (float) Math.cos(a) * 9.4f, 12 + (float) Math.sin(a) * 9.4f, ink);
+            }
+            c.restore();
+        }
+        public void setAlpha(int a) { ink.setAlpha(a); }
+        public void setColorFilter(android.graphics.ColorFilter f) { ink.setColorFilter(f); }
+        public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }

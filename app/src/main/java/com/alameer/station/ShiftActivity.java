@@ -74,19 +74,6 @@ public class ShiftActivity extends Activity {
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brand.addView(headerBalance,new LinearLayout.LayoutParams(0,dp(66),1));
-        ImageButton settingsGear=new ImageButton(this);
-        settingsGear.setContentDescription("الضبط");
-        settingsGear.setTooltipText("الضبط");
-        settingsGear.setPadding(dp(12),dp(12),dp(12),dp(12));
-        settingsGear.setImageDrawable(new SettingsGear());
-        settingsGear.setBackground(new android.graphics.drawable.RippleDrawable(
-            android.content.res.ColorStateList.valueOf(0x33ffce00),null,Util.round(Color.WHITE,dp(24))));
-        brand.addView(settingsGear,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        settingsGear.setOnClickListener(v->{
-            if(page==4){showPage(settingsReturnPage);}
-            else{settingsReturnPage=page;showPage(4);}
-            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
-        });
         shell.addView(brand);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
@@ -179,7 +166,9 @@ public class ShiftActivity extends Activity {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(70),1);
             lp.setMargins(dp(3),0,dp(3),0);nav.addView(tab,lp);
         }
-        shell.addView(nav);setContentView(shell);showPage(0);loadMovements();
+        shell.addView(nav);setContentView(shell);
+        boolean openSettings=getIntent().getBooleanExtra("openSettings",false);
+        showPage(openSettings?4:0);loadMovements();
     }
     /** تبويب الإعدادات: الأسعار والطرمبات قبل بدء المطابقة. */
     private void buildSettingsPage(){
