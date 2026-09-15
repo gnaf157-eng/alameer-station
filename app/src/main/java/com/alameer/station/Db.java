@@ -652,6 +652,23 @@ public class Db extends SQLiteOpenHelper {
     public boolean deleteDebtEntry(long id){
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
+    /** سعة خزان مادة باللترات، لرسم شريط الامتلاء في لوحة التحكم. */
+    public double capacity(String material){
+        try{return Double.parseDouble(setting("capacity_"+material,defaultCapacity(material)));}
+        catch(NumberFormatException e){return Double.parseDouble(defaultCapacity(material));}
+    }
+    public void setCapacity(String material,double litres){
+        setSetting("capacity_"+material,String.valueOf(litres));
+    }
+    private static String defaultCapacity(String material){
+        return "غاز".equals(material)?"10000":"40500";
+    }
+    /** عدد الورديات المفتوحة الآن. */
+    public int openShifts(){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE status='OPEN'",null)){
+            c.moveToFirst();return c.getInt(0);
+        }
+    }
     /** id,name,phone,opening — بيانات مدين واحد. */
     public String[] debtorInfo(long id){
         try(Cursor c=getReadableDatabase().rawQuery("SELECT name,COALESCE(phone,''),opening FROM debtors WHERE id=?",
