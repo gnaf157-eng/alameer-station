@@ -541,11 +541,15 @@ public class ShiftActivity extends Activity {
             for(int i=0;i<group.getChildCount();i++)collectEditable(group.getChildAt(i),fields);
         }
     }
-    /** الأسماء المحفوظة لنوع حركة، لاقتراحها في نافذة الإدخال. */
+    /**
+     * كل الأسماء المحفوظة مهما كان نوع الحركة، فالاسم الواحد قد يتكرر
+     * بين المقبوضات والديون والمخاريج. أسماء النوع الحالي تُقترح أولًا.
+     */
     private ArrayList<String> rememberedNames(String type){
         ArrayList<String> names=new ArrayList<>();
         try(Cursor c=db.getReadableDatabase().rawQuery(
-                "SELECT DISTINCT name FROM remembered_names WHERE type=? ORDER BY name",new String[]{type})){
+                "SELECT name,MAX(CASE WHEN type=? THEN 1 ELSE 0 END) AS same FROM remembered_names "+
+                "GROUP BY name ORDER BY same DESC,name",new String[]{type})){
             while(c.moveToNext())names.add(c.getString(0));
         }
         return names;
