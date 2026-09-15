@@ -11,7 +11,9 @@ ext.prop = { String name ->
     def value = secrets.getProperty(name) ?: System.getenv(name) ?: project.findProperty(name)
     value == null ? '' : value.toString()
 }
-ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() }
+/** مفتاح التوقيع الثابت المرافق للمشروع: يضمن أن كل نسخة تُثبَّت فوق سابقتها بلا فقدان بيانات. */
+ext.bundledKeystore = rootProject.file('signing/release.p12')
+ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() } || bundledKeystore.exists()
 
 android {
     namespace 'com.alameer.station.shifts'
@@ -22,7 +24,7 @@ android {
         targetSdk 35
         versionCode 47
         versionName '2.8.0'
-        buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://drive.google.com/uc?export=download&id=15-szIB-Fq4nIXhX-FgnBTdbNc-9cdllE'}\""
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://github.com/gnaf157-eng/alameer-station/releases/latest/download/update-manifest.json'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""
     }
@@ -30,11 +32,17 @@ android {
     signingConfigs {
         release {
             // يُفعّل فقط عند وجود keystore.properties أو متغيرات بيئة التوقيع.
-            if (signingReady) {
+            if (!prop('KEYSTORE_FILE').isEmpty()) {
                 storeFile file(prop('KEYSTORE_FILE'))
                 storePassword prop('KEYSTORE_PASSWORD')
                 keyAlias prop('KEY_ALIAS')
                 keyPassword prop('KEY_PASSWORD')
+            } else if (bundledKeystore.exists()) {
+                storeFile bundledKeystore
+                storeType 'PKCS12'
+                storePassword 'tabiq2216'
+                keyAlias 'tabiq'
+                keyPassword 'tabiq2216'
             }
         }
     }

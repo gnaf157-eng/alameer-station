@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -48,27 +48,15 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "file=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::لا يوجد مفتاح توقيع (KEYSTORE_BASE64). سيُبنى إصدار debug فقط."
+            echo "file=" >> "$GITHUB_OUTPUT"
+            echo "::notice::سيُستخدم مفتاح التوقيع المرافق signing/release.p12"
           fi
 
-      - name: Build debug APK
-        if: steps.keystore.outputs.available != 'true'
-        env:
-          SYNC_URL: ${{ secrets.SYNC_URL }}
-          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
-          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
-        run: |
-          ./gradlew --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk \
-             "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}-debug.apk"
-
       - name: Build signed release APK
-        if: steps.keystore.outputs.available == 'true'
         env:
-          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -78,19 +66,46 @@ jobs:
         run: |
           ./gradlew --no-daemon :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk \
-             "Alameer-Station-Shifts-v${{ steps.version.outputs.name }}.apk"
+             "Tabiq-v${{ steps.version.outputs.name }}.apk"
+
+      - name: Verify the APK is signed
+        run: |
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "Tabiq-v${{ steps.version.outputs.name }}.apk" | tee certs.txt
+          grep -q "SHA-256 digest" certs.txt
 
       - name: Generate update manifest
         run: |
+          FILE="Tabiq-v${{ steps.version.outputs.name }}.apk"
+          SIZE=$(stat -c%s "$FILE")
+          HASH=$(sha256sum "$FILE" | cut -d" " -f1)
+          BASE="https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.name }}"
           cat > update-manifest.json <<JSON
           {
             "versionCode": ${{ steps.version.outputs.code }},
             "versionName": "${{ steps.version.outputs.name }}",
-            "apkUrl": "",
-            "notes": "نسخة ${{ steps.version.outputs.name }} من تطبيق محطة الأمير.",
+            "apkUrl": "$BASE/$FILE",
+            "sizeBytes": $SIZE,
+            "sha256": "$HASH",
+            "notes": "نسخة ${{ steps.version.outputs.name }} من تطبيق طابق ورحّل.",
             "required": false
           }
           JSON
+          cat update-manifest.json
+
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.name }}"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            --target "${{ github.sha }}" \
+            --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
+            --notes "نسخة موقّعة تُثبَّت فوق السابقة دون فقدان البيانات." \
+            "Tabiq-v${{ steps.version.outputs.name }}.apk" \
+            update-manifest.json
 
       - name: Clean up keystore
         if: always()
@@ -101,7 +116,7 @@ jobs:
         with:
           name: Alameer-Station-Shifts-APK
           path: |
-            Alameer-Station-Shifts-v*.apk
+            Tabiq-v*.apk
             update-manifest.json
           if-no-files-found: error
           retention-days: 30

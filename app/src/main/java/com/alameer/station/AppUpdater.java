@@ -40,7 +40,9 @@ public class AppUpdater {
     private String readUrl(String address)throws Exception{
         HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
         c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setUseCaches(false);
+        c.setInstanceFollowRedirects(true);
         c.setRequestProperty("Accept","application/json");
+        c.setRequestProperty("User-Agent","TabiqUpdater");
         try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] b=new byte[4096];int n;
             while((n=in.read(b))!=-1){if(out.size()+n>65536)throw new IOException("Invalid manifest");out.write(b,0,n);}
