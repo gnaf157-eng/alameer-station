@@ -190,7 +190,7 @@ public class Db extends SQLiteOpenHelper {
         return out;
     }
     public Cursor workers(){return getReadableDatabase().rawQuery("SELECT id,name,'',role,shift_kind,active FROM workers ORDER BY id",null);}
-    public Cursor pumps(){return getReadableDatabase().rawQuery("SELECT p.id,p.name,p.fuel,p.price,p.last_reading,p.worker_id,COALESCE(w.name,'بدون عامل'),p.active FROM pumps p LEFT JOIN workers w ON w.id=p.worker_id ORDER BY p.id",null);}
+    public Cursor pumps(){return getReadableDatabase().rawQuery("SELECT p.id,p.name,p.fuel,p.price,p.last_reading,p.worker_id,COALESCE(w.name,'بدون عامل'),p.active FROM pumps p LEFT JOIN workers w ON w.id=p.worker_id ORDER BY "+FUEL_ORDER+",p.id",null);}
     public void updateWorker(long id,String name,String pin,String kind){ContentValues v=new ContentValues();v.put("name",name.trim());if(!pin.trim().isEmpty())v.put("pin_hash",hash(pin));v.put("shift_kind",kind);getWritableDatabase().update("workers",v,"id=?",new String[]{String.valueOf(id)});}
     public void updatePump(long id,String name,String fuel,double price,double reading,long workerId){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("fuel",fuel.trim());v.put("price",price);v.put("last_reading",reading);v.put("worker_id",workerId);getWritableDatabase().update("pumps",v,"id=?",new String[]{String.valueOf(id)});}
     public void addWorker(String name,String pin,String kind){ContentValues v=new ContentValues();v.put("name",name.trim());v.put("pin_hash",hash(pin));v.put("role","WORKER");v.put("shift_kind",kind);v.put("active",1);getWritableDatabase().insertOrThrow("workers",null,v);}
@@ -220,6 +220,8 @@ public class Db extends SQLiteOpenHelper {
      * الطرمبة الموقوفة تختفي من الوردية ما لم يكن العامل قد أدخل قراءتها فعلًا،
      * فلا تضيع مبيعات سُجّلت قبل الإيقاف.
      */
+    /** ترتيب موحّد للمواد: بترول ثم ديزل ثم غاز. */
+    static final String FUEL_ORDER="CASE TRIM(p.fuel) WHEN 'بترول' THEN 0 WHEN 'البترول' THEN 0 WHEN 'بنزين' THEN 0 WHEN 'البنزين' THEN 0 WHEN 'ديزل' THEN 1 WHEN 'الديزل' THEN 1 WHEN 'غاز' THEN 2 WHEN 'الغاز' THEN 2 ELSE 3 END";
     private static final String LIVE_PUMP = "(p.active=1 OR r.current IS NOT NULL)";
     public Cursor shiftReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT r.id,p.name,p.fuel,r.previous,r.current,r.price,r.sales,p.active FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY CASE TRIM(p.fuel) WHEN 'بترول' THEN 0 WHEN 'البترول' THEN 0 WHEN 'بنزين' THEN 0 WHEN 'البنزين' THEN 0 WHEN 'ديزل' THEN 1 WHEN 'الديزل' THEN 1 WHEN 'غاز' THEN 2 WHEN 'الغاز' THEN 2 ELSE 3 END,p.id",new String[]{String.valueOf(shiftId)});}
     public boolean saveReading(long readingId,double current){SQLiteDatabase db=getWritableDatabase();try(Cursor c=db.rawQuery("SELECT previous,price FROM readings WHERE id=?",new String[]{String.valueOf(readingId)})){if(c.moveToFirst()){double previous=c.getDouble(0),price=c.getDouble(1);if(current<previous)return false;ContentValues v=new ContentValues();v.put("current",current);v.put("sales",Calc.pumpSales(previous,current,price));db.update("readings",v,"id=?",new String[]{String.valueOf(readingId)});return true;}}return false;}
@@ -269,7 +271,7 @@ public class Db extends SQLiteOpenHelper {
     public double priceFor(String fuel){try(Cursor c=getReadableDatabase().rawQuery("SELECT MAX(price) FROM pumps WHERE fuel=?",new String[]{fuel.trim()})){return c.moveToFirst()?c.getDouble(0):0;}}
     /** أنواع الوقود المستخدمة فعليًا مع سعر كل نوع وعدد طرمباته. */
     public Cursor fuelPrices(){return getReadableDatabase().rawQuery(
-        "SELECT fuel,MIN(price),MAX(price),COUNT(*) FROM pumps WHERE active=1 GROUP BY fuel ORDER BY fuel",null);}
+        "SELECT fuel,MIN(price),MAX(price),COUNT(*) FROM pumps p WHERE active=1 GROUP BY fuel ORDER BY "+FUEL_ORDER+",fuel",null);}
     /** يضبط سعر اللتر لكل طرمبات نوع وقود واحد دفعة واحدة، ويرجع عدد ما تغيّر. */
     public int setFuelPrice(String fuel,double price){
         if(price<=0)return 0;
