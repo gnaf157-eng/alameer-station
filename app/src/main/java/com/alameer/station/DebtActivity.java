@@ -297,13 +297,14 @@ public class DebtActivity extends Activity {
     private void debtorOptions(long id, String name, String phone, double opening) {
         int entries = db.debtEntryCount(id);
         new AlertDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{"تعديل البيانات", "عرض حركات هذا المدين", "كل الحركات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
+                .setItems(new String[]{"📄  كشف حساب وإرساله", "تعديل البيانات", "عرض حركات هذا المدين", "كل الحركات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
                         (d, which) -> {
-                            if (which == 0) debtorDialog(id, name, phone, opening);
-                            else if (which == 1) { filterDebtor = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
-                            else if (which == 2) { filterDebtor = 0; refreshEntries(); }
-                            else if (which == 3) { db.setDebtorActive(id, false); refresh(); }
-                            else if (which == 4) { db.setDebtorActive(id, true); refresh(); }
+                            if (which == 0) sendStatement(id, phone);
+                            else if (which == 1) debtorDialog(id, name, phone, opening);
+                            else if (which == 2) { filterDebtor = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
+                            else if (which == 3) { filterDebtor = 0; refreshEntries(); }
+                            else if (which == 4) { db.setDebtorActive(id, false); refresh(); }
+                            else if (which == 5) { db.setDebtorActive(id, true); refresh(); }
                             else {
                                 if (entries > 0) {
                                     new AlertDialog.Builder(this).setTitle("لا يمكن الحذف")
@@ -315,6 +316,75 @@ public class DebtActivity extends Activity {
                                 refresh();
                             }
                         }).show();
+    }
+
+    /** يولّد كشف الحساب PDF ثم يعرض خيار الإرسال عبر واتساب أو أي تطبيق. */
+    private void sendStatement(long debtorId, String phone) {
+        final java.io.File file;
+        try {
+            file = new StatementReport(this, db).build(debtorId);
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setTitle("تعذر إنشاء الكشف")
+                    .setMessage(String.valueOf(e.getMessage())).setPositiveButton("حسنًا", null).show();
+            return;
+        }
+        final android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                this, getPackageName() + ".files", file);
+        final String body = new StatementReport(this, db).message(debtorId);
+        final String clean = phone == null ? "" : phone.replaceAll("[^0-9]", "");
+
+        String[] choices = clean.isEmpty()
+                ? new String[]{"مشاركة الكشف", "فتح الكشف"}
+                : new String[]{"إرسال واتساب إلى " + phone, "مشاركة الكشف", "فتح الكشف"};
+        new AlertDialog.Builder(this).setTitle("كشف الحساب جاهز")
+                .setItems(choices, (d, which) -> {
+                    int pick = clean.isEmpty() ? which + 1 : which;
+                    if (pick == 0) whatsapp(clean, body, uri);
+                    else if (pick == 1) share(uri, body);
+                    else open(uri);
+                }).show();
+    }
+
+    /** يفتح محادثة واتساب مع الرقم ويرفق الملف؛ يسقط إلى المشاركة عند غياب واتساب. */
+    private void whatsapp(String digits, String body, android.net.Uri uri) {
+        String number = digits.startsWith("00") ? digits.substring(2) : digits;
+        if (number.length() == 9 && number.startsWith("7")) number = "967" + number;
+        else if (number.startsWith("0")) number = "967" + number.substring(1);
+        try {
+            android.content.Intent chat = new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://wa.me/" + number + "?text="
+                            + android.net.Uri.encode(body)));
+            startActivity(chat);
+            // الملف يُرسل بخطوة ثانية لأن واتساب لا يقبل نصًا ومرفقًا لرقم محدد معًا.
+            Toast.makeText(this, "أرسل الرسالة ثم أرفق الكشف من نافذة المشاركة", Toast.LENGTH_LONG).show();
+            android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+            send.setType("application/pdf");
+            send.setPackage("com.whatsapp");
+            send.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+            send.putExtra(android.content.Intent.EXTRA_TEXT, body);
+            send.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(send);
+        } catch (Exception e) {
+            share(uri, body);
+        }
+    }
+
+    private void share(android.net.Uri uri, String body) {
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_SEND);
+        intent.setType("application/pdf");
+        intent.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+        intent.putExtra(android.content.Intent.EXTRA_TEXT, body);
+        intent.putExtra(android.content.Intent.EXTRA_SUBJECT, "كشف حساب");
+        intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(android.content.Intent.createChooser(intent, "إرسال كشف الحساب"));
+    }
+
+    private void open(android.net.Uri uri) {
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/pdf");
+        intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivity(intent); }
+        catch (Exception e) { Toast.makeText(this, "لا يوجد تطبيق لفتح PDF", Toast.LENGTH_SHORT).show(); }
     }
 
     /** تسجيل دين أو سداد، مع عرض رصيد المدين قبل الحفظ. */

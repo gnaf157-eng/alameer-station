@@ -57,7 +57,16 @@ public class HomeActivity extends Activity {
                 v -> askPin(ManagerActivity.class)), cell());
         shell.addView(row);
 
-        TextView hint = text("واجهة المدير تفتح بكلمة سر وتضم حركة الصناديق وحركة المواد", 13, 0xff7c8186, false);
+        // لوحة التحكم مفتوحة مؤقتًا بلا كلمة سر بطلب المدير.
+        LinearLayout second = new LinearLayout(this);
+        second.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(150));
+        wide.setMargins(dp(6), dp(12), dp(6), 0);
+        second.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون بالألوان", 2, false,
+                v -> startActivity(new Intent(this, ControlPanelActivity.class))), wide);
+        shell.addView(second);
+
+        TextView hint = text("لوحة التحكم مفتوحة بلا كلمة سر • واجهة المدير محمية", 13, 0xff7c8186, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(24), 0, 0);
         shell.addView(hint);
@@ -204,6 +213,15 @@ public class HomeActivity extends Activity {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawRoundRect(6, 5.5f, 12, 10, 1, 1, paint);
+            } else if (kind == 2) {
+                // لوحة تحكم: إطار وأعمدة بيانية.
+                c.drawRoundRect(2.5f, 3.5f, 21.5f, 20.5f, 2f, 2f, paint);
+                c.drawLine(2.5f, 7.6f, 21.5f, 7.6f, paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawRoundRect(6, 13.5f, 8.4f, 17.8f, 0.8f, 0.8f, paint);
+                c.drawRoundRect(10.8f, 10.5f, 13.2f, 17.8f, 0.8f, 0.8f, paint);
+                c.drawRoundRect(15.6f, 12f, 18, 17.8f, 0.8f, 0.8f, paint);
             } else if (kind == 9) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);

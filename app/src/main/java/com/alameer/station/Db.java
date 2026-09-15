@@ -652,6 +652,27 @@ public class Db extends SQLiteOpenHelper {
     public boolean deleteDebtEntry(long id){
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
+    /** id,name,phone,opening — بيانات مدين واحد. */
+    public String[] debtorInfo(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT name,COALESCE(phone,''),opening FROM debtors WHERE id=?",
+                new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())return null;
+            return new String[]{c.getString(0),c.getString(1),String.valueOf(c.getDouble(2))};
+        }
+    }
+    /** كل حركات المدين بالترتيب الزمني الصاعد لكشف الحساب: direction,amount,note,entry_date */
+    public Cursor debtLedger(long debtorId){
+        return getReadableDatabase().rawQuery(
+            "SELECT direction,amount,note,entry_date FROM debt_entries WHERE debtor_id=? ORDER BY entry_date,id",
+            new String[]{String.valueOf(debtorId)});
+    }
+    /** آخر تاريخ حركة للمدين، أو فراغ. */
+    public String debtorLastActivity(long debtorId){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT MAX(entry_date) FROM debt_entries WHERE debtor_id=?",new String[]{String.valueOf(debtorId)})){
+            return c.moveToFirst()&&c.getString(0)!=null?c.getString(0):"";
+        }
+    }
     /** id,direction,amount,note,entry_date,debtor_name */
     public Cursor debtEntries(long debtorId,int limit){
         String where=debtorId>0?"WHERE e.debtor_id=? ":"";
