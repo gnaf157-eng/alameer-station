@@ -72,13 +72,13 @@ final class ReportTable {
             add(false,type,"لترات",f(fuelSum("D",fuelRows.get(type)),litres.get(type)),"مبيعات",f(fuelSum("E",fuelRows.get(type)),amounts.get(type)));
         }
         movementHeader=rows.size();
-        add(true,"المخاريج","المقبوضات","الديون","الفلوس","البيان");
+        add(true,"المخاريج","المقبوضات","الديون","البيان","الفلوس");
         List<Object[]> movements=new ArrayList<>();double[] totals=new double[4];
         List<String> types=Arrays.asList("EXPENSE","COLLECTION","DEBT","CASH");
         try(Cursor c=db.syncMovements(id)){
             while(c.moveToNext()){
                 int col=types.indexOf(c.getString(0));if(col<0)throw new IllegalArgumentException("نوع حركة غير معروف");
-                Object[] values=new Object[5];values[col]=c.getDouble(2);values[4]=c.getString(1);
+                Object[] values=new Object[5];values[CELL[col]]=c.getDouble(2);values[3]=c.getString(1);
                 totals[col]+=c.getDouble(2);movements.add(values);
             }
         }
@@ -87,17 +87,28 @@ final class ReportTable {
         Collections.sort(movements,(a,b)->Integer.compare(movementOrder(column(a)),movementOrder(column(b))));
         first=rows.size()+1;
         for(Object[] movement:movements)add(false,movement);
-        if(movements.isEmpty())add(false,null,null,null,null,"لا توجد حركات");
+        if(movements.isEmpty())add(false,null,null,null,"لا توجد حركات",null);
         last=rows.size();totalsStart=rows.size();
-        int tr=add(true,f(sum("A",first,last),totals[0]),f(sum("B",first,last),totals[1]),f(sum("C",first,last),totals[2]),f(sum("D",first,last),totals[3]),"الإجمالي");
-        add(true,"المبيعات","المقبوضات","النقد المسلّم","الديون","المخاريج");
-        add(false,f("E"+salesRow,sales),f("B"+tr,totals[1]),f("D"+tr,totals[3]),f("C"+tr,totals[2]),f("A"+tr,totals[0]));
-        add(true,"الباقي",f("E"+salesRow+"+B"+tr+"-D"+tr+"-C"+tr+"-A"+tr,sales+totals[1]-totals[3]-totals[2]-totals[0]),"سبب الفرق",reason,"");
+        int tr=add(true,f(sum("A",first,last),totals[0]),f(sum("B",first,last),totals[1]),f(sum("C",first,last),totals[2]),"الإجمالي",f(sum("E",first,last),totals[3]));
+        // بيانات المطابقة في عمودين: البيان ثم القيمة.
+        add(true,"بيانات المطابقة","","","","");
+        add(false,"المبيعات",f("E"+salesRow,sales),"","","");
+        add(false,"المقبوضات",f("B"+tr,totals[1]),"","","");
+        add(false,"النقد المسلّم",f("E"+tr,totals[3]),"","","");
+        add(false,"الديون",f("C"+tr,totals[2]),"","","");
+        add(false,"المخاريج",f("A"+tr,totals[0]),"","","");
+        add(true,"الباقي",f("E"+salesRow+"+B"+tr+"-E"+tr+"-C"+tr+"-A"+tr,sales+totals[1]-totals[3]-totals[2]-totals[0]),"","","");
+        add(false,"سبب الفرق",reason,"","","");
     }
+    /** عمود كل نوع حركة: مخاريج، مقبوضات، ديون، ثم الفلوس في آخر عمود. */
+    static final int[] CELL={0,1,2,4};
     private static int movementOrder(int column){
-        switch(column){case 2:return 0;case 1:return 1;case 0:return 2;case 3:return 3;default:return 4;}
+        switch(column){case 2:return 0;case 1:return 1;case 0:return 2;case 4:return 3;default:return 5;}
     }
-    private static int column(Object[] a){for(int i=0;i<4;i++)if(a[i]!=null)return i;return 4;}
+    private static int column(Object[] a){
+        for(int i:CELL)if(a[i] instanceof Number||a[i] instanceof XlsxWorkbook.Formula)return i;
+        return 5;
+    }
     private static Object price(Set<Double> values){
         if(values==null||values.isEmpty())return "—";
         if(values.size()==1)return values.iterator().next();

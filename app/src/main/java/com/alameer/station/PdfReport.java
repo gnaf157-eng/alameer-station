@@ -26,10 +26,12 @@ public final class PdfReport {
         java.util.List<Block> blocks=new java.util.ArrayList<>();
         for(int i=0;i<table.rows.size();i++){
             ReportTable.Row row=table.rows.get(i);
-            int kind=i==0?1:"الباقي".equals(row.cells[0])?2:row.heading?3:0;
+            int kind=i==0?1:"الباقي".equals(row.cells[0])?2:
+                "بيانات المطابقة".equals(row.cells[0])?3:
+                row.heading?3:isPair(table,i)?8:0;
             if(i>table.movementHeader&&i<table.totalsStart){
-                for(int column=0;column<4;column++){
-                    if(row.cells[column] instanceof Number){kind=4+column;break;}
+                for(int c=0;c<ReportTable.CELL.length;c++){
+                    if(row.cells[ReportTable.CELL[c]] instanceof Number){kind=4+c;break;}
                 }
             }
             blocks.add(new Block(row,kind));
@@ -44,6 +46,7 @@ public final class PdfReport {
                 Block block=blocks.get(i);int needed=block.height;
                 if(i==table.totalsStart-1){
                     for(int j=i+1;j<blocks.size();j++)needed+=blocks.get(j).height;
+                    if(needed>HEIGHT-2*MARGIN)needed=block.height;
                 }else if(block.kind==3&&i+1<blocks.size()){
                     needed+=blocks.get(i+1).height;
                 }
@@ -76,18 +79,29 @@ public final class PdfReport {
         p.setTextSize(size);p.setColor(color);
         p.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));return p;
     }
+    /** أسطر بيانات المطابقة والسبب تُرسم في عمودين فقط. */
+    private static boolean isPair(ReportTable table,int index){
+        for(int i=index;i>=0;i--){
+            Object first=table.rows.get(i).cells[0];
+            if("بيانات المطابقة".equals(first))return true;
+            if(table.rows.get(i).heading&&!"الباقي".equals(first))return false;
+        }
+        return false;
+    }
     private static StaticLayout[] layouts(ReportTable.Row row,int kind){
-        StaticLayout[] result=new StaticLayout[kind==1?1:5];
+        StaticLayout[] result=new StaticLayout[kind==1?1:kind==2||kind==8?2:5];
         for(int i=0;i<result.length;i++){
             Object value=i<row.cells.length?row.cells[i]:null;
             if(value instanceof XlsxWorkbook.Formula)value=((XlsxWorkbook.Formula)value).value;
             String text=value==null?"":value instanceof Number?ReportTable.format(((Number)value).doubleValue()):value.toString();
-            int size=kind==1?21:kind==2&&i==1?20:kind==2?12:11;
-            int color=kind==1?Color.WHITE:kind==2?balanceColor(row):kind==3||kind>=4?INK:value instanceof Number?INK:MUTED;
-            TextPaint p=paint(size,kind!=0,color);
-            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),p,(kind==1?COLUMN*5-60:COLUMN)-20)
+            int size=kind==1?21:kind==2&&i==1?20:kind==2?13:kind==8?12:11;
+            int color=kind==1?Color.WHITE:kind==2?balanceColor(row):kind==3||(kind>=4&&kind<8)?INK:
+                kind==8?(i==1?INK:MUTED):value instanceof Number?INK:MUTED;
+            TextPaint p=paint(size,kind!=0&&kind!=8||kind==8&&i==1,color);
+            int cellWidth=kind==1?COLUMN*5-60:kind==2||kind==8?COLUMN*5/2:COLUMN;
+            result[i]=StaticLayout.Builder.obtain(text,0,text.length(),p,cellWidth-20)
                 .setTextDirection(value instanceof Number?TextDirectionHeuristics.LTR:TextDirectionHeuristics.RTL)
-                .setAlignment(kind==1?Layout.Alignment.ALIGN_NORMAL:Layout.Alignment.ALIGN_CENTER)
+                .setAlignment(kind==1||kind==8||kind==2?Layout.Alignment.ALIGN_NORMAL:Layout.Alignment.ALIGN_CENTER)
                 .setIncludePad(false).build();
         }
         return result;
@@ -120,18 +134,21 @@ public final class PdfReport {
         }else if(b.kind==2){
             p.setColor(balanceColor(b.row)==0xff286342?0xffedf5ef:0xfffcf0ed);
             canvas.drawRoundRect(left,y+4,right,y+b.height-2,8,8,p);
+        }else if(b.kind==8){
+            p.setColor(0xfffbfcfd);
+            canvas.drawRect(left,y,right,y+b.height,p);
         }else if(b.kind==3){
             p.setColor(0xfff3f4f4);
             canvas.drawRoundRect(left,y+4,right,y+b.height-2,5,5,p);
             p.setColor(GOLD);canvas.drawRect(right-3,y+8,right,y+b.height-6,p);
         }
         for(int i=0;i<b.cells.length;i++){
-            int width=b.kind==1?COLUMN*5:COLUMN;
+            int width=b.kind==1?COLUMN*5:b.kind==2||b.kind==8?COLUMN*5/2:COLUMN;
             int cellLeft=right-i*width-width+(b.kind==1?60:0);
             canvas.save();canvas.translate(cellLeft+10,y+(b.height-b.cells[i].getHeight())/2f);
             b.cells[i].draw(canvas);canvas.restore();
         }
-        if(b.kind==0||b.kind>=4){
+        if(b.kind==0||b.kind>=4&&b.kind<8||b.kind==8){
             p.setColor(0xffbac2c8);p.setStrokeWidth(0.65f);
             canvas.drawLine(left,y+b.height,right,y+b.height,p);
         }
