@@ -2,12 +2,9 @@ package com.alameer.station.shifts;
 
 import android.animation.ValueAnimator;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -17,64 +14,47 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** لوحة التحكم: ملخّص داكن قابل للطي للورديات والصناديق والمواد والديون. */
+/** لوحة التحكم: حالة الورديات والصناديق والمواد والديون بألوان هوية التطبيق. */
 public class ControlPanelActivity extends Activity {
-
-    // ألوان الثيم الداكن الخاص باللوحة.
-    static final int DARK_BG = 0xff12201c;
-    static final int PANEL = 0xff1b2b26;
-    static final int PANEL_SOFT = 0xff223530;
-    static final int DIVIDER = 0xff2c403a;
-    static final int HEAD = 0xff0f6b52;
-    static final int GOLD = 0xffF5C518;
-    static final int GREEN_T = 0xff2ecc8f;
-    static final int RED_T = 0xffff6b74;
-    static final int AMBER_T = 0xffE0A32E;
-    static final int TEXT = 0xffeaf3f0;
-    static final int TEXT_DIM = 0xff8fa6a0;
-
     private Db db;
     private LinearLayout content;
 
     private static final double LOW_CASH = 50000;
     private static final double BIG_DEBT = 100000;
     private static final int STALE_DAYS = 21;
+    private static final int AMBER = 0xffB86A00;
 
-    /** حالة الطي محفوظة بين الفتحات. */
-    private boolean openStock, openCash, openDebt;
+    private boolean debtsOpen = false;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
-        openStock = "1".equals(db.setting("panel_stock", "1"));
-        openCash = "1".equals(db.setting("panel_cash", "0"));
-        openDebt = "1".equals(db.setting("panel_debt", "0"));
-
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        shell.setBackgroundColor(DARK_BG);
+        shell.setBackgroundColor(Util.BG);
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(16), dp(14), dp(16), dp(14));
-        header.setBackgroundColor(HEAD);
+        header.setPadding(dp(16), dp(15), dp(16), dp(15));
+        header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("لوحة التحكم", 18, Color.WHITE, true));
-        words.addView(text(Branding.stationName(db) + "  •  " + ShiftDates.today(), 11, 0xffBFE3D6, false));
+        words.addView(text("لوحة التحكم", 19, Color.WHITE, true));
+        words.addView(text(Branding.stationName(db) + "  •  " + ShiftDates.today(), 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(10), dp(12), dp(20));
+        content.setPadding(dp(14), dp(10), dp(14), dp(24));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        shell.addView(bottomNav());
         setContentView(shell);
     }
 
@@ -82,24 +62,36 @@ public class ControlPanelActivity extends Activity {
 
     private void build() {
         content.removeAllViews();
-        content.addView(statusRow());
-        section("المخزون", openStock, v -> { openStock = !openStock; save("panel_stock", openStock); build(); }, this::stockBody);
-        section("الصناديق", openCash, v -> { openCash = !openCash; save("panel_cash", openCash); build(); }, this::cashBody);
-        section("الديون", openDebt, v -> { openDebt = !openDebt; save("panel_debt", openDebt); build(); }, this::debtBody);
+        int delay = 0;
+        delay = add(statusRow(), delay);
+        delay = add(stockSection(), delay);
+        delay = add(cashSection(), delay);
+        add(debtSection(), delay);
     }
 
-    private void save(String key, boolean value) { db.setSetting(key, value ? "1" : "0"); }
+    private int add(View section, int delay) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+        p.setMargins(0, dp(6), 0, dp(6));
+        content.addView(section, p);
+        section.setAlpha(0f);
+        section.setTranslationY(dp(18));
+        section.animate().alpha(1f).translationY(0)
+                .setStartDelay(delay).setDuration(320)
+                .setInterpolator(new DecelerateInterpolator()).start();
+        return delay + 70;
+    }
 
-    // ==================== شريط الحالة الثلاثي ====================
+    // ==================== صف الحالة العلوي ====================
 
     /** ثلاث بطاقات: الورديات، الصناديق، المواد — سليم أو يحتاج انتباه. */
     private View statusRow() {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER);
 
-        int open = db.openShifts() + db.pendingCount();
-        row.addView(statusCard("الورديات", open == 0 ? "0" : String.valueOf(open),
-                open == 0, open == 0 ? "سليم" : "معلّقة"), cell());
+        int pending = db.pendingCount();
+        row.addView(statusCard("الورديات",
+                pending == 0 ? "0" : String.valueOf(pending),
+                pending == 0 ? "سليم" : "بانتظار الاعتماد", pending == 0), cell());
 
         int badBoxes = 0;
         double cash = db.cashboxesTotal();
@@ -107,140 +99,237 @@ public class ControlPanelActivity extends Activity {
             while (c.moveToNext()) if (c.getDouble(6) < LOW_CASH) badBoxes++;
         }
         row.addView(statusCard("الصناديق", money(cash) + " ر.ي",
-                badBoxes == 0, badBoxes == 0 ? "سليم" : badBoxes + " منخفض"), cell());
+                badBoxes == 0 ? "سليم" : badBoxes + " صندوق منخفض", badBoxes == 0), cell());
 
-        int lowStock = 0;
+        int badMaterials = 0;
         for (String material : Db.MATERIALS) {
             double left = db.materialSummary(material)[3];
-            if (left < db.capacity(material) * 0.25) lowStock++;
+            if (left / capacity(material) < 0.25) badMaterials++;
         }
-        row.addView(statusCard("المواد", lowStock == 0 ? "سليم" : lowStock + " مادة",
-                lowStock == 0, lowStock == 0 ? "سليم" : "منخفضة"), cell());
+        row.addView(statusCard("المواد", badMaterials == 0 ? "كامل" : badMaterials + " مادة",
+                badMaterials == 0 ? "سليم" : "تحتاج تعبئة", badMaterials == 0), cell());
         return row;
     }
 
-    private View statusCard(String title, String value, boolean ok, String state) {
+    private LinearLayout.LayoutParams cell() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
+        p.setMargins(dp(4), 0, dp(4), 0);
+        return p;
+    }
+
+    private View statusCard(String title, String value, String state, boolean good) {
+        int tint = good ? Util.GREEN : AMBER;
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(8), dp(14), dp(8), dp(12));
-        box.setBackground(Util.round(PANEL, dp(14)));
+        box.setPadding(dp(8), dp(14), dp(8), dp(14));
+        box.setBackground(Util.round(Color.WHITE, dp(16)));
+        box.setElevation(dp(2));
 
-        TextView label = text(title, 12, TEXT_DIM, false);
-        label.setGravity(Gravity.CENTER);
-        box.addView(label);
+        TextView name = text(title, 12, 0xff7c8186, false);
+        name.setGravity(Gravity.CENTER);
+        box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout line = new LinearLayout(this);
         line.setGravity(Gravity.CENTER);
-        line.setPadding(0, dp(8), 0, dp(6));
-        TextView mark = text(ok ? "✅" : "⚠️", 15, ok ? GREEN_T : AMBER_T, true);
-        line.addView(mark);
-        TextView number = text(value, 16, ok ? GREEN_T : AMBER_T, true);
-        number.setPadding(dp(6), 0, 0, 0);
+        line.setPadding(0, dp(7), 0, dp(6));
+        View mark = new View(this);
+        mark.setBackground(Util.round(tint, dp(6)));
+        line.addView(mark, new LinearLayout.LayoutParams(dp(12), dp(12)));
+        TextView number = text(value, 15, tint, true);
+        number.setPadding(dp(7), 0, 0, 0);
         number.setTextDirection(View.TEXT_DIRECTION_LTR);
         line.addView(number);
-        box.addView(line);
+        box.addView(line, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView tail = text(state, 11, TEXT_DIM, false);
-        tail.setGravity(Gravity.CENTER);
-        box.addView(tail);
+        TextView badge = text(state, 10, tint, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(9), dp(3), dp(9), dp(3));
+        badge.setBackground(Util.round(soften(tint), dp(8)));
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setGravity(Gravity.CENTER);
+        wrap.addView(badge);
+        box.addView(wrap, new LinearLayout.LayoutParams(-1, -2));
         return box;
     }
 
-    // ==================== قسم قابل للطي ====================
+    // ==================== المخزون (ظاهر دائمًا) ====================
 
-    private interface Body { void fill(LinearLayout into); }
-
-    private void section(String title, boolean open, View.OnClickListener toggle, Body body) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(Util.round(PANEL, dp(14)));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(0, dp(9), 0, 0);
-        card.setLayoutParams(cp);
-
-        LinearLayout head = new LinearLayout(this);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(16), dp(18), dp(16), dp(18));
-        head.setClickable(true);
-        head.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x22FFFFFF),
-                Util.round(PANEL, dp(14)), null));
-        head.setOnClickListener(toggle);
-        TextView name = text(title, 16, GOLD, true);
-        head.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView arrow = text(open ? "▼ ‣" : "◀ ‣", 13, GOLD, false);
-        head.addView(arrow);
-        card.addView(head);
-
-        if (open) {
-            LinearLayout inner = new LinearLayout(this);
-            inner.setOrientation(LinearLayout.VERTICAL);
-            inner.setPadding(dp(12), 0, dp(12), dp(12));
-            body.fill(inner);
-            card.addView(inner);
-            inner.setAlpha(0f);
-            inner.setTranslationY(dp(-10));
-            inner.animate().alpha(1f).translationY(0).setDuration(260)
-                    .setInterpolator(new DecelerateInterpolator()).start();
-        }
-        content.addView(card);
-    }
-
-    // ==================== المخزون ====================
-
-    private void stockBody(LinearLayout into) {
+    private View stockSection() {
+        LinearLayout box = panel();
+        box.addView(sectionHead("المخزون"));
         for (String material : Db.MATERIALS) {
-            final String name = material;
-            double left = db.materialSummary(material)[3];
-            double capacity = Math.max(1, db.capacity(material));
-            int percent = (int) Math.round(Math.max(0, left) * 100 / capacity);
-            int tint = percent <= 12 ? RED_T : percent <= 30 ? AMBER_T : GREEN_T;
+            double left = Math.max(0, db.materialSummary(material)[3]);
+            double cap = capacity(material);
+            int percent = (int) Math.round(Math.min(100, left * 100 / cap));
+            int tint = percent < 15 ? Util.RED : percent < 30 ? AMBER : Util.GREEN;
 
-            LinearLayout box = new LinearLayout(this);
-            box.setOrientation(LinearLayout.VERTICAL);
-            box.setPadding(dp(14), dp(13), dp(14), dp(14));
-            box.setBackground(Util.round(PANEL_SOFT, dp(12)));
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
-            bp.setMargins(0, dp(6), 0, dp(6));
-            box.setLayoutParams(bp);
-            box.setClickable(true);
-            box.setOnLongClickListener(v -> { capacityDialog(name); return true; });
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(13), dp(12), dp(13), dp(13));
+            card.setBackground(Util.round(0xffF7FAFE, dp(13)));
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+            cp.setMargins(dp(10), dp(5), dp(10), dp(5));
+            card.setLayoutParams(cp);
 
             LinearLayout top = new LinearLayout(this);
+            top.setGravity(Gravity.CENTER_VERTICAL);
             LinearLayout words = new LinearLayout(this);
             words.setOrientation(LinearLayout.VERTICAL);
-            words.addView(text(material, 16, TEXT, true));
-            words.addView(text("السعة " + money(capacity) + " · الحالي " + money(left), 11, TEXT_DIM, false));
+            words.addView(text(material, 16, Util.NAVY, true));
+            words.addView(text("السعة " + money(cap) + "  •  الحالي " + money(left), 11, 0xff8b9097, false));
             top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView amount = text(money(left), 19, tint, true);
+            TextView amount = text(money(left), 18, tint, true);
             amount.setTextDirection(View.TEXT_DIRECTION_LTR);
-            amount.setGravity(Gravity.CENTER_VERTICAL);
             top.addView(amount);
-            box.addView(top);
+            card.addView(top);
 
-            box.addView(bar(percent, tint), barParams());
-            into.addView(box);
+            card.addView(bar(percent, tint), barParams());
+            box.addView(card);
         }
-        TextView hint = text("اضغط مطوّلًا على المادة لتعديل سعة الخزان", 10, TEXT_DIM, false);
-        hint.setPadding(dp(4), dp(6), 0, 0);
-        into.addView(hint);
+        return box;
+    }
+
+    // ==================== الصناديق (ظاهرة دائمًا) ====================
+
+    private View cashSection() {
+        LinearLayout box = panel();
+        box.addView(sectionHead("الصناديق"));
+        int count = 0;
+        try (Cursor c = db.cashboxes(true)) {
+            while (c.moveToNext()) {
+                count++;
+                double balance = c.getDouble(6);
+                box.addView(flatRow(c.getString(1), money(balance) + " ر.ي",
+                        balance < 0 ? Util.RED : balance < LOW_CASH ? AMBER : Util.GREEN));
+                box.addView(divider());
+            }
+        }
+        if (count == 0) box.addView(emptyLine("لم تُنشئ صناديق بعد."));
+        else {
+            double total = db.cashboxesTotal();
+            LinearLayout sum = flatRow("الإجمالي", money(total) + " ر.ي", Util.NAVY);
+            sum.setBackground(Util.round(Util.ACCENT_SOFT, 0));
+            box.addView(sum);
+        }
+        return box;
+    }
+
+    // ==================== الديون (قائمة منسدلة) ====================
+
+    private View debtSection() {
+        final LinearLayout box = panel();
+        final LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        final TextView arrow = text(debtsOpen ? "▼" : "◀", 13, Util.ACCENT, true);
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(14), dp(14), dp(14), dp(14));
+        head.setClickable(true);
+        head.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x14000000), null, null));
+        head.addView(arrow);
+        TextView title = text("الديون", 16, Util.NAVY, true);
+        title.setPadding(dp(9), 0, 0, 0);
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        double total = db.debtsTotal();
+        TextView sum = text(money(total) + " ر.ي", 14, total > 0.009 ? Util.RED : Util.GREEN, true);
+        sum.setTextDirection(View.TEXT_DIRECTION_LTR);
+        head.addView(sum);
+        head.setOnClickListener(v -> {
+            debtsOpen = !debtsOpen;
+            arrow.setText(debtsOpen ? "▼" : "◀");
+            body.setVisibility(debtsOpen ? View.VISIBLE : View.GONE);
+            if (debtsOpen) {
+                body.setAlpha(0f);
+                body.animate().alpha(1f).setDuration(260).start();
+            }
+        });
+        box.addView(head);
+
+        List<String[]> rows = new ArrayList<>();
+        try (Cursor c = db.debtors(true)) {
+            while (c.moveToNext()) {
+                double balance = c.getDouble(7);
+                if (Math.abs(balance) < 0.009) continue;
+                rows.add(new String[]{c.getString(1), String.valueOf(balance),
+                        String.valueOf(daysSince(db.debtorLastActivity(c.getLong(0))))});
+            }
+        }
+        rows.sort((a, b) -> Double.compare(Math.abs(Double.parseDouble(b[1])),
+                Math.abs(Double.parseDouble(a[1]))));
+        if (rows.isEmpty()) body.addView(emptyLine("لا ديون مستحقة."));
+        for (String[] row : rows) {
+            double balance = Double.parseDouble(row[1]);
+            int idle = Integer.parseInt(row[2]);
+            int tint = balance > BIG_DEBT ? Util.RED : idle >= STALE_DAYS ? AMBER : Util.NAVY;
+            body.addView(flatRow(row[0], money(balance) + " ر.ي",
+                    idle >= STALE_DAYS ? "راكد " + idle + " يومًا" : null, tint));
+            body.addView(divider());
+        }
+        body.setVisibility(debtsOpen ? View.VISIBLE : View.GONE);
+        box.addView(body);
+        return box;
+    }
+
+    // ==================== لبنات البناء ====================
+
+    private LinearLayout panel() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackground(Util.round(Color.WHITE, dp(16)));
+        box.setElevation(dp(2));
+        box.setPadding(0, 0, 0, dp(6));
+        return box;
+    }
+
+    /** عنوان قسم ثابت غير قابل للطي. */
+    private View sectionHead(String name) {
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(14), dp(14), dp(14), dp(10));
+        View mark = new View(this);
+        mark.setBackground(Util.round(Util.ACCENT, dp(2)));
+        head.addView(mark, new LinearLayout.LayoutParams(dp(4), dp(18)));
+        TextView t = text(name, 16, Util.NAVY, true);
+        t.setPadding(dp(9), 0, 0, 0);
+        head.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        return head;
+    }
+
+    private LinearLayout flatRow(String name, String value, int tint) {
+        return flatRow(name, value, null, tint);
+    }
+
+    private LinearLayout flatRow(String name, String value, String note, int tint) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(13), dp(14), dp(13));
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.addView(text(name, 15, Util.NAVY, true));
+        if (note != null) words.addView(text(note, 10, AMBER, false));
+        row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView amount = text(value, 16, tint, true);
+        amount.setTextDirection(View.TEXT_DIRECTION_LTR);
+        row.addView(amount);
+        return row;
     }
 
     /** شريط امتلاء ينمو بحركة من الصفر. */
     private LinearLayout bar(int percent, int tint) {
         LinearLayout bar = new LinearLayout(this);
-        bar.setBackground(Util.round(0xffE6E4DC, dp(5)));
+        bar.setBackground(Util.round(0xffe6eaef, dp(5)));
         final View fill = new View(this);
         fill.setBackground(Util.round(tint, dp(5)));
-        final LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(0, dp(10), 0.01f);
+        final LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(0, dp(9), 0.01f);
         bar.addView(fill, fp);
         View rest = new View(this);
-        bar.addView(rest, new LinearLayout.LayoutParams(0, dp(10), Math.max(0.01f, 100 - percent)));
-
-        ValueAnimator grow = ValueAnimator.ofFloat(0.01f, Math.max(0.01f, Math.min(100, percent)));
-        grow.setDuration(620);
-        grow.setStartDelay(120);
+        bar.addView(rest, new LinearLayout.LayoutParams(0, dp(9), Math.max(0.01f, 100f - percent)));
+        ValueAnimator grow = ValueAnimator.ofFloat(0.01f, Math.max(0.01f, percent));
+        grow.setDuration(640);
+        grow.setStartDelay(180);
         grow.setInterpolator(new DecelerateInterpolator());
         grow.addUpdateListener(a -> { fp.weight = (Float) a.getAnimatedValue(); fill.setLayoutParams(fp); });
         grow.start();
@@ -248,187 +337,30 @@ public class ControlPanelActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams barParams() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(10));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(9));
         p.setMargins(0, dp(11), 0, 0);
         return p;
     }
 
-    private void capacityDialog(final String material) {
-        final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        input.setTextSize(20);
-        input.setGravity(Gravity.CENTER);
-        input.setText(money(db.capacity(material)).replace(",", ""));
-        LinearLayout box = new LinearLayout(this);
-        box.setPadding(dp(26), dp(14), dp(26), 0);
-        box.addView(input, new LinearLayout.LayoutParams(-1, -2));
-        new AlertDialog.Builder(this)
-                .setTitle("سعة خزان " + material)
-                .setMessage("اكتب السعة الكاملة باللتر.")
-                .setView(box)
-                .setPositiveButton("حفظ", (d, w) -> {
-                    double value = Calc.number(input.getText().toString());
-                    if (value > 0) { db.setCapacity(material, value); build(); }
-                })
-                .setNegativeButton("إلغاء", null).show();
-    }
-
-    // ==================== الصناديق ====================
-
-    private void cashBody(LinearLayout into) {
-        List<String[]> boxes = new ArrayList<>();
-        try (Cursor c = db.cashboxes(true)) {
-            while (c.moveToNext()) boxes.add(new String[]{c.getString(1), String.valueOf(c.getDouble(6))});
-        }
-        boxes.sort((a, b) -> Double.compare(Double.parseDouble(b[1]), Double.parseDouble(a[1])));
-        if (boxes.isEmpty()) { into.addView(emptyRow("لم تُنشئ صناديق بعد.")); return; }
-        for (int i = 0; i < boxes.size(); i++) {
-            double balance = Double.parseDouble(boxes.get(i)[1]);
-            into.addView(row(boxes.get(i)[0], money(balance) + " ر.ي",
-                    balance < 0 ? RED_T : balance < LOW_CASH ? AMBER_T : GREEN_T));
-            if (i < boxes.size() - 1) into.addView(divider());
-        }
-    }
-
-    // ==================== الديون ====================
-
-    private void debtBody(LinearLayout into) {
-        List<String[]> people = new ArrayList<>();
-        try (Cursor c = db.debtors(true)) {
-            while (c.moveToNext()) {
-                double balance = c.getDouble(7);
-                if (Math.abs(balance) < 0.009) continue;
-                people.add(new String[]{c.getString(1), String.valueOf(balance),
-                        String.valueOf(daysSince(db.debtorLastActivity(c.getLong(0))))});
-            }
-        }
-        people.sort((a, b) -> Double.compare(
-                Math.abs(Double.parseDouble(b[1])), Math.abs(Double.parseDouble(a[1]))));
-        if (people.isEmpty()) { into.addView(emptyRow("لا ديون مستحقة — ممتاز.")); return; }
-        for (int i = 0; i < people.size(); i++) {
-            double balance = Double.parseDouble(people.get(i)[1]);
-            int idle = Integer.parseInt(people.get(i)[2]);
-            into.addView(debtRow(people.get(i)[0], balance, idle));
-            if (i < people.size() - 1) into.addView(divider());
-        }
-    }
-
-    /** سطر مدين بمفتاح ذهبي يشير إلى حالته. */
-    private View debtRow(String name, double balance, int idle) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(13), dp(4), dp(13));
-
-        LinearLayout words = new LinearLayout(this);
-        words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text(name, 16, TEXT, true));
-        TextView value = text(money(-Math.abs(balance)) + " ر.ي", 12, TEXT_DIM, false);
-        value.setTextDirection(View.TEXT_DIRECTION_LTR);
-        value.setPadding(0, dp(4), 0, 0);
-        words.addView(value);
-        row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-
-        boolean heavy = Math.abs(balance) > BIG_DEBT || idle >= STALE_DAYS;
-        row.addView(toggle(heavy));
-        return row;
-    }
-
-    /** مفتاح مرسوم: خلفية داكنة وكرة ذهبية. */
-    private View toggle(boolean flagged) {
-        FrameLayout wrap = new FrameLayout(this);
-        wrap.setBackground(Util.round(flagged ? 0xff2f4038 : 0xff26362f, dp(15)));
-        LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(dp(60), dp(30));
-        wrap.setLayoutParams(wp);
-        View knob = new View(this);
-        knob.setBackground(Util.round(GOLD, dp(11)));
-        FrameLayout.LayoutParams kp = new FrameLayout.LayoutParams(dp(22), dp(22));
-        kp.gravity = Gravity.CENTER_VERTICAL | Gravity.START;
-        kp.leftMargin = dp(4);
-        wrap.addView(knob, kp);
-        View tip = new View(this);
-        tip.setBackground(Util.round(GREEN_T, dp(2)));
-        FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(dp(4), dp(12));
-        tp.gravity = Gravity.CENTER_VERTICAL | Gravity.END;
-        tp.rightMargin = dp(5);
-        wrap.addView(tip, tp);
-        return wrap;
-    }
-
-    // ==================== لبنات مشتركة ====================
-
-    private View row(String name, String value, int tint) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(4), dp(15), dp(4), dp(15));
-        row.addView(text(name, 15, TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView amount = text(value, 17, tint, true);
-        amount.setTextDirection(View.TEXT_DIRECTION_LTR);
-        row.addView(amount);
-        return row;
-    }
-
     private View divider() {
         View line = new View(this);
-        line.setBackgroundColor(DIVIDER);
-        line.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(1)));
+        line.setBackgroundColor(0xffeef1f4);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(1));
+        p.setMargins(dp(14), 0, dp(14), 0);
+        line.setLayoutParams(p);
         return line;
     }
 
-    private View emptyRow(String message) {
-        TextView t = text(message, 14, TEXT_DIM, false);
-        t.setPadding(dp(4), dp(14), dp(4), dp(14));
+    private View emptyLine(String message) {
+        TextView t = text(message, 14, 0xff8b9097, false);
+        t.setPadding(dp(14), dp(10), dp(14), dp(14));
         return t;
     }
 
-    // ==================== شريط التنقل السفلي ====================
+    private double capacity(String material) { return Math.max(1, db.capacity(material)); }
 
-    private View bottomNav() {
-        LinearLayout nav = new LinearLayout(this);
-        nav.setBackgroundColor(DARK_BG);
-        nav.setPadding(dp(8), dp(8), dp(8), dp(10));
-        nav.addView(navButton("الرئيسية", "⌂", true, v -> { }), navCell());
-        nav.addView(navButton("وردية", "◷", false,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), navCell());
-        nav.addView(navButton("الصناديق", "▣", false,
-                v -> startActivity(new Intent(this, CashboxActivity.class))), navCell());
-        nav.addView(navButton("المواد", "◱", false,
-                v -> startActivity(new Intent(this, MaterialActivity.class))), navCell());
-        return nav;
-    }
-
-    private LinearLayout.LayoutParams navCell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
-        p.setMargins(dp(4), 0, dp(4), 0);
-        return p;
-    }
-
-    private View navButton(String label, String glyph, boolean active, View.OnClickListener action) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(4), dp(12), dp(4), dp(11));
-        box.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x22FFFFFF),
-                Util.round(active ? GOLD : PANEL, dp(13)), null));
-        box.setClickable(true);
-        box.setOnClickListener(action);
-        int ink = active ? 0xff1a1a1a : TEXT;
-        TextView icon = text(glyph, 17, ink, false);
-        icon.setGravity(Gravity.CENTER);
-        box.addView(icon);
-        TextView name = text(label, 12, ink, active);
-        name.setGravity(Gravity.CENTER);
-        name.setPadding(0, dp(4), 0, 0);
-        box.addView(name);
-        return box;
-    }
-
-    // ==================== أدوات ====================
-
-    private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
-        p.setMargins(dp(4), dp(4), dp(4), dp(4));
-        return p;
+    private int soften(int color) {
+        return Color.argb(30, Color.red(color), Color.green(color), Color.blue(color));
     }
 
     private int daysSince(String date) {
