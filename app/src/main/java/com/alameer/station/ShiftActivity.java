@@ -44,9 +44,7 @@ public class ShiftActivity extends Activity {
     boolean askNameOnFirstRun=false;
     LinearLayout totalsBox;
 
-    AutoCompleteTextView movementName;
-    EditText movementAmount;
-    Spinner movementType;
+    LinearLayout typePicker;
     final String[] movementTypes={"COLLECTION","CASH","DEBT","EXPENSE"};
     final String[] movementLabels={"مقبوضات","نقد مسلّم","ديون","مخاريج"};
 
@@ -108,15 +106,14 @@ public class ShiftActivity extends Activity {
         save.setOnClickListener(v->{if(saveReadings()){showPage(1);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}});pages[0].addView(save,space());
         pages[1].addView(heading("الحركات"));
         movementsBox=panel(Color.WHITE);
-        LinearLayout form=panel(Color.WHITE);form.addView(text("＋  إضافة حركة",21,Util.NAVY,true),space());
-        form.addView(text("نوع الحركة",13,Util.NAVY,false));
-        movementType=new Spinner(this);movementType.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,movementLabels));
-        form.addView(movementType,new LinearLayout.LayoutParams(-1,dp(48)));
-        form.addView(text("الاسم",13,Util.NAVY,false));
-        movementName=new AutoCompleteTextView(this);styleInput(movementName);movementName.setHint("الاسم أو البيان");movementName.setThreshold(1);form.addView(movementName,space());refreshNames();
-        form.addView(text("المبلغ • ر.ي",13,Util.NAVY,false));movementAmount=new EditText(this);styleInput(movementAmount);movementAmount.setHint("0");movementAmount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);movementAmount.setTextDirection(View.TEXT_DIRECTION_LTR);form.addView(movementAmount,space());
-        Button add=action("حفظ الحركة  ▣",true);add.setOnClickListener(v->{String name=movementName.getText().toString().trim();double amount=Util.number(movementAmount.getText().toString());if(name.isEmpty()){movementName.setError("أدخل الاسم");return;}if(amount<=0||Double.isNaN(amount)||Double.isInfinite(amount)){movementAmount.setError("أدخل مبلغًا صحيحًا");return;}db.addMovement(shiftId,movementTypes[movementType.getSelectedItemPosition()],name,amount);movementName.setText("");movementAmount.setText("");refreshNames();loadMovements();refreshTotals();Toast.makeText(this,"حُفظت الحركة على الجهاز",Toast.LENGTH_SHORT).show();});
-        form.addView(add,space());pages[1].addView(form,space());
+        // أربع أيقونات ظاهرة بدل القائمة المنسدلة؛ كل واحدة تفتح نافذة إدخال سريعة.
+        LinearLayout picker=panel(Color.WHITE);
+        picker.addView(text("＋  إضافة حركة",21,Util.NAVY,true),space());
+        picker.addView(text("اختر نوع الحركة ثم سجّل الاسم والمبلغ",12,0xff777d84,false),space());
+        typePicker=column();
+        picker.addView(typePicker);
+        buildTypeTiles();
+        pages[1].addView(picker,space());
         pages[1].addView(text("الحركات المسجّلة",18,Util.NAVY,true),space());
 
         pages[1].addView(movementsBox,space());
@@ -544,7 +541,15 @@ public class ShiftActivity extends Activity {
             for(int i=0;i<group.getChildCount();i++)collectEditable(group.getChildAt(i),fields);
         }
     }
-    private void refreshNames(){ArrayList<String> names=new ArrayList<>();try(Cursor c=db.getReadableDatabase().rawQuery("SELECT DISTINCT name FROM remembered_names ORDER BY name",null)){while(c.moveToNext())names.add(c.getString(0));}movementName.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,names));}
+    /** الأسماء المحفوظة لنوع حركة، لاقتراحها في نافذة الإدخال. */
+    private ArrayList<String> rememberedNames(String type){
+        ArrayList<String> names=new ArrayList<>();
+        try(Cursor c=db.getReadableDatabase().rawQuery(
+                "SELECT DISTINCT name FROM remembered_names WHERE type=? ORDER BY name",new String[]{type})){
+            while(c.moveToNext())names.add(c.getString(0));
+        }
+        return names;
+    }
     private void loadReadings(){
         refreshShiftDate();
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
@@ -623,6 +628,205 @@ public class ShiftActivity extends Activity {
         Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة حالية أقل من السابقة",Toast.LENGTH_SHORT).show();
         loadReadings();refreshTotals();
         return ok;}
+    /** يعيد رسم البطاقات الأربع لتحديث مجاميعها. */
+    private void buildTypeTiles(){
+        if(typePicker==null)return;
+        typePicker.removeAllViews();
+        LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER);
+        top.addView(typeTile(0),tileCell());
+        top.addView(typeTile(1),tileCell());
+        typePicker.addView(top);
+        LinearLayout bottom=new LinearLayout(this);bottom.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams gap=new LinearLayout.LayoutParams(-1,-2);gap.setMargins(0,dp(10),0,0);
+        bottom.addView(typeTile(2),tileCell());
+        bottom.addView(typeTile(3),tileCell());
+        typePicker.addView(bottom,gap);
+    }
+
+    private LinearLayout.LayoutParams tileCell(){
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(108),1);
+        p.setMargins(dp(5),0,dp(5),0);
+        return p;
+    }
+
+    /** بطاقة نوع حركة: أيقونة ملوّنة واسم ومجموع النوع في هذه الوردية. */
+    private LinearLayout typeTile(final int index){
+        final String type=movementTypes[index];
+        int tint=typeColor(type);
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(6),dp(10),dp(6),dp(10));
+        box.setBackground(new android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(0x22000000),
+            Util.round(typeSoft(type),dp(16)),null));
+        box.setClickable(true);
+        FrameLayout disc=new FrameLayout(this);
+        disc.setBackground(Util.round(Color.WHITE,dp(19)));
+        ImageView art=new ImageView(this);
+        MoveIcon icon=new MoveIcon(index,tint);
+        icon.setBounds(0,0,dp(22),dp(22));
+        art.setImageDrawable(icon);
+        FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(22),dp(22));
+        ip.gravity=Gravity.CENTER;
+        disc.addView(art,ip);
+        box.addView(disc,new LinearLayout.LayoutParams(dp(38),dp(38)));
+        TextView name=text(movementLabels[index],14,tint,true);
+        name.setGravity(Gravity.CENTER);name.setPadding(0,dp(7),0,dp(2));
+        box.addView(name,new LinearLayout.LayoutParams(-1,-2));
+        TextView sum=text(Calc.money(db.total(shiftId,type)),12,tint,false);
+        sum.setGravity(Gravity.CENTER);sum.setTextDirection(View.TEXT_DIRECTION_LTR);
+        box.addView(sum,new LinearLayout.LayoutParams(-1,-2));
+        box.setOnClickListener(v->quickEntry(index));
+        return box;
+    }
+
+    private int typeColor(String type){
+        if("COLLECTION".equals(type))return Util.GREEN;
+        if("CASH".equals(type))return Util.NAVY;
+        if("DEBT".equals(type))return Util.RED;
+        return 0xffB86A00;
+    }
+
+    private int typeSoft(String type){
+        int c=typeColor(type);
+        return Color.argb(26,Color.red(c),Color.green(c),Color.blue(c));
+    }
+
+    /**
+     * نافذة إدخال تبقى مفتوحة: الاسم ← التالي ← المبلغ ← التالي فتُحفظ الحركة
+     * ويعود المؤشر للاسم لتسجيل حركة أخرى، ولا تُغلق إلا بزر إلغاء.
+     */
+    private void quickEntry(final int index){
+        final String type=movementTypes[index];
+        final String label=movementLabels[index];
+        final int tint=typeColor(type);
+
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22),dp(6),dp(22),0);
+
+        final TextView running=text("",13,tint,true);
+        running.setPadding(dp(12),dp(9),dp(12),dp(9));
+        running.setBackground(Util.round(typeSoft(type),dp(11)));
+        box.addView(running,space());
+
+        box.addView(text("الاسم أو البيان",12,0xff7c8186,false));
+        final AutoCompleteTextView name=new AutoCompleteTextView(this);
+        styleInput(name);
+        name.setHint("اكتب الاسم ثم التالي");
+        name.setThreshold(1);
+        name.setSingleLine(true);
+        name.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+        name.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,rememberedNames(type)));
+        box.addView(name,space());
+
+        box.addView(text("المبلغ • ر.ي",12,0xff7c8186,false));
+        final EditText amount=new EditText(this);
+        styleInput(amount);
+        amount.setHint("0");
+        amount.setSingleLine(true);
+        amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        amount.setTextDirection(View.TEXT_DIRECTION_LTR);
+        amount.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        box.addView(amount,space());
+
+        final TextView saved=text("",12,Util.GREEN,true);
+        saved.setPadding(0,dp(4),0,0);
+        box.addView(saved);
+
+        ScrollView form=new ScrollView(this);form.addView(box);
+        final AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle("إضافة "+label)
+            .setView(form)
+            .setPositiveButton("التالي",null)
+            .setNegativeButton("إلغاء",null)
+            .create();
+
+        final Runnable refreshRunning=()->running.setText(
+            "مجموع "+label+" في هذه الوردية: "+Calc.money(db.total(shiftId,type))+" ر.ي");
+        refreshRunning.run();
+
+        // خطوة واحدة: إن كان المؤشر على الاسم ينتقل للمبلغ، وإلا يحفظ ويعيد الكرّة.
+        final Runnable step=()->{
+            String value=name.getText().toString().trim();
+            if(value.isEmpty()){name.setError("أدخل الاسم");name.requestFocus();return;}
+            if(!amount.hasFocus()&&amount.getText().toString().trim().isEmpty()){
+                amount.requestFocus();return;
+            }
+            double money=Util.number(amount.getText().toString());
+            if(money<=0||Double.isNaN(money)||Double.isInfinite(money)){
+                amount.setError("أدخل مبلغًا صحيحًا");amount.requestFocus();return;
+            }
+            db.addMovement(shiftId,type,value,money);
+            loadMovements();refreshTotals();
+            saved.setText("✓ سُجّلت: "+value+"  •  "+Calc.money(money)+" ر.ي");
+            refreshRunning.run();
+            name.setText("");amount.setText("");
+            name.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,rememberedNames(type)));
+            name.requestFocus();
+        };
+
+        name.setOnEditorActionListener((v,actionId,event)->{amount.requestFocus();return true;});
+        amount.setOnEditorActionListener((v,actionId,event)->{step.run();return true;});
+        dialog.setOnShowListener(x->{
+            Button next=dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            next.setOnClickListener(v->step.run());
+            name.requestFocus();
+        });
+        dialog.setOnDismissListener(x->{loadMovements();refreshTotals();showPage(1);});
+        dialog.show();
+    }
+
+    /** أيقونات أنواع الحركات الأربعة. */
+    private class MoveIcon extends android.graphics.drawable.Drawable{
+        final int kind,tint;final android.graphics.Paint paint=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        MoveIcon(int kind,int tint){this.kind=kind;this.tint=tint;}
+        public void draw(android.graphics.Canvas c){
+            c.save();c.translate(getBounds().left,getBounds().top);
+            c.scale(getBounds().width()/24f,getBounds().height()/24f);
+            paint.setColor(tint);paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setStrokeWidth(1.9f);paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+            if(kind==0){
+                // مقبوضات: كف تستقبل عملة.
+                c.drawCircle(12,8,4.2f,paint);
+                c.drawLine(12,5.6f,12,10.4f,paint);
+                c.drawArc(4.5f,14,19.5f,22,200,140,false,paint);
+            }else if(kind==1){
+                // نقد مسلّم: ورقة نقدية وسهم للأعلى.
+                c.drawRoundRect(3,10.5f,21,19.5f,1.8f,1.8f,paint);
+                c.drawCircle(12,15,2.4f,paint);
+                c.drawLine(12,8.5f,12,2.8f,paint);
+                c.drawLine(9,5.6f,12,2.8f,paint);
+                c.drawLine(15,5.6f,12,2.8f,paint);
+            }else if(kind==2){
+                // ديون: دفتر حساب وقلم.
+                c.drawRoundRect(4,3,17,21,1.8f,1.8f,paint);
+                c.drawLine(7.5f,8,13.5f,8,paint);
+                c.drawLine(7.5f,12,13.5f,12,paint);
+                c.drawLine(7.5f,16,11,16,paint);
+                c.drawLine(19,6,21.5f,8.5f,paint);
+                c.drawLine(19,6,14.5f,10.5f,paint);
+                c.drawLine(21.5f,8.5f,17,13,paint);
+            }else{
+                // مخاريج: فاتورة بحافة مسنّنة.
+                android.graphics.Path r=new android.graphics.Path();
+                r.moveTo(5,2.5f);r.lineTo(19,2.5f);r.lineTo(19,21.5f);
+                r.lineTo(16.5f,19.6f);r.lineTo(14,21.5f);r.lineTo(11.5f,19.6f);
+                r.lineTo(9,21.5f);r.lineTo(6.5f,19.6f);r.lineTo(5,21.5f);r.close();
+                c.drawPath(r,paint);
+                c.drawLine(8.5f,8,15.5f,8,paint);
+                c.drawLine(8.5f,12,15.5f,12,paint);
+                c.drawLine(8.5f,15.6f,13,15.6f,paint);
+            }
+            c.restore();
+        }
+        public void setAlpha(int a){paint.setAlpha(a);}
+        public void setColorFilter(android.graphics.ColorFilter f){paint.setColorFilter(f);}
+        public int getOpacity(){return android.graphics.PixelFormat.TRANSLUCENT;}
+    }
+
     private void movementDialog(String type,String label){LinearLayout box=new LinearLayout(this);box.setPadding(30,10,30,0);box.setOrientation(LinearLayout.VERTICAL);EditText name=new EditText(this);name.setHint("الاسم أو البيان");EditText amount=new EditText(this);amount.setHint("المبلغ");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);box.addView(name);box.addView(amount);new AlertDialog.Builder(this).setTitle("إضافة "+label).setView(box).setPositiveButton("حفظ",(d,w)->{if(name.getText().toString().trim().isEmpty()||Util.number(amount.getText().toString())<=0){Toast.makeText(this,"أدخل الاسم والمبلغ",Toast.LENGTH_SHORT).show();return;}db.addMovement(shiftId,type,name.getText().toString(),Util.number(amount.getText().toString()));loadMovements();refreshTotals();}).setNegativeButton("إلغاء",null).show();}
     private void loadMovements(){
         movementsBox.removeAllViews();int count=0;
@@ -672,6 +876,7 @@ public class ShiftActivity extends Activity {
     }
     private void refreshTotals(){
         refreshMovementSummary();
+        buildTypeTiles();
         double[] values={visibleSales(),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
         double bal=Calc.balance(values[0],values[1],values[2],values[3],values[4]);String issue=db.validateShift(shiftId);
         if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
