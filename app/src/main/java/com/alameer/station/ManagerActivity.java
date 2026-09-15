@@ -30,9 +30,11 @@ public class ManagerActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("واجهة المدير", 19, Color.WHITE, true));
-        words.addView(text(Branding.stationName(db), 11, 0xffCFE2FA, false));
+        words.addView(text("واجهة المدير", 20, Color.WHITE, true));
+        words.addView(text(Branding.stationName(db), 14, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView lock = text("🔒", 18, 0xffCFE2FA, false);
+        header.addView(lock);
         shell.addView(header);
 
         LinearLayout content = new LinearLayout(this);
@@ -67,6 +69,10 @@ public class ManagerActivity extends Activity {
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0, dp(6), 0, 0);
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(shell);
@@ -177,25 +183,29 @@ public class ManagerActivity extends Activity {
                 paint.setColor(Util.ACCENT);
                 c.drawCircle(12, 15.5f, 3, paint);
             } else if (kind == 1) {
-                android.graphics.Path drop = new android.graphics.Path();
-                drop.moveTo(12, 2.5f);
-                drop.cubicTo(17.5f, 9, 20, 12.5f, 20, 15.5f);
-                drop.cubicTo(20, 19.6f, 16.4f, 22, 12, 22);
-                drop.cubicTo(7.6f, 22, 4, 19.6f, 4, 15.5f);
-                drop.cubicTo(4, 12.5f, 6.5f, 9, 12, 2.5f);
-                drop.close();
-                c.drawPath(drop, paint);
+                // خرطوم وقود: مقبض ومسدس وأنبوب منحنٍ.
+                c.drawRoundRect(5, 4, 14.5f, 21, 1.6f, 1.6f, paint);
+                c.drawLine(3, 21, 16.5f, 21, paint);
+                c.drawLine(14.5f, 9.5f, 17, 9.5f, paint);
+                c.drawLine(17, 9.5f, 17, 16.5f, paint);
+                android.graphics.Path hose = new android.graphics.Path();
+                hose.moveTo(17, 16.5f);
+                hose.cubicTo(17, 19.4f, 21, 19.4f, 21, 16.5f);
+                hose.lineTo(21, 6.5f);
+                hose.lineTo(18.4f, 3.6f);
+                c.drawPath(hose, paint);
                 paint.setStyle(android.graphics.Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
-                c.drawRect(8, 13.5f, 16, 15.2f, paint);
-                c.drawRect(11.1f, 10.4f, 12.9f, 18.3f, paint);
+                c.drawRoundRect(7, 6.5f, 12.5f, 11.5f, 0.8f, 0.8f, paint);
             } else {
-                c.drawRoundRect(2.5f, 5.5f, 21.5f, 15.5f, 1.8f, 1.8f, paint);
-                c.drawLine(6.5f, 19, 19, 19, paint);
-                c.drawLine(8.5f, 21.5f, 17, 21.5f, paint);
+                // ورقة نقدية: إطار وعملة في الوسط وحافتان.
+                c.drawRoundRect(2.5f, 6, 21.5f, 18, 1.8f, 1.8f, paint);
+                c.drawLine(5.6f, 6, 5.6f, 18, paint);
+                c.drawLine(18.4f, 6, 18.4f, 18, paint);
+                c.drawCircle(12, 12, 3.1f, paint);
                 paint.setStyle(android.graphics.Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
-                c.drawCircle(12, 10.5f, 2.6f, paint);
+                c.drawCircle(12, 12, 1.5f, paint);
             }
             c.restore();
         }

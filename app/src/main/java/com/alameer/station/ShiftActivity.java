@@ -98,6 +98,11 @@ public class ShiftActivity extends Activity {
         movementSummary.setVisibility(View.GONE);
         pinnedSummaries.addView(movementSummary);
         ScrollView scroll=new ScrollView(this);screenScroll=scroll;
+        // هامش علوي داخل التمرير حتى لا يلتصق المحتوى بالترويسة الثابتة.
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0,dp(10),0,0);
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(dp(14));
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
         for(int i=0;i<pages.length;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
