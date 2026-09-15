@@ -14,7 +14,7 @@ import java.util.Locale;
 /** واجهة المدير: حركة الصناديق وحركة المواد بعد تجاوز كلمة السر. */
 public class ManagerActivity extends Activity {
     private Db db;
-    private TextView cashTotal, stockTotal, debtTotal;
+    private TextView cashTotal, stockTotal, debtTotal, expenseTotal;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -46,21 +46,32 @@ public class ManagerActivity extends Activity {
         welcome.setPadding(0, dp(22), 0, dp(16));
         content.addView(welcome);
 
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
+        // شبكة 2×2 لتبقى البطاقات الأربع متساوية وواضحة.
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setGravity(Gravity.CENTER);
         LinearLayout cashTile = tile("حركة الصناديق", "وارد وصادر النقد", 0,
                 v -> startActivity(new Intent(this, CashboxActivity.class)));
         cashTotal = (TextView) cashTile.getTag();
-        row.addView(cashTile, cell());
+        topRow.addView(cashTile, cell());
         LinearLayout stockTile = tile("حركة المواد", "وارد وصادر اللترات", 1,
                 v -> startActivity(new Intent(this, MaterialActivity.class)));
         stockTotal = (TextView) stockTile.getTag();
-        row.addView(stockTile, cell());
+        topRow.addView(stockTile, cell());
+        content.addView(topRow);
+
+        LinearLayout bottomRow = new LinearLayout(this);
+        bottomRow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams rowGap = new LinearLayout.LayoutParams(-1, -2);
+        rowGap.setMargins(0, dp(12), 0, 0);
         LinearLayout debtTile = tile("حركة الديون", "ديون وسداد المدينين", 2,
                 v -> startActivity(new Intent(this, DebtActivity.class)));
         debtTotal = (TextView) debtTile.getTag();
-        row.addView(debtTile, cell());
-        content.addView(row);
+        bottomRow.addView(debtTile, cell());
+        LinearLayout expenseTile = tile("حركة المخاريج", "مصروفات المحطة", 3,
+                v -> startActivity(new Intent(this, ExpenseActivity.class)));
+        expenseTotal = (TextView) expenseTile.getTag();
+        bottomRow.addView(expenseTile, cell());
+        content.addView(bottomRow, rowGap);
 
         TextView hint = text("الأرقام تحت كل أيقونة محدّثة الآن", 12, 0xff8b9097, false);
         hint.setGravity(Gravity.CENTER);
@@ -90,11 +101,12 @@ public class ManagerActivity extends Activity {
         for (String material : Db.MATERIALS) stock += db.materialSummary(material)[3];
         stockTotal.setText(money(stock) + " لتر");
         debtTotal.setText(money(db.debtsTotal()) + " ر.ي");
+        expenseTotal.setText(money(db.expensesTotal()) + " ر.ي");
     }
 
     private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(184), 1);
-        p.setMargins(dp(4), 0, dp(4), 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(196), 1);
+        p.setMargins(dp(6), 0, dp(6), 0);
         return p;
     }
 
@@ -102,7 +114,7 @@ public class ManagerActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(6), dp(14), dp(6), dp(14));
+        box.setPadding(dp(8), dp(16), dp(8), dp(16));
         box.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
         box.setElevation(dp(3));
@@ -110,28 +122,28 @@ public class ManagerActivity extends Activity {
         box.setOnClickListener(action);
 
         FrameLayout disc = new FrameLayout(this);
-        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(26)));
+        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(30)));
         ImageView art = new ImageView(this);
         ManagerIcon drawable = new ManagerIcon(icon);
-        drawable.setBounds(0, 0, dp(29), dp(29));
+        drawable.setBounds(0, 0, dp(34), dp(34));
         art.setImageDrawable(drawable);
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(29), dp(29));
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(34), dp(34));
         ip.gravity = Gravity.CENTER;
         disc.addView(art, ip);
-        box.addView(disc, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        box.addView(disc, new LinearLayout.LayoutParams(dp(60), dp(60)));
 
-        TextView name = text(title, 14, Util.NAVY, true);
+        TextView name = text(title, 16, Util.NAVY, true);
         name.setMaxLines(2);
         name.setGravity(Gravity.CENTER);
         name.setPadding(0, dp(12), 0, dp(3));
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 10, 0xff7c8186, false);
+        TextView caption = text(note, 11, 0xff7c8186, false);
         caption.setMaxLines(2);
         caption.setGravity(Gravity.CENTER);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView total = text("", 13, Util.NAVY, true);
+        TextView total = text("", 14, Util.NAVY, true);
         total.setGravity(Gravity.CENTER);
         total.setTextDirection(View.TEXT_DIRECTION_LTR);
         total.setPadding(dp(10), dp(5), dp(10), dp(5));
@@ -206,6 +218,23 @@ public class ManagerActivity extends Activity {
                 paint.setStyle(android.graphics.Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawCircle(12, 12, 1.5f, paint);
+            } else {
+                android.graphics.Path receipt = new android.graphics.Path();
+                receipt.moveTo(4.5f, 2.5f);
+                receipt.lineTo(19.5f, 2.5f);
+                receipt.lineTo(19.5f, 21.5f);
+                receipt.lineTo(17, 19.6f);
+                receipt.lineTo(14.5f, 21.5f);
+                receipt.lineTo(12, 19.6f);
+                receipt.lineTo(9.5f, 21.5f);
+                receipt.lineTo(7, 19.6f);
+                receipt.lineTo(4.5f, 21.5f);
+                receipt.close();
+                c.drawPath(receipt, paint);
+                paint.setColor(Util.ACCENT);
+                c.drawLine(8, 8, 16, 8, paint);
+                c.drawLine(8, 12, 16, 12, paint);
+                c.drawLine(8, 15.6f, 13, 15.6f, paint);
             }
             c.restore();
         }

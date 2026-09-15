@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 9;
+    private static final int DB_VERSION = 10;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -21,6 +21,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(CASHBOXES_SQL);
         db.execSQL(CASHBOX_ENTRIES_SQL);
         db.execSQL(MATERIAL_ENTRIES_SQL);
+        db.execSQL(EXPENSE_ENTRIES_SQL);
         db.execSQL(DEBTORS_SQL);
         db.execSQL(DEBT_ENTRIES_SQL);
         db.execSQL("CREATE TABLE audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER,worker_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL)");
@@ -49,7 +50,11 @@ public class Db extends SQLiteOpenHelper {
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
+    static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0)";
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<10){
+            try{db.execSQL(EXPENSE_ENTRIES_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<9){
             try{db.execSQL("ALTER TABLE cashbox_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
             try{db.execSQL("ALTER TABLE debt_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
@@ -418,6 +423,55 @@ public class Db extends SQLiteOpenHelper {
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             boxId>0?new String[]{String.valueOf(boxId)}:null);
     }
+    // ==================== حركة المخاريج ====================
+    public long addExpense(String category,double amount,String note,String date,long boxId,long sourceShift){
+        String clean=category.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب باب المصروف");
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        long id;
+        try{
+            ContentValues v=new ContentValues();
+            v.put("category",clean);v.put("amount",amount);v.put("note",note.trim());
+            v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);v.put("box_id",boxId);
+            id=db.insertOrThrow("expense_entries",null,v);
+            // المصروف المدفوع من صندوق يخرج منه فعليًا.
+            if(boxId>0)addCashboxEntry(boxId,"OUT",amount,"مخاريج: "+clean+(note.trim().isEmpty()?"":" — "+note.trim()),date,sourceShift);
+            ContentValues n=new ContentValues();n.put("type","EXPENSE");n.put("name",clean);
+            db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        return id;
+    }
+    public boolean deleteExpense(long id){
+        return getWritableDatabase().delete("expense_entries","id=?",new String[]{String.valueOf(id)})==1;
+    }
+    /** category,total,count — أبواب المصروف مرتّبة بالأكبر. */
+    public Cursor expenseCategories(){
+        return getReadableDatabase().rawQuery(
+            "SELECT category,SUM(amount),COUNT(*) FROM expense_entries GROUP BY category ORDER BY SUM(amount) DESC",null);
+    }
+    /** id,category,amount,note,entry_date,source_shift */
+    public Cursor expenses(String category,int limit){
+        boolean all=category==null||category.isEmpty();
+        return getReadableDatabase().rawQuery(
+            "SELECT id,category,amount,note,entry_date,source_shift FROM expense_entries "+
+            (all?"":"WHERE category=? ")+"ORDER BY entry_date DESC,id DESC LIMIT "+Math.max(1,limit),
+            all?null:new String[]{category});
+    }
+    public double expensesTotal(){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(amount),0) FROM expense_entries",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+    /** إجمالي مصروف شهر بصيغة yyyy-MM. */
+    public double expensesInMonth(String month){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT COALESCE(SUM(amount),0) FROM expense_entries WHERE substr(entry_date,1,7)=?",new String[]{month})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
     // ==================== ربط الوردية بالصناديق والديون والمواد ====================
     /** الصندوق الافتراضي الذي يستقبل نقد الورديات، أو 0 إن لم يُختر. */
     public long defaultCashbox(){
@@ -431,8 +485,9 @@ public class Db extends SQLiteOpenHelper {
     public void setDefaultCashbox(long id){setSetting("default_cashbox",String.valueOf(id));}
     public boolean shiftPosted(long shiftId){
         try(Cursor c=getReadableDatabase().rawQuery(
-            "SELECT (SELECT COUNT(*) FROM cashbox_entries WHERE source_shift=?)+(SELECT COUNT(*) FROM debt_entries WHERE source_shift=?)",
-            new String[]{String.valueOf(shiftId),String.valueOf(shiftId)})){
+            "SELECT (SELECT COUNT(*) FROM cashbox_entries WHERE source_shift=?)+(SELECT COUNT(*) FROM debt_entries WHERE source_shift=?)"+
+            "+(SELECT COUNT(*) FROM expense_entries WHERE source_shift=?)",
+            new String[]{String.valueOf(shiftId),String.valueOf(shiftId),String.valueOf(shiftId)})){
             c.moveToFirst();return c.getInt(0)>0;
         }
     }
@@ -441,6 +496,7 @@ public class Db extends SQLiteOpenHelper {
         SQLiteDatabase db=getWritableDatabase();
         db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+        db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("material_entries","note LIKE ?",new String[]{"وردية #"+shiftId+"%"});
     }
     /**
@@ -473,6 +529,21 @@ public class Db extends SQLiteOpenHelper {
                     debtors++;debtTotal+=amount;
                 }
             }
+            int expenses=0;double expenseTotal=0;
+            try(Cursor c=db.rawQuery("SELECT name,SUM(amount) FROM movements WHERE shift_id=? AND type='EXPENSE' GROUP BY name",
+                    new String[]{String.valueOf(shiftId)})){
+                while(c.moveToNext()){
+                    String name=c.getString(0).trim();
+                    double amount=c.getDouble(1);
+                    if(name.isEmpty()||!(amount>0))continue;
+                    ContentValues v=new ContentValues();
+                    v.put("category",name);v.put("amount",amount);v.put("note","وردية #"+shiftId);
+                    v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",shiftId);v.put("box_id",0);
+                    db.insertOrThrow("expense_entries",null,v);
+                    expenses++;expenseTotal+=amount;
+                }
+            }
+            if(expenses>0)log.append("• سُجّل ").append(Calc.money(expenseTotal)).append(" ر.ي مخاريج\n");
             if(debtors>0)log.append("• قُيّد ").append(Calc.money(debtTotal)).append(" ر.ي على ").append(debtors).append(" مدين\n");
             int materials=0;
             try(Cursor c=db.rawQuery(
