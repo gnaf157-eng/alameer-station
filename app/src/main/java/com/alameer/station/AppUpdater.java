@@ -34,7 +34,12 @@ public class AppUpdater {
                     .setPositiveButton("تنزيل وتثبيت",(d,w)->download(manifest))
                     .setNegativeButton("لاحقًا",null).show());
                 else if(requested)ui(()->Toast.makeText(activity,"لديك أحدث نسخة",Toast.LENGTH_LONG).show());
-            }catch(Exception e){if(requested)message("تعذر فحص التحديث. تحقق من الإنترنت ثم حاول مجددًا.");}
+            }catch(Exception e){
+                final String detail=e.getMessage()==null?"":e.getMessage();
+                if(requested)message(detail.isEmpty()
+                    ?"تعذر فحص التحديث. تحقق من الإنترنت ثم حاول مجددًا."
+                    :detail+"\n\nالرابط:\n"+address);
+            }
         }).start();
     }
     private String readUrl(String address)throws Exception{
@@ -43,6 +48,10 @@ public class AppUpdater {
         c.setInstanceFollowRedirects(true);
         c.setRequestProperty("Accept","application/json");
         c.setRequestProperty("User-Agent","TabiqUpdater");
+        int status=c.getResponseCode();
+        if(status==404)throw new IOException("ملف التحديث غير متاح للعموم (404). اجعل المستودع public أو استضف المانيفست برابط مفتوح.");
+        if(status==401||status==403)throw new IOException("الوصول لملف التحديث مرفوض ("+status+"). الرابط يحتاج تسجيل دخول.");
+        if(status>=400)throw new IOException("الخادم ردّ بالرمز "+status+" عند فحص التحديث.");
         try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] b=new byte[4096];int n;
             while((n=in.read(b))!=-1){if(out.size()+n>65536)throw new IOException("Invalid manifest");out.write(b,0,n);}
