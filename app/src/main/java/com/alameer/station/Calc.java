@@ -63,4 +63,8 @@ public final class Calc {
         if ("APPROVED".equals(s)) return "مُغلقة";
         return s;
     }
+    /** تنسيق مبلغ للعرض داخل الرسائل. */
+    public static String money(double value){
+        return String.format(java.util.Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);
+    }
 }

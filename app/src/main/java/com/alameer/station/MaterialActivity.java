@@ -163,7 +163,7 @@ public class MaterialActivity extends Activity {
             });
             listBox.addView(card, space());
         }
-        listBox.addView(text("المباع يُحسب تلقائيًا من قراءات الورديات المُغلقة", 11, 0xff8b9097, false));
+        listBox.addView(text("المباع يُرحَّل تلقائيًا ضمن الصادر عند إغلاق كل وردية", 11, 0xff8b9097, false));
     }
 
     /** آخر الحركات مع الحذف بضغطة مطوّلة. */
@@ -194,7 +194,19 @@ public class MaterialActivity extends Activity {
                 TextView amount = text((in ? "+ " : "− ") + money(c.getDouble(3)) + " لتر", 16, in ? Util.GREEN : Util.RED, true);
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 row.addView(amount);
+                final boolean auto = c.getString(4).startsWith("وردية #");
+                if (auto) {
+                    TextView src = text("مُرحّلة تلقائيًا من وردية", 10, Util.ACCENT, false);
+                    src.setPadding(0, dp(4), 0, 0);
+                    words.addView(src);
+                }
                 row.setOnLongClickListener(v -> {
+                    if (auto) {
+                        new AlertDialog.Builder(this).setTitle("حركة مرتبطة بوردية")
+                                .setMessage("هذه الحركة رُحّلت تلقائيًا من وردية مُغلقة ولا تُحذف يدويًا، حتى لا تختلف الأرقام عن الأرشيف.")
+                                .setPositiveButton("حسنًا", null).show();
+                        return true;
+                    }
                     new AlertDialog.Builder(this).setTitle("حذف الحركة")
                             .setMessage("سيُحذف هذا السطر ويتغيّر رصيد المخزون.")
                             .setPositiveButton("حذف", (d, w) -> { db.deleteMaterialEntry(id); refresh(); })

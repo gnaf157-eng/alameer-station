@@ -188,6 +188,11 @@ public class CashboxActivity extends Activity {
                     if (!active) { Toast.makeText(this, "الصندوق موقوف. فعّله أولًا.", Toast.LENGTH_SHORT).show(); return; }
                     entryDialog(id, name);
                 });
+                if (id == db.defaultCashbox()) {
+                    TextView tag = text("★  صندوق الورديات — يستقبل النقد المسلّم تلقائيًا", 11, Util.ACCENT, true);
+                    tag.setPadding(0, dp(9), 0, 0);
+                    card.addView(tag);
+                }
                 card.setOnLongClickListener(v -> { boxOptions(id, name, opening); return true; });
                 listBox.addView(card, space());
             }
@@ -197,7 +202,10 @@ public class CashboxActivity extends Activity {
             empty.addView(text("لم تُضف صناديق بعد. أضف صندوقًا لتبدأ تسجيل الوارد والصادر.", 15, 0xff777d84, false));
             listBox.addView(empty, space());
         } else {
-            listBox.addView(text("اضغط مطوّلًا على الصندوق لتعديله أو إيقافه", 11, 0xff8b9097, false));
+            listBox.addView(text(db.defaultCashbox() == 0
+                    ? "⚠ لم تختر صندوق الورديات بعد. اضغط مطوّلًا على صندوق واختر «اجعله صندوق الورديات» ليستقبل النقد المسلّم تلقائيًا."
+                    : "اضغط مطوّلًا على الصندوق لتعديله أو إيقافه", 11,
+                    db.defaultCashbox() == 0 ? 0xffa8610a : 0xff8b9097, false));
         }
     }
 
@@ -244,7 +252,19 @@ public class CashboxActivity extends Activity {
                 TextView amount = text((in ? "+ " : "− ") + money(c.getDouble(2)), 17, in ? Util.GREEN : Util.RED, true);
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 row.addView(amount);
+                final boolean auto = c.getLong(6) > 0;
+                if (auto) {
+                    TextView src = text("مُرحّلة تلقائيًا من وردية", 10, Util.ACCENT, false);
+                    src.setPadding(0, dp(4), 0, 0);
+                    words.addView(src);
+                }
                 row.setOnLongClickListener(v -> {
+                    if (auto) {
+                        new AlertDialog.Builder(this).setTitle("حركة مرتبطة بوردية")
+                                .setMessage("هذه الحركة رُحّلت تلقائيًا من وردية مُغلقة ولا تُحذف يدويًا، حتى لا تختلف الأرقام عن الأرشيف.")
+                                .setPositiveButton("حسنًا", null).show();
+                        return true;
+                    }
                     new AlertDialog.Builder(this).setTitle("حذف الحركة")
                             .setMessage("سيُحذف هذا السطر ويتغيّر رصيد الصندوق.")
                             .setPositiveButton("حذف", (d, w) -> { db.deleteCashboxEntry(id); refresh(); })
@@ -308,13 +328,18 @@ public class CashboxActivity extends Activity {
     private void boxOptions(long id, String name, double opening) {
         int entries = db.cashboxEntryCount(id);
         new AlertDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{"تعديل الاسم والرصيد الافتتاحي", "عرض حركات هذا الصندوق", "كل الحركات", "إيقاف الصندوق", "تفعيل الصندوق", "حذف الصندوق"},
+                .setItems(new String[]{"تعديل الاسم والرصيد الافتتاحي", "اجعله صندوق الورديات", "عرض حركات هذا الصندوق", "كل الحركات", "إيقاف الصندوق", "تفعيل الصندوق", "حذف الصندوق"},
                         (d, which) -> {
                             if (which == 0) { boxDialog(id, name, opening); }
-                            else if (which == 1) { filterBox = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
-                            else if (which == 2) { filterBox = 0; refreshEntries(); }
-                            else if (which == 3) { db.setCashboxActive(id, false); refresh(); }
-                            else if (which == 4) { db.setCashboxActive(id, true); refresh(); }
+                            else if (which == 1) {
+                                db.setDefaultCashbox(db.defaultCashbox() == id ? 0 : id);
+                                Toast.makeText(this, db.defaultCashbox() == id ? "سيستقبل " + name + " النقد المسلّم من الورديات" : "أُلغي ربط الورديات بهذا الصندوق", Toast.LENGTH_LONG).show();
+                                refresh();
+                            }
+                            else if (which == 2) { filterBox = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
+                            else if (which == 3) { filterBox = 0; refreshEntries(); }
+                            else if (which == 4) { db.setCashboxActive(id, false); refresh(); }
+                            else if (which == 5) { db.setCashboxActive(id, true); refresh(); }
                             else {
                                 if (entries > 0) {
                                     new AlertDialog.Builder(this).setTitle("لا يمكن الحذف")

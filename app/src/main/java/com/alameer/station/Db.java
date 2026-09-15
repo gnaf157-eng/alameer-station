@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 8;
+    private static final int DB_VERSION = 9;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -45,11 +45,16 @@ public class Db extends SQLiteOpenHelper {
     public static String hash(String pin){ return Calc.hash(pin); }
 
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
-    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
+    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
-    static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
+    static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<9){
+            try{db.execSQL("ALTER TABLE cashbox_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
+            try{db.execSQL("ALTER TABLE debt_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
+            try{db.execSQL(MATERIAL_ENTRIES_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<8){
             try{db.execSQL(DEBTORS_SQL);db.execSQL(DEBT_ENTRIES_SQL);}catch(Exception ignored){}
         }
@@ -390,11 +395,14 @@ public class Db extends SQLiteOpenHelper {
         }
     }
     public long addCashboxEntry(long boxId,String direction,double amount,String note,String date){
+        return addCashboxEntry(boxId,direction,amount,note,date,0);
+    }
+    public long addCashboxEntry(long boxId,String direction,double amount,String note,String date,long sourceShift){
         if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         ContentValues v=new ContentValues();
         v.put("box_id",boxId);v.put("direction",direction);v.put("amount",amount);
-        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
         return getWritableDatabase().insertOrThrow("cashbox_entries",null,v);
     }
     public boolean deleteCashboxEntry(long id){
@@ -404,9 +412,102 @@ public class Db extends SQLiteOpenHelper {
     public Cursor cashboxEntries(long boxId,int limit){
         String where=boxId>0?"WHERE e.box_id=? ":"";
         return getReadableDatabase().rawQuery(
-            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,b.name FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
+            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,b.name,e.source_shift FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             boxId>0?new String[]{String.valueOf(boxId)}:null);
+    }
+    // ==================== ربط الوردية بالصناديق والديون والمواد ====================
+    /** الصندوق الافتراضي الذي يستقبل نقد الورديات، أو 0 إن لم يُختر. */
+    public long defaultCashbox(){
+        long id=0;
+        try{id=Long.parseLong(setting("default_cashbox","0"));}catch(NumberFormatException ignored){}
+        if(id<=0)return 0;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM cashboxes WHERE id=? AND active=1",new String[]{String.valueOf(id)})){
+            c.moveToFirst();return c.getInt(0)==1?id:0;
+        }
+    }
+    public void setDefaultCashbox(long id){setSetting("default_cashbox",String.valueOf(id));}
+    public boolean shiftPosted(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT (SELECT COUNT(*) FROM cashbox_entries WHERE source_shift=?)+(SELECT COUNT(*) FROM debt_entries WHERE source_shift=?)",
+            new String[]{String.valueOf(shiftId),String.valueOf(shiftId)})){
+            c.moveToFirst();return c.getInt(0)>0;
+        }
+    }
+    /** يلغي ترحيل وردية (عند حذفها أو إعادة ترحيلها). */
+    public void unpostShift(long shiftId){
+        SQLiteDatabase db=getWritableDatabase();
+        db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+        db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+        db.delete("material_entries","note LIKE ?",new String[]{"وردية #"+shiftId+"%"});
+    }
+    /**
+     * يرحّل وردية مُغلقة إلى بقية السجلات في معاملة واحدة:
+     * النقد المسلّم إلى الصندوق، وديون الوردية على المدينين بأسمائهم،
+     * واللترات المباعة تُخصم من المخزون.
+     * يعيد سطر ملخّص لما جرى.
+     */
+    public String postShift(long shiftId,long cashboxId){
+        if(shiftPosted(shiftId))return "";
+        SQLiteDatabase db=getWritableDatabase();
+        String date=shiftDate(shiftId);
+        StringBuilder log=new StringBuilder();
+        db.beginTransaction();
+        try{
+            double cash=total(shiftId,"CASH");
+            if(cashboxId>0&&cash>0){
+                addCashboxEntry(cashboxId,"IN",cash,"نقد مسلّم من وردية #"+shiftId,date,shiftId);
+                log.append("• دخل الصندوق ").append(Calc.money(cash)).append(" ر.ي\n");
+            }
+            int debtors=0;double debtTotal=0;
+            try(Cursor c=db.rawQuery("SELECT name,SUM(amount) FROM movements WHERE shift_id=? AND type='DEBT' GROUP BY name",
+                    new String[]{String.valueOf(shiftId)})){
+                while(c.moveToNext()){
+                    String name=c.getString(0).trim();
+                    double amount=c.getDouble(1);
+                    if(name.isEmpty()||!(amount>0))continue;
+                    long debtorId=findOrCreateDebtor(db,name);
+                    addDebtEntry(debtorId,"DEBT",amount,"دين من وردية #"+shiftId,date,shiftId);
+                    debtors++;debtTotal+=amount;
+                }
+            }
+            if(debtors>0)log.append("• قُيّد ").append(Calc.money(debtTotal)).append(" ر.ي على ").append(debtors).append(" مدين\n");
+            int materials=0;
+            try(Cursor c=db.rawQuery(
+                "SELECT TRIM(p.fuel),SUM(r.current-r.previous) FROM readings r JOIN pumps p ON p.id=r.pump_id "+
+                "WHERE r.shift_id=? AND r.current IS NOT NULL AND r.current>=r.previous GROUP BY TRIM(p.fuel)",
+                new String[]{String.valueOf(shiftId)})){
+                while(c.moveToNext()){
+                    String fuel=normalizeFuel(c.getString(0));
+                    double litres=c.getDouble(1);
+                    if(!(litres>0))continue;
+                    ContentValues v=new ContentValues();
+                    v.put("material",fuel);v.put("direction","OUT");v.put("litres",litres);
+                    v.put("note","وردية #"+shiftId+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
+                    db.insertOrThrow("material_entries",null,v);
+                    materials++;
+                }
+            }
+            if(materials>0)log.append("• خُصمت لترات المبيعات من المخزون\n");
+            audit(db,shiftId,0,"POST_SHIFT","ترحيل الوردية إلى الصناديق والديون والمواد");
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        return log.toString().trim();
+    }
+    static String normalizeFuel(String fuel){
+        String f=fuel==null?"":fuel.trim();
+        if(f.equals("البترول")||f.equals("بنزين")||f.equals("البنزين"))return "بترول";
+        if(f.equals("الديزل"))return "ديزل";
+        if(f.equals("الغاز"))return "غاز";
+        return f;
+    }
+    private long findOrCreateDebtor(SQLiteDatabase db,String name){
+        try(Cursor c=db.rawQuery("SELECT id FROM debtors WHERE name=?",new String[]{name})){
+            if(c.moveToFirst())return c.getLong(0);
+        }
+        ContentValues v=new ContentValues();
+        v.put("name",name);v.put("phone","");v.put("opening",0);v.put("created_at",Util.now());
+        return db.insertOrThrow("debtors",null,v);
     }
     // ==================== حركة الديون ====================
     public long addDebtor(String name,String phone,double opening){
@@ -465,11 +566,14 @@ public class Db extends SQLiteOpenHelper {
         return total;
     }
     public long addDebtEntry(long debtorId,String direction,double amount,String note,String date){
+        return addDebtEntry(debtorId,direction,amount,note,date,0);
+    }
+    public long addDebtEntry(long debtorId,String direction,double amount,String note,String date,long sourceShift){
         if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         ContentValues v=new ContentValues();
         v.put("debtor_id",debtorId);v.put("direction",direction);v.put("amount",amount);
-        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
         return getWritableDatabase().insertOrThrow("debt_entries",null,v);
     }
     public boolean deleteDebtEntry(long id){
@@ -479,7 +583,7 @@ public class Db extends SQLiteOpenHelper {
     public Cursor debtEntries(long debtorId,int limit){
         String where=debtorId>0?"WHERE e.debtor_id=? ":"";
         return getReadableDatabase().rawQuery(
-            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,d.name FROM debt_entries e JOIN debtors d ON d.id=e.debtor_id "+
+            "SELECT e.id,e.direction,e.amount,e.note,e.entry_date,d.name,e.source_shift FROM debt_entries e JOIN debtors d ON d.id=e.debtor_id "+
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             debtorId>0?new String[]{String.valueOf(debtorId)}:null);
     }
@@ -505,8 +609,17 @@ public class Db extends SQLiteOpenHelper {
             new String[]{material})){
             if(c.moveToFirst()){in=c.getDouble(0);out=c.getDouble(1);}
         }
-        double sold=soldLitres(material);
-        return new double[]{in,out,sold,in-out-sold};
+        // المبيعات تدخل كحركات صادرة عند ترحيل الوردية، فلا تُخصم مرتين.
+        double sold=postedSales(material);
+        return new double[]{in,out,sold,in-out};
+    }
+    /** اللترات المرحّلة من الورديات ضمن الصادر. */
+    public double postedSales(String material){
+        try(Cursor c=getReadableDatabase().rawQuery(
+            "SELECT COALESCE(SUM(litres),0) FROM material_entries WHERE material=? AND direction='OUT' AND note LIKE 'وردية #%'",
+            new String[]{material})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
     }
     /** اللترات المباعة فعليًا من الورديات المغلقة لهذه المادة. */
     public double soldLitres(String material){

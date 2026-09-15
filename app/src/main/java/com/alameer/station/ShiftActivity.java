@@ -882,9 +882,11 @@ public class ShiftActivity extends Activity {
         final boolean historical=db.isHistorical(closed);
         db.submit(closed,workerId,reason);
         db.approve(closed);
+        String posted=db.postShift(closed,db.defaultCashbox());
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
         String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
+        if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
         AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
         if(reason.isEmpty()){
             done.setMessage(base+"\nتستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")

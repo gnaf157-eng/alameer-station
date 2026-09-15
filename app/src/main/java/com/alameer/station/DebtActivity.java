@@ -214,7 +214,19 @@ public class DebtActivity extends Activity {
                 TextView amount = text((isDebt ? "+ " : "− ") + money(c.getDouble(2)), 17, isDebt ? Util.RED : Util.GREEN, true);
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 row.addView(amount);
+                final boolean auto = c.getLong(6) > 0;
+                if (auto) {
+                    TextView src = text("مُرحّلة تلقائيًا من وردية", 10, Util.ACCENT, false);
+                    src.setPadding(0, dp(4), 0, 0);
+                    words.addView(src);
+                }
                 row.setOnLongClickListener(v -> {
+                    if (auto) {
+                        new AlertDialog.Builder(this).setTitle("حركة مرتبطة بوردية")
+                                .setMessage("هذه الحركة رُحّلت تلقائيًا من وردية مُغلقة ولا تُحذف يدويًا، حتى لا تختلف الأرقام عن الأرشيف.")
+                                .setPositiveButton("حسنًا", null).show();
+                        return true;
+                    }
                     new AlertDialog.Builder(this).setTitle("حذف الحركة")
                             .setMessage("سيُحذف هذا السطر ويتغيّر رصيد المدين.")
                             .setPositiveButton("حذف", (d, w) -> { db.deleteDebtEntry(id); refresh(); })
