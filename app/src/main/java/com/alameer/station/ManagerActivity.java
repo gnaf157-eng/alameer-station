@@ -171,7 +171,7 @@ public class ManagerActivity extends Activity {
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 
-    /** صندوق نقدي وقطرة وقود. */
+    /** صندوق نقدي، خرطوم وقود، ورقة نقدية، فاتورة مخاريج. */
     private static class ManagerIcon extends android.graphics.drawable.Drawable {
         final int kind;
         final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
@@ -209,7 +209,7 @@ public class ManagerActivity extends Activity {
                 paint.setStyle(android.graphics.Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawRoundRect(7, 6.5f, 12.5f, 11.5f, 0.8f, 0.8f, paint);
-            } else {
+            } else if (kind == 2) {
                 // ورقة نقدية: إطار وعملة في الوسط وحافتان.
                 c.drawRoundRect(2.5f, 6, 21.5f, 18, 1.8f, 1.8f, paint);
                 c.drawLine(5.6f, 6, 5.6f, 18, paint);
@@ -219,6 +219,7 @@ public class ManagerActivity extends Activity {
                 paint.setColor(Util.ACCENT);
                 c.drawCircle(12, 12, 1.5f, paint);
             } else {
+                // فاتورة مخاريج: ورقة بحافة مسنّنة وسطور.
                 android.graphics.Path receipt = new android.graphics.Path();
                 receipt.moveTo(4.5f, 2.5f);
                 receipt.lineTo(19.5f, 2.5f);
