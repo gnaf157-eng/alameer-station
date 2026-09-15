@@ -113,7 +113,7 @@ public class ShiftActivity extends Activity {
         fuelLitresBox=panel(Color.WHITE);pinnedSummaries.addView(fuelLitresBox);
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
         Button save=action("حفظ القراءات ومتابعة الوردية",true);
-        save.setOnClickListener(v->{if(saveReadings())showPage(2);});pages[0].addView(save,space());
+        save.setOnClickListener(v->{if(saveReadings()){showPage(1);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}});pages[0].addView(save,space());
         pages[1].addView(heading("الحركات"));
         movementsBox=panel(Color.WHITE);
         LinearLayout form=panel(Color.WHITE);form.addView(text("＋  إضافة حركة",21,Util.NAVY,true),space());
@@ -789,7 +789,7 @@ public class ShiftActivity extends Activity {
             return false;
         }
         double bal=db.balance(id);
-        if(Math.abs(bal)>=0.01){
+        if(!Calc.matched(bal)){
             new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير")
                 .setMessage("الوردية غير مطابقة. الباقي "+money(bal)+" ريال.\nيجب أن يكون الباقي صفرًا قبل حفظ أو مشاركة PDF أو Excel.")
                 .setPositiveButton("حسنًا",null).show();
@@ -798,6 +798,7 @@ public class ShiftActivity extends Activity {
         return true;
     }
     private void chooseReport(long id){
+        if(id==shiftId&&!saveReadings())return;
         if(!reportAllowed(id))return;
         new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
             .setItems(new String[]{"PDF","Excel (.xlsx)"},(d,which)->{
@@ -806,6 +807,7 @@ public class ShiftActivity extends Activity {
             }).show();
     }
     private void shareExcel(long id){
+        if(!reportAllowed(id))return;
         Toast.makeText(this,"جارٍ تجهيز ملف Excel",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             try{
@@ -833,6 +835,7 @@ public class ShiftActivity extends Activity {
         catch(Exception e){Toast.makeText(this,"تعذر إنشاء ملف PDF",Toast.LENGTH_LONG).show();}
     }
     private void sharePdfOrThrow(long id)throws Exception{
+        if(!reportAllowed(id))return;
         java.io.File file=new PdfReport(this,db).build(id);
         android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".files",file);
         Intent intent=new Intent(Intent.ACTION_SEND);

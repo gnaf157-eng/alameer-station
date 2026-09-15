@@ -19,6 +19,8 @@ final class ReportTable {
     }
     private static String sum(String col,int start,int end){return end<start?"0":"SUM("+col+start+":"+col+end+")";}
     ReportTable(Db db,long id){
+        String issue=db.validateShift(id);
+        if(!issue.isEmpty())throw new IllegalStateException(issue);
         String worker="",opened="",closed="",state="",reason="",note="";
         try(Cursor c=db.shiftHeader(id)){
             if(!c.moveToFirst())throw new IllegalArgumentException("الوردية غير موجودة");
@@ -80,6 +82,8 @@ final class ReportTable {
                 totals[col]+=c.getDouble(2);movements.add(values);
             }
         }
+        if(!Calc.matched(Calc.balance(sales,totals[1],totals[3],totals[2],totals[0])))
+            throw new IllegalStateException("لا يمكن مشاركة التقرير: يجب أن يكون باقي الوردية صفرًا.");
         Collections.sort(movements,(a,b)->Integer.compare(movementOrder(column(a)),movementOrder(column(b))));
         first=rows.size()+1;
         for(Object[] movement:movements)add(false,movement);

@@ -35,6 +35,9 @@ public class ArchiveActivity extends Activity {
             int rows=0;
             try(Cursor c=db.exportShifts(workerId,admin)){
                 while(c.moveToNext()){
+                    if(!Calc.matched(c.getDouble(10))||!db.validateShift(c.getLong(0)).isEmpty()){
+                        Toast.makeText(this,"لا يمكن تصدير الأرشيف: توجد وردية غير مكتملة أو غير مطابقة.",Toast.LENGTH_LONG).show();return;
+                    }
                     rows++;
                     sb.append(cell(String.valueOf(c.getLong(0)))).append(',').append(cell(c.getString(1))).append(',')
                       .append(cell(c.getString(2))).append(',').append(cell(c.getString(3))).append(',')
@@ -51,6 +54,9 @@ public class ArchiveActivity extends Activity {
         }catch(Exception e){Toast.makeText(this,"تعذر تصدير الأرشيف",Toast.LENGTH_LONG).show();}
     }
     private void exportPdf(long shiftId){
+        if(!Calc.matched(db.balance(shiftId))||!db.validateShift(shiftId).isEmpty()){
+            new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير").setMessage("أكمل الوردية واجعل الباقي صفرًا قبل مشاركة التقرير.").setPositiveButton("حسنًا",null).show();return;
+        }
         try{
             File file=new PdfReport(this,db).build(shiftId);
             share(file,"application/pdf","تقرير وردية #"+shiftId,"مشاركة تقرير الوردية");
