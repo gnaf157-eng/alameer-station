@@ -592,6 +592,28 @@ public class Db extends SQLiteOpenHelper {
         }finally{db.endTransaction();}
         return log.toString().trim();
     }
+    // ==================== الرقابة المحاسبية ====================
+
+    /**
+     * يبني قيود القيد المزدوج من كل وردية مُغلقة.
+     * الدائن = المبيعات + المقبوضات، والمدين = النقد + الديون + المخاريج + الباقي.
+     */
+    public java.util.List<Ledger.Row> ledgerRows(){
+        java.util.List<Ledger.Row> rows=Ledger.newList();
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),"+
+                "s.sales,s.collections,s.cash_delivered,s.debts,s.expenses,s.balance "+
+                "FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.status<>'OPEN' "+
+                "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null)){
+            while(c.moveToNext()){
+                double debit=Ledger.debit(c.getDouble(5),c.getDouble(6),c.getDouble(7),c.getDouble(8));
+                double credit=Ledger.credit(c.getDouble(3),c.getDouble(4));
+                rows.add(new Ledger.Row(c.getLong(0),c.getString(1),c.getString(2),debit,credit));
+            }
+        }
+        return rows;
+    }
+
     static String normalizeFuel(String fuel){
         String f=fuel==null?"":fuel.trim();
         if(f.equals("البترول")||f.equals("بنزين")||f.equals("البنزين"))return "بترول";

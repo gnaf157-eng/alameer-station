@@ -63,6 +63,7 @@ public class ControlPanelActivity extends Activity {
     private void build() {
         content.removeAllViews();
         int delay = 0;
+        delay = add(auditBoard(), delay);
         delay = add(statusRow(), delay);
         delay = add(stockSection(), delay);
         delay = add(cashSection(), delay);
@@ -79,6 +80,117 @@ public class ControlPanelActivity extends Activity {
                 .setStartDelay(delay).setDuration(320)
                 .setInterpolator(new DecelerateInterpolator()).start();
         return delay + 70;
+    }
+
+    // ==================== لوحة الرقابة المحاسبية ====================
+
+    /**
+     * أعلى الشاشة: إجمالي المدين والدائن والفرق بينهما وحالة النظام.
+     * الضغط على الفرق يفتح الحركات المسبّبة له.
+     */
+    private View auditBoard() {
+        java.util.List<Ledger.Row> rows = db.ledgerRows();
+        double debit = Ledger.totalDebit(rows);
+        double credit = Ledger.totalCredit(rows);
+        double gap = Ledger.gap(rows);
+        boolean ok = Ledger.balanced(gap);
+        int tint = ok ? Util.GREEN : Util.RED;
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(15), dp(16), dp(15));
+        box.setBackground(Util.round(Util.NAVY, dp(18)));
+        box.setElevation(dp(3));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.addView(text("الرقابة المحاسبية", 15, Color.WHITE, true),
+                new LinearLayout.LayoutParams(0, -2, 1));
+        TextView state = text(Ledger.state(gap), 12, Color.WHITE, true);
+        state.setPadding(dp(12), dp(5), dp(12), dp(5));
+        state.setBackground(Util.round(tint, dp(10)));
+        head.addView(state);
+        box.addView(head);
+
+        LinearLayout sums = new LinearLayout(this);
+        sums.setPadding(0, dp(14), 0, 0);
+        sums.addView(sideCell("إجمالي المدين", debit), sideParams());
+        sums.addView(sideCell("إجمالي الدائن", credit), sideParams());
+        box.addView(sums);
+
+        // الفرق: بطاقة قابلة للضغط تكشف الحركات المسبّبة.
+        LinearLayout diff = new LinearLayout(this);
+        diff.setOrientation(LinearLayout.VERTICAL);
+        diff.setPadding(dp(13), dp(11), dp(13), dp(11));
+        diff.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(ok ? 0x1A12805C : 0x33B42335, dp(13)), null));
+        diff.setClickable(true);
+        diff.setOnClickListener(v -> showOffenders(rows, gap));
+
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.addView(text("الفرق", 12, 0xffCFE2FA, false), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView value = text(money(Math.abs(gap)) + " ر.ي", 20, ok ? Color.WHITE : 0xffFFB3BC, true);
+        value.setTextDirection(View.TEXT_DIRECTION_LTR);
+        line.addView(value);
+        diff.addView(line);
+
+        TextView why = text(Ledger.explain(gap) + "  •  اضغط لعرض الحركات", 11, 0xffCFE2FA, false);
+        why.setPadding(0, dp(4), 0, 0);
+        diff.addView(why);
+
+        LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(-1, -2);
+        dp2.setMargins(0, dp(12), 0, 0);
+        box.addView(diff, dp2);
+        return box;
+    }
+
+    private LinearLayout.LayoutParams sideParams() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        return p;
+    }
+
+    private View sideCell(String title, double amount) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setPadding(dp(12), dp(10), dp(12), dp(10));
+        cell.setBackground(Util.round(0x22FFFFFF, dp(13)));
+        cell.addView(text(title, 11, 0xffCFE2FA, false));
+        TextView v = text(money(amount), 17, Color.WHITE, true);
+        v.setTextDirection(View.TEXT_DIRECTION_LTR);
+        v.setPadding(0, dp(3), 0, 0);
+        cell.addView(v);
+        return cell;
+    }
+
+    /** الحركات التي سبّبت الفرق، مرتّبة بالأكبر أثرًا. */
+    private void showOffenders(java.util.List<Ledger.Row> rows, double gap) {
+        java.util.List<Ledger.Row> bad = Ledger.offenders(rows);
+        StringBuilder sb = new StringBuilder();
+        if (Ledger.balanced(gap) && bad.isEmpty()) {
+            sb.append("النظام متوازن تمامًا.\nمجموع المدين يساوي مجموع الدائن في كل الورديات المُغلقة.");
+        } else {
+            sb.append(Ledger.explain(gap)).append("\n\nالحركات المسبّبة للفرق:\n");
+            int shown = 0;
+            for (Ledger.Row r : bad) {
+                if (shown++ == 20) { sb.append("\n… وحركات أخرى"); break; }
+                double g = r.gap();
+                sb.append("\n• وردية #").append(r.shiftId).append(" — ").append(r.label)
+                  .append("\n   ").append(r.date)
+                  .append("\n   مدين ").append(money(r.debit))
+                  .append(" • دائن ").append(money(r.credit))
+                  .append(" • فرق ").append(g > 0 ? "+" : "-").append(money(Math.abs(g)))
+                  .append(" ر.ي\n");
+            }
+            if (bad.isEmpty()) sb.append("\nلا وردية مفردة غير متوازنة؛ الفرق ناتج عن أرصدة افتتاحية أو حركات خارج الورديات.");
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تفصيل الفرق")
+                .setMessage(sb.toString())
+                .setPositiveButton("حسنًا", null)
+                .show();
     }
 
     // ==================== صف الحالة العلوي ====================
