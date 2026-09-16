@@ -256,11 +256,6 @@ public class ShiftActivity extends Activity {
         buildTankSettings();
         buildThresholdSettings();
 
-        Button startShift=action("ابدأ المطابقة  ➤",true);
-        // الانتقال المتعمّد إلى الوردية يُلغي وضع «الإعدادات وحدها».
-        startShift.setOnClickListener(v->{settingsOnly=false;db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
-        pages[4].addView(startShift,space());
-
         Button update=action("فحص تحديث التطبيق",false);
         update.setOnClickListener(v->new AppUpdater(this).check(true));
         pages[4].addView(update,space());
@@ -627,6 +622,8 @@ public class ShiftActivity extends Activity {
         }
     }
     @Override public void onBackPressed(){
+        // مغادرة الإعدادات تُنزل الأسعار والطرمبات على الوردية المفتوحة.
+        if(page==4){db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();}
         if(page==4&&!settingsOnly){
             showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
