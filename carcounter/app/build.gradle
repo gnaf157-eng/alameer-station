@@ -23,18 +23,29 @@ android {
     }
     // منع ضغط ملف النموذج داخل الـ APK
     androidResources { noCompress 'tflite' }
+    packaging { resources { excludes += ['META-INF/LICENSE*', 'META-INF/NOTICE*'] } }
+    aaptOptions { noCompress 'tflite' }
 }
 
 // تنزيل نموذج EfficientDet-Lite0 (Int8, ~4.5MB) مرة واحدة إلى مجلد assets
+// ملف TFLite صالح يبدأ بالبايتات "TFL3" عند الإزاحة 4
+def isValidModel(File f) {
+    if (!f.exists() || f.length() < 1000000) return false
+    byte[] h = new byte[8]
+    f.withInputStream { it.read(h) }
+    return new String(h, 4, 4, 'US-ASCII') == 'TFL3'
+}
 def modelFile = file('src/main/assets/efficientdet_lite0.tflite')
 def modelUrl = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite'
 tasks.register('downloadModel') {
     outputs.file(modelFile)
-    onlyIf { !modelFile.exists() || modelFile.length() < 1000000 }
+    onlyIf { !isValidModel(modelFile) }
     doLast {
         modelFile.parentFile.mkdirs()
         println "Downloading TFLite model -> ${modelFile}"
         new URL(modelUrl).withInputStream { i -> modelFile.withOutputStream { o -> o << i } }
+        if (!isValidModel(modelFile)) throw new GradleException("Downloaded model is invalid: ${modelFile}")
+        println "Model OK: ${modelFile.length()} bytes"
     }
 }
 tasks.configureEach { t -> if (t.name == 'preBuild') t.dependsOn('downloadModel') }

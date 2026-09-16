@@ -100,8 +100,11 @@ public class MainActivity extends AppCompatActivity implements VehicleTracker.Li
 
         try {
             detector = new VehicleDetector(this, SCORE_THRESHOLD);
-        } catch (Exception e) {
-            Toast.makeText(this, R.string.model_error, Toast.LENGTH_LONG).show();
+        } catch (Throwable e) {
+            android.util.Log.e("CarCounter", "model load failed", e);
+            String msg = getString(R.string.model_error) + "\n" + e.getClass().getSimpleName() + ": " + e.getMessage();
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+            statusText.setText(msg);
             toggleButton.setEnabled(false);
         }
 
