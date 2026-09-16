@@ -19,9 +19,10 @@ public class ControlPanelActivity extends Activity {
     private Db db;
     private LinearLayout content;
 
-    private static final double LOW_CASH = 50000;
-    private static final double BIG_DEBT = 100000;
-    private static final int STALE_DAYS = 21;
+    // الحدود تُقرأ من الإعدادات، والثوابت هنا قيم احتياطية فقط.
+    private double LOW_CASH = 50000;
+    private int STALE_DAYS = 21;
+    private int LOW_STOCK = 25;
     private static final int AMBER = 0xffB86A00;
 
     private boolean debtsOpen = false;
@@ -58,7 +59,13 @@ public class ControlPanelActivity extends Activity {
         setContentView(shell);
     }
 
-    @Override protected void onResume() { super.onResume(); build(); }
+    @Override protected void onResume() {
+        super.onResume();
+        LOW_CASH = db.lowCash();
+        STALE_DAYS = db.staleDays();
+        LOW_STOCK = db.lowStockPercent();
+        build();
+    }
 
     private void build() {
         content.removeAllViews();
@@ -494,7 +501,7 @@ public class ControlPanelActivity extends Activity {
         int badMaterials = 0;
         for (String material : Db.MATERIALS) {
             double left = db.materialSummary(material)[3];
-            if (left / capacity(material) < 0.25) badMaterials++;
+            if (left * 100 / capacity(material) < LOW_STOCK) badMaterials++;
         }
         row.addView(statusCard("المواد", badMaterials == 0 ? "كامل" : badMaterials + " مادة",
                 badMaterials == 0 ? "سليم" : "تحتاج تعبئة", badMaterials == 0), cell());

@@ -248,6 +248,9 @@ public class ShiftActivity extends Activity {
         addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
         pages[4].addView(addPump,space());
 
+        buildTankSettings();
+        buildThresholdSettings();
+
         Button startShift=action("ابدأ المطابقة  ➤",true);
         startShift.setOnClickListener(v->{db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
         pages[4].addView(startShift,space());
@@ -266,6 +269,159 @@ public class ShiftActivity extends Activity {
         Button call=action("تواصل مع المطوّر",false);
         call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
         about.addView(call,space());pages[4].addView(about,space());
+    }
+
+    /** سعات الخزانات ومطابقة العجز بالمقياس اليدوي. */
+    private void buildTankSettings(){
+        pages[4].addView(sectionTitle("الخزانات ومطابقة العجز"));
+        LinearLayout box=panel(Color.WHITE);
+        for(final String material:Db.MATERIALS){
+            final double cap=db.capacity(material);
+            final double book=db.materialSummary(material)[3];
+            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
+            LinearLayout words=column();
+            words.addView(text(material,17,Util.NAVY,true));
+            words.addView(text("السعة "+money(cap)+" لتر  •  الدفتري "+money(book)+" لتر",13,0xff7c8186,false));
+            String last=db.lastDip(material);
+            if(!last.isEmpty())words.addView(text("آخر قياس: "+last,12,0xff8b9097,false));
+            row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+            Button capBtn=action("السعة",false);capBtn.setTextSize(13);
+            capBtn.setOnClickListener(v->capacityDialog(material,cap));
+            row.addView(capBtn);
+            Button dipBtn=action("قياس",false);dipBtn.setTextSize(13);
+            dipBtn.setOnClickListener(v->dipDialog(material));
+            row.addView(dipBtn);
+            box.addView(row);
+            View line=new View(this);line.setBackgroundColor(0xffeceef0);
+            box.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
+        }
+        pages[4].addView(box,space());
+        Button history=action("سجل المطابقات",false);
+        history.setOnClickListener(v->dipHistory());
+        pages[4].addView(history,space());
+    }
+
+    private void capacityDialog(final String material,double current){
+        final EditText input=new EditText(this);styleInput(input);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setText(fmt(current));input.setSelectAllOnFocus(true);
+        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);form.addView(input);
+        new AlertDialog.Builder(this).setTitle("سعة خزان "+material)
+            .setMessage("تُستخدم لرسم شريط الامتلاء وحساب نسبة المخزون.")
+            .setView(form)
+            .setPositiveButton("حفظ",(d,w)->{
+                double value=Calc.number(input.getText().toString());
+                if(value<=0){Toast.makeText(this,"اكتب سعة أكبر من صفر",Toast.LENGTH_SHORT).show();return;}
+                db.setCapacity(material,value);buildSettingsPage();
+            }).setNegativeButton("إلغاء",null).show();
+    }
+
+    /** يقارن القياس اليدوي بالرصيد الدفتري ويصحّح الفرق بحركة مخزون. */
+    private void dipDialog(final String material){
+        final double book=db.materialSummary(material)[3];
+        final double price=db.priceFor(material);
+        final EditText measured=new EditText(this);styleInput(measured);
+        measured.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        measured.setHint("القياس الفعلي باللترات");
+        final EditText why=new EditText(this);styleInput(why);why.setHint("سبب الفرق (اختياري)");
+        final TextView preview=text("أدخل القياس لعرض الفرق",14,0xff7c8186,false);
+        preview.setPadding(0,dp(10),0,0);
+        measured.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence c,int a,int b,int d){}
+            public void onTextChanged(CharSequence c,int a,int b,int d){}
+            public void afterTextChanged(android.text.Editable e){
+                String raw=e.toString().trim();
+                if(raw.isEmpty()){preview.setText("أدخل القياس لعرض الفرق");preview.setTextColor(0xff7c8186);return;}
+                double value=Calc.number(raw);
+                double gap=Dip.gap(book,value);
+                int level=Dip.level(book,value);
+                preview.setText(Dip.summary(book,value,price)+"\n"+Dip.verdict(book,value)
+                        +"  (الحد المسموح "+money(Dip.tolerance(book))+" لتر)");
+                preview.setTextColor(level==Dip.OK?Util.GREEN:level==Dip.WATCH?0xffB86A00:Util.RED);
+            }
+        });
+        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);
+        form.addView(text("الرصيد الدفتري "+money(book)+" لتر",15,Util.NAVY,true));
+        form.addView(measured);form.addView(why);form.addView(preview);
+
+        new AlertDialog.Builder(this).setTitle("مطابقة خزان "+material)
+            .setView(form)
+            .setPositiveButton("حفظ المطابقة",(d,w)->{
+                String raw=measured.getText().toString().trim();
+                if(raw.isEmpty()){Toast.makeText(this,"اكتب القياس أولًا",Toast.LENGTH_SHORT).show();return;}
+                try{
+                    db.recordDip(material,Calc.number(raw),why.getText().toString(),ShiftDates.today());
+                    Toast.makeText(this,"سُجّلت المطابقة وصُحّح المخزون",Toast.LENGTH_LONG).show();
+                    buildSettingsPage();
+                }catch(Exception ex){Toast.makeText(this,String.valueOf(ex.getMessage()),Toast.LENGTH_LONG).show();}
+            })
+            .setNegativeButton("إلغاء",null).show();
+    }
+
+    private void dipHistory(){
+        StringBuilder sb=new StringBuilder();
+        try(Cursor c=db.dipReadings(null,40)){
+            if(c.getCount()==0)sb.append("لا قياسات مسجّلة بعد.");
+            while(c.moveToNext()){
+                double gap=c.getDouble(4);
+                sb.append("• ").append(c.getString(1)).append("  —  ").append(c.getString(5))
+                  .append("\n   المقاس ").append(money(c.getDouble(2)))
+                  .append(" • الدفتري ").append(money(c.getDouble(3)))
+                  .append("\n   ").append(Dip.direction(gap)).append(" ").append(money(Math.abs(gap))).append(" لتر");
+                String reason=c.getString(6);
+                if(reason!=null&&!reason.isEmpty())sb.append("\n   السبب: ").append(reason);
+                sb.append("\n\n");
+            }
+        }
+        new AlertDialog.Builder(this).setTitle("سجل مطابقة الخزانات")
+            .setMessage(sb.toString()).setPositiveButton("حسنًا",null).show();
+    }
+
+    /** حدود التنبيه في لوحة التحكم. */
+    private void buildThresholdSettings(){
+        pages[4].addView(sectionTitle("حدود التنبيه"));
+        LinearLayout box=panel(Color.WHITE);
+        box.addView(thresholdRow("الصندوق المنخفض",money(db.lowCash())+" ريال",
+                "يُنبَّه على أي صندوق رصيده أقل من هذا الحد.",
+                v->numberDialog("حد الصندوق المنخفض",db.lowCash(),false,value->db.setLowCash(value))));
+        box.addView(thresholdRow("الدين الكبير",money(db.bigDebt())+" ريال",
+                "يُميَّز المدين الذي يتجاوز دينه هذا الحد.",
+                v->numberDialog("حد الدين الكبير",db.bigDebt(),false,value->db.setBigDebt(value))));
+        box.addView(thresholdRow("الحساب الراكد",db.staleDays()+" يومًا",
+                "يُعلَّم المدين الذي لم تُسجَّل له حركة منذ هذه المدة.",
+                v->numberDialog("أيام الركود",db.staleDays(),true,value->db.setStaleDays((int)value))));
+        box.addView(thresholdRow("المخزون المنخفض",db.lowStockPercent()+"٪",
+                "تُنبَّه المادة التي ينزل مخزونها تحت هذه النسبة من السعة.",
+                v->numberDialog("نسبة المخزون المنخفض",db.lowStockPercent(),true,value->db.setLowStockPercent((int)value))));
+        pages[4].addView(box,space());
+    }
+
+    private View thresholdRow(String title,String value,String note,View.OnClickListener tap){
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
+        LinearLayout words=column();
+        words.addView(text(title+"  —  "+value,17,Util.NAVY,true));
+        words.addView(text(note,12,0xff7c8186,false));
+        row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        Button edit=action("تغيير",false);edit.setTextSize(14);
+        edit.setOnClickListener(tap);
+        row.addView(edit);
+        return row;
+    }
+
+    private interface NumberSink{ void accept(double value); }
+
+    private void numberDialog(String title,double current,boolean integer,final NumberSink sink){
+        final EditText input=new EditText(this);styleInput(input);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                |(integer?0:android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL));
+        input.setText(fmt(current));input.setSelectAllOnFocus(true);
+        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);form.addView(input);
+        new AlertDialog.Builder(this).setTitle(title).setView(form)
+            .setPositiveButton("حفظ",(d,w)->{
+                double value=Calc.number(input.getText().toString());
+                if(value<=0){Toast.makeText(this,"اكتب قيمة أكبر من صفر",Toast.LENGTH_SHORT).show();return;}
+                sink.accept(value);buildSettingsPage();
+            }).setNegativeButton("إلغاء",null).show();
     }
 
     private void refreshStationBrand(){

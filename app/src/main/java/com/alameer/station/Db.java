@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 11;
+    private static final int DB_VERSION = 12;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -29,6 +29,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(JOURNAL_LINES_SQL);
         db.execSQL(LEDGER_AUDIT_SQL);
         db.execSQL(PERIOD_LOCKS_SQL);
+        db.execSQL(DIP_SQL);
         seed(db);
     }
 
@@ -68,7 +69,14 @@ public class Db extends SQLiteOpenHelper {
     static final String PERIOD_LOCKS_SQL="CREATE TABLE IF NOT EXISTS period_locks(period TEXT PRIMARY KEY,"+
         "locked_at TEXT NOT NULL,actor TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '')";
 
+    static final String DIP_SQL="CREATE TABLE IF NOT EXISTS dip_readings(id INTEGER PRIMARY KEY AUTOINCREMENT,"+
+        "material TEXT NOT NULL,measured REAL NOT NULL,book REAL NOT NULL,gap REAL NOT NULL,"+
+        "entry_date TEXT NOT NULL,created_at TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',actor TEXT NOT NULL DEFAULT '')";
+
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<12){
+            try{db.execSQL(DIP_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<11){
             try{db.execSQL(JOURNAL_SQL);}catch(Exception ignored){}
             try{db.execSQL(JOURNAL_LINES_SQL);}catch(Exception ignored){}
@@ -1001,6 +1009,16 @@ public class Db extends SQLiteOpenHelper {
     public boolean deleteDebtEntry(long id){
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
+    /** حدود التنبيه القابلة للضبط من الإعدادات. */
+    public double lowCash(){try{return Double.parseDouble(setting("threshold_low_cash","50000"));}catch(Exception e){return 50000;}}
+    public void setLowCash(double v){setSetting("threshold_low_cash",String.valueOf(v));}
+    public double bigDebt(){try{return Double.parseDouble(setting("threshold_big_debt","100000"));}catch(Exception e){return 100000;}}
+    public void setBigDebt(double v){setSetting("threshold_big_debt",String.valueOf(v));}
+    public int staleDays(){try{return Integer.parseInt(setting("threshold_stale_days","21"));}catch(Exception e){return 21;}}
+    public void setStaleDays(int v){setSetting("threshold_stale_days",String.valueOf(v));}
+    public int lowStockPercent(){try{return Integer.parseInt(setting("threshold_low_stock","25"));}catch(Exception e){return 25;}}
+    public void setLowStockPercent(int v){setSetting("threshold_low_stock",String.valueOf(v));}
+
     /** سعة خزان مادة باللترات، لرسم شريط الامتلاء في لوحة التحكم. */
     public double capacity(String material){
         try{return Double.parseDouble(setting("capacity_"+material,defaultCapacity(material)));}
@@ -1060,6 +1078,58 @@ public class Db extends SQLiteOpenHelper {
     public boolean deleteMaterialEntry(long id){
         return getWritableDatabase().delete("material_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
+    // ==================== مطابقة العجز بالمقياس ====================
+
+    /** يسجّل قياس خزان يدويًا ويصحّح المخزون بحركة فرق، كل ذلك في معاملة واحدة. */
+    public long recordDip(String material,double measured,String reason,String date){
+        if(!Double.isFinite(measured)||measured<0)throw new IllegalArgumentException("اكتب القياس باللترات");
+        double book=materialSummary(material)[3];
+        double gap=Dip.gap(book,measured);
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            long id=0;
+            if(Math.abs(gap)>=0.001){
+                ContentValues v=new ContentValues();
+                v.put("material",material);
+                v.put("direction",Dip.correctionDirection(gap));
+                v.put("litres",Math.abs(gap));
+                v.put("note",Dip.note(gap,reason));
+                v.put("entry_date",date);v.put("created_at",Util.now());
+                id=db.insertOrThrow("material_entries",null,v);
+            }
+            ContentValues log=new ContentValues();
+            log.put("material",material);log.put("measured",measured);log.put("book",book);
+            log.put("gap",gap);log.put("entry_date",date);log.put("created_at",Util.now());
+            log.put("reason",reason==null?"":reason.trim());log.put("actor",actor);
+            db.insertOrThrow("dip_readings",null,log);
+            audit(db,"dip",id,"DIP_RECONCILE",Calc.money(book)+" لتر دفتري",
+                  Calc.money(measured)+" لتر مقاس ("+Dip.direction(gap)+" "+Calc.money(Math.abs(gap))+")",
+                  reason==null?"":reason.trim());
+            db.setTransactionSuccessful();
+            return id;
+        }finally{db.endTransaction();}
+    }
+
+    /** سجل القياسات: 0=id,1=مادة,2=مقاس,3=دفتري,4=فرق,5=تاريخ,6=سبب,7=من */
+    public Cursor dipReadings(String material,int limit){
+        boolean all=material==null||material.isEmpty();
+        return getReadableDatabase().rawQuery(
+            "SELECT id,material,measured,book,gap,entry_date,reason,actor FROM dip_readings "+
+            (all?"":"WHERE material=? ")+"ORDER BY entry_date DESC,id DESC LIMIT "+Math.max(1,limit),
+            all?null:new String[]{material});
+    }
+
+    /** آخر قياس لمادة، أو نص فارغ. */
+    public String lastDip(String material){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT entry_date,gap FROM dip_readings WHERE material=? ORDER BY entry_date DESC,id DESC LIMIT 1",
+                new String[]{material})){
+            if(!c.moveToFirst())return "";
+            return c.getString(0)+"  •  "+Dip.direction(c.getDouble(1))+" "+Calc.money(Math.abs(c.getDouble(1)))+" لتر";
+        }
+    }
+
     /** الوارد والصادر والرصيد المخزني لمادة واحدة. المبيعات المحفوظة تُخصم كصادر. */
     public double[] materialSummary(String material){
         double in=0,out=0;
