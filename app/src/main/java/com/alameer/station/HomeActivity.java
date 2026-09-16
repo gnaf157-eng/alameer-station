@@ -49,7 +49,7 @@ public class HomeActivity extends Activity {
         words.setOrientation(LinearLayout.VERTICAL);
         words.setPadding(dp(12), 0, 0, 0);
         words.addView(text(Branding.stationName(db), 19, Color.WHITE, true));
-        words.addView(text("طابق ورحّل • مطابقة الورديات والصناديق", 11, 0xffCFE2FA, false));
+        words.addView(text("واجهة المدير", 12, 0xffCFE2FA, true));
         brand.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
 
         // الترس انتقل إلى هنا؛ يفتح صفحة الإعدادات مباشرة بدل أن يزحم شاشة العامل.

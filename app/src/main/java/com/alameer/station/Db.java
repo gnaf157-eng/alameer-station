@@ -1036,6 +1036,15 @@ public class Db extends SQLiteOpenHelper {
         return code;
     }
 
+    /** عدد ورديات العامل المرسلة وما زالت تنتظر اعتماد المدير. */
+    public int awaitingManager(int workerId){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM shifts WHERE worker_id=? AND status='SUBMITTED' AND sync_state='SYNCED'",
+                new String[]{String.valueOf(workerId)})){
+            return c.moveToFirst()?c.getInt(0):0;
+        }
+    }
+
     /** يعلّم الوردية بأنها أُرسلت إلى المدير. */
     public void markSent(long shiftId){
         ContentValues v=new ContentValues();

@@ -43,6 +43,7 @@ public class ShiftActivity extends Activity {
     boolean settingsOnly=false;
     boolean reviewing=false;
     Button postButton;
+    TextView pendingBanner;
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance,stationTitle;
@@ -74,7 +75,7 @@ public class ShiftActivity extends Activity {
         stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
         refreshStationBrand();
-        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffCFE2FA,false));
+        brandWords.addView(text(Db.managerMode()?"واجهة المدير":"واجهة فريق العمل",12,0xffCFE2FA,true));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
         headerBalance=text("",15,0xffCFE2FA,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
@@ -760,24 +761,60 @@ public class ShiftActivity extends Activity {
         }));
         dialog.show();
     }
+    /** شريط تنبيه في شاشة العامل حين تكون له وردية معلّقة عند المدير. */
+    private void showPendingBanner(){
+        if(pinnedSummaries==null)return;
+        if(pendingBanner!=null){pinnedSummaries.removeView(pendingBanner);pendingBanner=null;}
+        if(Db.managerMode())return;
+        int waiting=db.awaitingManager(workerId);
+        if(waiting==0)return;
+        TextView bar=text(waiting==1?"◷ وردية عند المدير قيد المراجعة — لا يمكن إغلاق وردية جديدة حتى تُعتمد"
+                                    :"◷ "+waiting+" ورديات عند المدير قيد المراجعة",13,Color.WHITE,true);
+        bar.setGravity(Gravity.CENTER);
+        bar.setPadding(dp(12),dp(10),dp(12),dp(10));
+        bar.setBackground(Util.round(0xffB86A00,dp(12)));
+        pendingBanner=bar;
+        pinnedSummaries.addView(bar,0);
+    }
+
     private void loadArchive(){
         pages[3].removeAllViews();pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         try(Cursor c=db.archive(workerId,false)){
             if(c.getCount()==0)pages[3].addView(Util.card(this,"لا توجد ورديات محفوظة بعد."),Util.spaced());
             while(c.moveToNext()){
                 String state=c.getString(3);
-                String label="OPEN".equals(state)?"جارية الآن":"مُغلقة";
                 final long archivedId=c.getLong(0);
+                boolean sent="SYNCED".equals(c.getString(6));
+                // حالة الوردية في رحلتها: عند العامل، أو منتظرة المدير، أو معتمدة.
+                String label;int tint;
+                if("OPEN".equals(state)||"RETURNED".equals(state)){label="جارية الآن";tint=0xff16733c;}
+                else if("APPROVED".equals(state)){label="✓ تم اعتمادها";tint=Util.GREEN;}
+                else if(sent){label="◷ قيد المراجعة عند المدير";tint=0xffB86A00;}
+                else{label="◷ بانتظار الإرسال للمدير";tint=Util.RED;}
+
                 LinearLayout card=panel(Color.WHITE);
                 card.addView(text(ShiftDates.day(c.getString(8)),21,0xff16733c,true),space());
-                card.addView(text("وردية #"+archivedId+"  •  "+label,16,Util.NAVY,true));
+                card.addView(text("وردية #"+archivedId,16,Util.NAVY,true));
+                card.addView(text(label,15,tint,true));
                 card.addView(text("تاريخ الوردية: "+c.getString(8),15,Util.NAVY,true));
                 card.addView(text("تاريخ الإدخال: "+c.getString(2),13,0xff667078,false));
                 card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
-                card.addView(text(Math.abs(c.getDouble(5))<0.01?"اضغط لفتحها ومراجعتها":"غير مطابقة — اضغط لفتحها ومراجعتها",12,Math.abs(c.getDouble(5))<0.01?0xff667078:0xffb3261e,false));
                 final boolean live="OPEN".equals(state)||"RETURNED".equals(state);
+                final boolean locked=!live&&!Db.managerMode();
+                card.addView(text(locked?"عند المدير — لا يمكن تعديلها":"اضغط لفتحها ومراجعتها",
+                        12,locked?0xff8b9097:0xff667078,false));
                 card.setClickable(true);
-                card.setOnClickListener(v->openArchived(archivedId,live));
+                card.setOnClickListener(v->{
+                    if(locked){
+                        new AlertDialog.Builder(this).setTitle("وردية #"+archivedId)
+                            .setMessage("APPROVED".equals(state)
+                                ?"اعتمدها المدير ورُحّلت إلى الدفاتر."
+                                :"أُرسلت إلى المدير وهي في سجل الورديات المنتظرة.")
+                            .setPositiveButton("حسنًا",null).show();
+                        return;
+                    }
+                    openArchived(archivedId,live);
+                });
                 card.setOnLongClickListener(v->{chooseReport(archivedId);return true;});
                 pages[3].addView(card,Util.spaced());
             }
@@ -880,6 +917,7 @@ public class ShiftActivity extends Activity {
     }
     private void loadReadings(){
         refreshShiftDate();
+        showPendingBanner();
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
         readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){
@@ -1406,6 +1444,17 @@ public class ShiftActivity extends Activity {
     }
     /** يقفل الوردية الحالية بعد حفظها ويبدأ وردية جديدة بعدادات الإغلاق. */
     private void closeShift(){
+        // العامل لا يفتح وردية جديدة وله وردية ما زالت عند المدير.
+        if(!Db.managerMode()){
+            int waiting=db.awaitingManager(workerId);
+            if(waiting>0){
+                new AlertDialog.Builder(this).setTitle("لديك وردية عند المدير")
+                    .setMessage("وردية سابقة ما زالت في قائمة الانتظار ولم تُعتمد بعد.\n\n"
+                        +"انتظر اعتمادها قبل إغلاق وردية جديدة.")
+                    .setPositiveButton("حسنًا",null).show();
+                return;
+            }
+        }
         if(!saveReadings())return;
         String issue=db.validateShift(shiftId);
         if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إغلاق الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}
@@ -1436,16 +1485,21 @@ public class ShiftActivity extends Activity {
         final boolean historical=db.isHistorical(closed);
         final boolean matched=reason.isEmpty();
         db.submit(closed,workerId,reason);
-        // المطابقة وحدها تُعتمد؛ غير المطابقة تبقى «مُرسلة» بانتظار المدير.
-        if(matched)db.approve(closed);else db.closeUnmatched(closed);
-        String posted=db.postShift(closed,db.defaultCashbox());
-        // قيد الوردية المزدوج: يُرفض إن كان فيه فرق بلا تعليل، ولا يُكتب إلا متوازنًا.
-        String journalNote="";
-        try{ db.journalShift(closed); }
-        catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
+        // في جهاز العامل: لا اعتماد ولا ترحيل: الوردية تنتظر المدير.
+        String posted="",journalNote="";
+        if(Db.managerMode()){
+            if(matched)db.approve(closed);else db.closeUnmatched(closed);
+            posted=db.postShift(closed,db.defaultCashbox());
+            try{ db.journalShift(closed); }
+            catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
+        }else{
+            db.closeUnmatched(closed);
+        }
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
-        String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
+        String base=Db.managerMode()
+            ?(historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.")
+            :"أرسل الوردية للمدير حتى تستطيع بدء وردية جديدة.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
         base=base+journalNote;
         AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
