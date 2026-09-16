@@ -29,7 +29,6 @@
         <activity android:name=".ControlPanelActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".IncomingActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ArchiveActivity" android:exported="false" android:screenOrientation="portrait" />
-        <activity android:name=".ArchiveActivity" android:screenOrientation="portrait" />
         <activity android:name=".DashboardActivity" android:screenOrientation="portrait" />
         <activity android:name=".AdminActivity" android:screenOrientation="portrait" />
         <activity android:name=".LoginActivity" android:screenOrientation="portrait" />
