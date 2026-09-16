@@ -7,13 +7,13 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 12;
+    private static final int DB_VERSION = 13;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE workers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,pin_hash TEXT NOT NULL UNIQUE,role TEXT NOT NULL,shift_kind TEXT NOT NULL DEFAULT 'DAY',active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE pumps(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,fuel TEXT NOT NULL,price REAL NOT NULL DEFAULT 0,last_reading REAL NOT NULL DEFAULT 0,worker_id INTEGER,active INTEGER NOT NULL DEFAULT 1)");
-        db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,shift_date TEXT NOT NULL DEFAULT '',historical INTEGER NOT NULL DEFAULT 0,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,shift_date TEXT NOT NULL DEFAULT '',historical INTEGER NOT NULL DEFAULT 0,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0,shift_code TEXT NOT NULL DEFAULT '')");
         db.execSQL("CREATE TABLE readings(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,pump_id INTEGER NOT NULL,previous REAL NOT NULL,current REAL,price REAL NOT NULL,sales REAL NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE movements(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,type TEXT NOT NULL,name TEXT NOT NULL,amount REAL NOT NULL,created_at TEXT NOT NULL)");
         db.execSQL("CREATE TABLE remembered_names(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,name TEXT NOT NULL,UNIQUE(type,name))");
@@ -74,6 +74,10 @@ public class Db extends SQLiteOpenHelper {
         "entry_date TEXT NOT NULL,created_at TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',actor TEXT NOT NULL DEFAULT '')";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<13){
+            try{db.execSQL("ALTER TABLE shifts ADD COLUMN shift_code TEXT NOT NULL DEFAULT ''");}catch(Exception ignored){}
+            try{db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_shift_code ON shifts(shift_code) WHERE shift_code<>''");}catch(Exception ignored){}
+        }
         if(oldVersion<12){
             try{db.execSQL(DIP_SQL);}catch(Exception ignored){}
         }
@@ -1046,6 +1050,21 @@ public class Db extends SQLiteOpenHelper {
             "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null);
     }
 
+    /** كود الوردية، ويُولَّد ويُثبَّت عند أول طلب. */
+    public String shiftCode(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(shift_code,''),COALESCE(NULLIF(shift_date,''),substr(opened_at,1,10)) "+
+                "FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){
+            if(!c.moveToFirst())return "";
+            if(!c.getString(0).isEmpty())return c.getString(0);
+            String code=ShiftFile.code(deviceId(),c.getString(1),shiftId);
+            ContentValues v=new ContentValues();
+            v.put("shift_code",code);
+            getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
+            return code;
+        }
+    }
+
     /** عدد ورديات العامل المرسلة وما زالت تنتظر اعتماد المدير. */
     public int awaitingManager(int workerId){
         try(Cursor c=getReadableDatabase().rawQuery(
@@ -1190,6 +1209,7 @@ public class Db extends SQLiteOpenHelper {
             if(!c.moveToFirst())throw new IllegalStateException("الوردية غير موجودة");
             out.worker=c.getString(0);out.reason=c.getString(4);out.date=c.getString(6);
         }
+        out.code=shiftCode(shiftId);
         try(Cursor c=shiftReadings(shiftId)){
             while(c.moveToNext()){
                 if(c.isNull(4))continue;
@@ -1205,8 +1225,12 @@ public class Db extends SQLiteOpenHelper {
 
     /** هل سبق استيراد هذا الملف؟ يمنع التكرار. */
     public boolean alreadyImported(ShiftFile.Shift s){
-        String key="import_"+s.device+"_"+s.number+"_"+s.date;
-        return !setting(key,"").isEmpty();
+        String code=s.code==null||s.code.isEmpty()?ShiftFile.code(s.device,s.date,s.number):s.code;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM shifts WHERE shift_code=?",
+                new String[]{code})){
+            if(c.moveToFirst())return true;
+        }
+        return !setting("import_"+s.device+"_"+s.number+"_"+s.date,"").isEmpty();
     }
     private void markImported(SQLiteDatabase db,ShiftFile.Shift s,long localId){
         ContentValues v=new ContentValues();
@@ -1244,15 +1268,16 @@ public class Db extends SQLiteOpenHelper {
         String mismatch=readingMismatch(s);
         if(!mismatch.isEmpty())
             throw new IllegalStateException("القراءات السابقة لا تطابق عدّاداتك:"+mismatch);
+        final String code=s.code==null||s.code.isEmpty()?ShiftFile.code(s.device,s.date,s.number):s.code;
         if(alreadyImported(s))
-            throw new IllegalStateException("سبق استيراد هذه الوردية.");
+            throw new IllegalStateException("سبق استيراد الوردية "+code+".");
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
         try{
             int worker=workerIdByName(db,s.worker);
             ContentValues head=new ContentValues();
             head.put("worker_id",worker);head.put("opened_at",Util.now());
-            head.put("shift_date",s.date);head.put("status","SUBMITTED");
+            head.put("shift_date",s.date);head.put("status","SUBMITTED");head.put("shift_code",code);
             head.put("closed_at",Util.now());head.put("sync_state","PENDING");
             head.put("difference_reason",s.reason);
             head.put("manager_note","واردة من جهاز العامل");

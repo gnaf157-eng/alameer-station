@@ -796,12 +796,14 @@ public class ShiftActivity extends Activity {
 
                 LinearLayout card=panel(Color.WHITE);
                 card.addView(text(ShiftDates.day(c.getString(8)),21,0xff16733c,true),space());
-                card.addView(text("وردية #"+archivedId,16,Util.NAVY,true));
+                String code=db.shiftCode(archivedId);
+                card.addView(text(code.isEmpty()?"وردية #"+archivedId:code,16,Util.NAVY,true));
                 card.addView(text(label,15,tint,true));
                 card.addView(text("تاريخ الوردية: "+c.getString(8),15,Util.NAVY,true));
                 card.addView(text("تاريخ الإدخال: "+c.getString(2),13,0xff667078,false));
                 card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
                 final boolean live="OPEN".equals(state)||"RETURNED".equals(state);
+                // بعد الإغلاق تُقفل الوردية على العامل نهائيًا.
                 final boolean locked=!live&&!Db.managerMode();
                 card.addView(text(locked?"عند المدير — لا يمكن تعديلها":"اضغط لفتحها ومراجعتها",
                         12,locked?0xff8b9097:0xff667078,false));
@@ -809,9 +811,11 @@ public class ShiftActivity extends Activity {
                 card.setOnClickListener(v->{
                     if(locked){
                         new AlertDialog.Builder(this).setTitle("وردية #"+archivedId)
-                            .setMessage("APPROVED".equals(state)
+                            .setMessage(("APPROVED".equals(state)
                                 ?"اعتمدها المدير ورُحّلت إلى الدفاتر."
                                 :"أُرسلت إلى المدير وهي في سجل الورديات المنتظرة.")
+                                +"\n\nلا يمكن تعديلها بعد الإغلاق.")
+                            .setNeutralButton("حفظ PDF",(x,y)->sharePdf(archivedId))
                             .setPositiveButton("حسنًا",null).show();
                         return;
                     }
@@ -1370,6 +1374,11 @@ public class ShiftActivity extends Activity {
      */
     private void openArchived(final long id,boolean live){
         if(live){ switchTo(id); return; }
+        // الوردية المُغلقة لا يفتحها إلا المدير.
+        if(!Db.managerMode()){
+            Toast.makeText(this,"لا يمكن تعديل وردية مُغلقة",Toast.LENGTH_LONG).show();
+            return;
+        }
         new AlertDialog.Builder(this).setTitle("وردية #"+id)
             .setMessage("تفتح الوردية بقراءاتها وحركاتها كما سُجّلت، وتصير قابلة للتعديل.\n\n"
                 + "سيُعكس قيدها المحاسبي ويُلغى ترحيلها حتى تعتمدها من جديد، ويُحفظ ذلك في سجل التدقيق.")
@@ -1397,10 +1406,8 @@ public class ShiftActivity extends Activity {
     private void chooseReport(long id){
         if(id==shiftId&&!saveReadings())return;
         new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
-            .setItems(new String[]{"PDF","Excel (.xlsx)","إرسال للمدير"},(d,which)->{
+            .setItems(new String[]{"PDF","Excel (.xlsx)"},(d,which)->{
                 if(id==shiftId&&!saveReadings())return;
-                // الإرسال للمدير متاح دائمًا؛ التقارير تحتاج وردية مطابقة.
-                if(which==2){sendShift(id);return;}
                 if(!reportAllowed(id))return;
                 if(which==0)sharePdf(id);else shareExcel(id);
             }).show();
@@ -1504,16 +1511,18 @@ public class ShiftActivity extends Activity {
             :"أرسل الوردية للمدير حتى تستطيع بدء وردية جديدة.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
         base=base+journalNote;
-        AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
-        if(reason.isEmpty()){
-            done.setMessage(base+"\nأرسل الوردية للمدير، أو احفظ تقريرها.")
-                .setPositiveButton("إرسال للمدير",(d,w)->sendShift(closed))
-                .setNeutralButton("حفظ PDF",(d,w)->sharePdf(closed))
+        final String code=db.shiftCode(closed);
+        AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code);
+        if(Db.managerMode()){
+            done.setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")
+                .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
                 .setNegativeButton("لاحقًا",null);
         }else{
-            done.setMessage(base+"\nالوردية غير مطابقة: أرسلها للمدير ليراجعها ويعتمدها.")
-                .setPositiveButton("إرسال للمدير",(d,w)->sendShift(closed))
-                .setNegativeButton("لاحقًا",null);
+            // الإغلاق يرسل الوردية فورًا؛ لا خيار بعده ولا تعديل.
+            new Relay(this).send(closed,false);
+            done.setMessage(base+"\n\nكود الوردية: "+code
+                    +"\nأُرسلت إلى المدير ودخلت أرشيفك، ولا يمكن تعديلها بعد الآن.")
+                .setPositiveButton("حسنًا",null);
         }
         done.show();
     }

@@ -38,7 +38,7 @@ public final class ShiftFile {
 
     /** وردية كاملة كما أرسلها العامل. */
     public static final class Shift {
-        public String station = "", worker = "", date = "", reason = "", device = "";
+        public String station = "", worker = "", date = "", reason = "", device = "", code = "";
         public long number;
         public final List<Reading> readings = new ArrayList<>();
         public final List<Move> moves = new ArrayList<>();
@@ -72,7 +72,8 @@ public final class ShiftFile {
         b.append(HEAD).append('\n');
         b.append("S").append(SEP).append(clean(s.station)).append(SEP).append(clean(s.worker))
          .append(SEP).append(clean(s.date)).append(SEP).append(s.number)
-         .append(SEP).append(clean(s.device)).append(SEP).append(clean(s.reason)).append('\n');
+         .append(SEP).append(clean(s.device)).append(SEP).append(clean(s.reason))
+         .append(SEP).append(clean(s.code.isEmpty() ? code(s.device, s.date, s.number) : s.code)).append('\n');
         for (Reading r : s.readings)
             b.append("R").append(SEP).append(clean(r.pump)).append(SEP).append(clean(r.fuel))
              .append(SEP).append(num(r.previous)).append(SEP).append(num(r.current))
@@ -109,6 +110,7 @@ public final class ShiftFile {
             if (p[0].equals("S") && p.length >= 7) {
                 s.station = p[1]; s.worker = p[2]; s.date = p[3];
                 s.number = (long) Calc.number(p[4]); s.device = p[5]; s.reason = p[6];
+                s.code = p.length >= 8 ? p[7] : code(s.device, s.date, s.number);
                 header = true;
             } else if (p[0].equals("R") && p.length >= 6) {
                 s.readings.add(new Reading(p[1], p[2], Calc.number(p[3]), Calc.number(p[4]), Calc.number(p[5])));
@@ -119,6 +121,25 @@ public final class ShiftFile {
         if (!header) throw new IllegalArgumentException("الملف بلا بيانات وردية");
         if (s.readings.isEmpty()) throw new IllegalArgumentException("الملف بلا قراءات طرمبات");
         return s;
+    }
+
+    /**
+     * كود الوردية الفريد: يجمع الجهاز والتاريخ ورقم الوردية في بصمة قصيرة.
+     * نفس الوردية تعطي نفس الكود دائمًا، فيُكشف التكرار عند الاستيراد.
+     */
+    public static String code(String device, String date, long number) {
+        String seed = "shift::" + clean(device) + "::" + clean(date) + "::" + number;
+        String hash = Calc.hash(seed).toUpperCase(java.util.Locale.US);
+        StringBuilder b = new StringBuilder("W-");
+        String compact = clean(date).replace("-", "");
+        b.append(compact.length() >= 8 ? compact.substring(2) : compact).append('-');
+        int taken = 0;
+        for (int i = 0; i < hash.length() && taken < 5; i++) {
+            char c = hash.charAt(i);
+            if ("ABCDEF23456789".indexOf(c) >= 0) { b.append(c); taken++; }
+        }
+        while (taken++ < 5) b.append('7');
+        return b.toString();
     }
 
     /** اسم ملف واضح للمشاركة. */
