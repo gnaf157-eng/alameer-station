@@ -537,13 +537,13 @@ public class Db extends SQLiteOpenHelper {
                     String name=c.getString(0).trim();
                     double amount=c.getDouble(1);
                     if(name.isEmpty()||!(amount>0))continue;
-                    long debtorId=findDebtor(db,name);
-                    if(debtorId<=0)continue;
+                    // الاسم الجديد يُفتح له حساب، فيصير رصيده سالبًا (له لا عليه).
+                    long debtorId=findOrCreateDebtor(db,name);
                     addDebtEntry(debtorId,"PAID",amount,"سداد من وردية #"+shiftId,date,shiftId);
                     payers++;paidTotal+=amount;
                 }
             }
-            if(payers>0)log.append("• سُدّد ").append(Calc.money(paidTotal)).append(" ر.ي من ").append(payers).append(" مدين\n");
+            if(payers>0)log.append("• سُدّد ").append(Calc.money(paidTotal)).append(" ر.ي من ").append(payers).append(" حساب\n");
             int expenses=0;double expenseTotal=0;
             try(Cursor c=db.rawQuery("SELECT name,SUM(amount) FROM movements WHERE shift_id=? AND type='EXPENSE' GROUP BY name",
                     new String[]{String.valueOf(shiftId)})){
@@ -588,12 +588,6 @@ public class Db extends SQLiteOpenHelper {
         if(f.equals("الديزل"))return "ديزل";
         if(f.equals("الغاز"))return "غاز";
         return f;
-    }
-    /** يعيد رقم المدين إن كان مسجّلًا، أو 0 — بلا إنشاء. */
-    private long findDebtor(SQLiteDatabase db,String name){
-        try(Cursor c=db.rawQuery("SELECT id FROM debtors WHERE name=?",new String[]{name})){
-            return c.moveToFirst()?c.getLong(0):0;
-        }
     }
     private long findOrCreateDebtor(SQLiteDatabase db,String name){
         try(Cursor c=db.rawQuery("SELECT id FROM debtors WHERE name=?",new String[]{name})){

@@ -162,11 +162,11 @@ public final class StatementReport {
         float width = (WIDTH - 2 * MARGIN - 18) / 4f;
         String[] labels = {"رصيد افتتاحي", "إجمالي عليه", "إجمالي له", "المستحق الآن"};
         double[] values = {opening, debt, paid, balance};
-        int[] colors = {MUTED, RED, GREEN, balance > 0 ? RED : GREEN};
+        int[] colors = {MUTED, RED, GREEN, balance > 0.009 ? RED : GREEN};
         for (int i = 0; i < 4; i++) {
             float left = WIDTH - MARGIN - (i + 1) * width - i * 6;
             boolean last = i == 3;
-            fill.setColor(last ? (balance > 0 ? 0xfffdeef0 : 0xffe9f6f1) : 0xfff5f8fc);
+            fill.setColor(last ? (balance > 0.009 ? 0xfffdeef0 : 0xffe9f6f1) : 0xfff5f8fc);
             c.drawRoundRect(new RectF(left, y, left + width, y + 62), 10, 10, fill);
             paint.setColor(MUTED);
             paint.setTextSize(9.5f);
@@ -190,6 +190,7 @@ public final class StatementReport {
         paint.setFakeBoldText(true);
         paint.setTextSize(15f);
         right(c, paint, owes ? "المبلغ المستحق عليكم: " + money(balance) + " ريال يمني"
+                : balance < -0.009 ? "لكم رصيد لدينا: " + money(-balance) + " ريال يمني"
                 : "الحساب مسدّد بالكامل — شكرًا لكم", WIDTH - MARGIN - 10, y + 38);
         paint.setFakeBoldText(false);
         paint.setColor(MUTED);
@@ -242,7 +243,8 @@ public final class StatementReport {
         return "السلام عليكم " + info[0] + "\n"
                 + Branding.stationName(db) + " — كشف حسابكم حتى " + ShiftDates.today() + "\n"
                 + (balance > 0.009 ? "المستحق عليكم: " + money(balance) + " ريال يمني"
-                                   : "حسابكم مسدّد بالكامل، شكرًا لكم")
+                   : balance < -0.009 ? "لكم رصيد لدينا: " + money(-balance) + " ريال يمني"
+                   : "حسابكم مسدّد بالكامل، شكرًا لكم")
                 + "\nالكشف التفصيلي في الملف المرفق.";
     }
 }

@@ -263,7 +263,9 @@ public class ControlPanelActivity extends Activity {
         for (String[] row : rows) {
             double balance = Double.parseDouble(row[1]);
             int idle = Integer.parseInt(row[2]);
-            int tint = balance > BIG_DEBT ? Util.RED : idle >= STALE_DAYS ? AMBER : Util.NAVY;
+            // الرصيد السالب يعني أن الزبون دفع أكثر مما عليه.
+            int tint = balance < -0.009 ? Util.GREEN
+                    : balance > BIG_DEBT ? Util.RED : idle >= STALE_DAYS ? AMBER : Util.NAVY;
             body.addView(flatRow(row[0], money(balance) + " ر.ي",
                     idle >= STALE_DAYS ? "راكد " + idle + " يومًا" : null, tint));
             body.addView(divider());

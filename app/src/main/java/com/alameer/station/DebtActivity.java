@@ -125,6 +125,9 @@ public class DebtActivity extends Activity {
                 final boolean active = c.getInt(4) == 1;
                 final double balance = c.getDouble(7);
                 final boolean clear = Math.abs(balance) < 0.01;
+                // سالب = له عندنا رصيد (أخضر)، موجب = عليه دين (أحمر)، صفر = رمادي.
+                final boolean credit = balance < -0.009;
+                final int balanceTint = clear ? 0xff7c8186 : credit ? Util.GREEN : Util.RED;
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
@@ -141,16 +144,17 @@ public class DebtActivity extends Activity {
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(name, 18, active ? Util.NAVY : 0xff9aa0a6, true));
                 String note = !active ? "موقوف — لا تُسجَّل عليه حركات"
-                        : clear ? "سدّد كامل دينه" : phone.isEmpty() ? "اضغط لتسجيل دين أو سداد" : phone;
-                words.addView(text(note, 11, clear && active ? Util.GREEN : 0xff8b9097, false));
+                        : clear ? "الحساب مقفل — لا دين ولا رصيد"
+                        : credit ? "دفع أكثر مما عليه" : phone.isEmpty() ? "اضغط لتسجيل دين أو سداد" : phone;
+                words.addView(text(note, 11, active && (clear || credit) ? Util.GREEN : 0xff8b9097, false));
                 top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 LinearLayout amountBox = new LinearLayout(this);
                 amountBox.setOrientation(LinearLayout.VERTICAL);
-                TextView amount = text(money(balance), 22, clear ? Util.GREEN : Util.RED, true);
+                TextView amount = text(money(balance), 22, balanceTint, true);
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 amount.setGravity(Gravity.LEFT);
                 amountBox.addView(amount);
-                TextView unit = text(clear ? "لا يوجد دين" : "ريال عليه", 10, 0xff8b9097, false);
+                TextView unit = text(clear ? "لا يوجد دين" : credit ? "ريال له" : "ريال عليه", 10, 0xff8b9097, false);
                 unit.setGravity(Gravity.LEFT);
                 amountBox.addView(unit);
                 top.addView(amountBox);
@@ -394,8 +398,9 @@ public class DebtActivity extends Activity {
         balanceCard.setOrientation(LinearLayout.VERTICAL);
         balanceCard.setPadding(dp(14), dp(12), dp(14), dp(12));
         balanceCard.setBackground(Util.round(Util.ACCENT_SOFT, dp(14)));
-        balanceCard.addView(text("الدين الحالي على " + debtorName, 12, 0xff5a6672, false));
-        TextView balanceText = text(money(current) + "  ر.ي", 24, Math.abs(current) < 0.01 ? Util.GREEN : Util.RED, true);
+        balanceCard.addView(text((current < -0.009 ? "رصيد له عند " : "الدين الحالي على ") + debtorName, 12, 0xff5a6672, false));
+        TextView balanceText = text(money(current) + "  ر.ي", 24,
+                Math.abs(current) < 0.01 ? 0xff7c8186 : current < 0 ? Util.GREEN : Util.RED, true);
         balanceText.setTextDirection(View.TEXT_DIRECTION_LTR);
         balanceCard.addView(balanceText);
         final TextView afterText = text("", 13, 0xff5a6672, true);
@@ -430,7 +435,7 @@ public class DebtActivity extends Activity {
             if (!(value > 0)) { afterText.setText(""); return; }
             double after = kind.getSelectedItemPosition() == 0 ? current + value : current - value;
             afterText.setText("الدين بعد الحركة: " + money(after) + " ر.ي");
-            afterText.setTextColor(after > 0.01 ? Util.RED : Util.GREEN);
+            afterText.setTextColor(after > 0.01 ? Util.RED : after < -0.01 ? Util.GREEN : 0xff7c8186);
         };
         amount.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
