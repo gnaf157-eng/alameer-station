@@ -268,9 +268,9 @@ public class ControlPanelActivity extends Activity {
         for (String[] row : rows) {
             if (Double.parseDouble(row[1]) < -0.009 && !creditHeaderShown) {
                 creditHeaderShown = true;
-                TextView head = text("أرصدة لهم عندنا", 12, Util.GREEN, true);
-                head.setPadding(dp(14), dp(12), dp(14), dp(6));
-                body.addView(head);
+                TextView creditHead = text("أرصدة لهم عندنا", 12, Util.GREEN, true);
+                creditHead.setPadding(dp(14), dp(12), dp(14), dp(6));
+                body.addView(creditHead);
             }
             double balance = Double.parseDouble(row[1]);
             int idle = Integer.parseInt(row[2]);
