@@ -77,6 +77,17 @@ public class ShiftActivity extends Activity {
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brand.addView(headerBalance,new LinearLayout.LayoutParams(0,dp(66),1));
+        // ترس في ترويسة الوردية: جهاز العامل لا يرى الواجهة الرئيسية، فهذا طريقه الوحيد للإعدادات.
+        ImageButton gear=new ImageButton(this);
+        gear.setContentDescription("الضبط");
+        gear.setPadding(dp(9),dp(9),dp(9),dp(9));
+        gear.setImageDrawable(new SettingsGear());
+        gear.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(0x22FFFFFF,dp(21)),Util.round(Color.WHITE,dp(21))));
+        gear.setOnClickListener(v->{settingsReturnPage=page==4?0:page;showPage(4);
+            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
+        brand.addView(gear,new LinearLayout.LayoutParams(dp(42),dp(42)));
         shell.addView(brand);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
@@ -179,6 +190,17 @@ public class ShiftActivity extends Activity {
     private void buildSettingsPage(){
         pages[4].removeAllViews();
         pages[4].addView(heading("الإعدادات"));
+        // التحديث أولًا: أهم ما يحتاجه جهاز العامل ولا ينبغي أن يبحث عنه.
+        Button updateTop=action("فحص تحديث التطبيق  ⟳",true);
+        updateTop.setOnClickListener(v->new AppUpdater(this).check(true));
+        pages[4].addView(updateTop,space());
+        TextView version=text("النسخة الحالية "+BuildConfig.VERSION_NAME,12,0xff7c8186,false);
+        version.setGravity(Gravity.CENTER);
+        pages[4].addView(version,space());
+        Button back=action("رجوع إلى الوردية",false);
+        back.setOnClickListener(v->{showPage(settingsReturnPage);
+            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
+        pages[4].addView(back,space());
         buildStationSettings();
 
         pages[4].addView(sectionTitle("اسم العامل"));
@@ -260,9 +282,6 @@ public class ShiftActivity extends Activity {
         buildTankSettings();
         buildThresholdSettings();
 
-        Button update=action("فحص تحديث التطبيق",false);
-        update.setOnClickListener(v->new AppUpdater(this).check(true));
-        pages[4].addView(update,space());
         Button backupBtn=action("نسخة احتياطية",false);
         backupBtn.setOnClickListener(v->new Backup(this).export());
         pages[4].addView(backupBtn,space());
@@ -727,7 +746,8 @@ public class ShiftActivity extends Activity {
     @Override public void onBackPressed(){
         // مغادرة الإعدادات تُنزل الأسعار والطرمبات على الوردية المفتوحة.
         if(page==4){db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();}
-        if(page==4&&!settingsOnly){
+        // جهاز العامل بلا واجهة رئيسية: الرجوع من الإعدادات يعود للوردية دائمًا.
+        if(page==4&&(!settingsOnly||db.workerDevice())){
             showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
         }else super.onBackPressed();
