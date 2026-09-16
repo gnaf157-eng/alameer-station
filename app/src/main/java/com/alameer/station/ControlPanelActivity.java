@@ -264,10 +264,10 @@ public class ControlPanelActivity extends Activity {
             double balance = Double.parseDouble(row[1]);
             int idle = Integer.parseInt(row[2]);
             // الرصيد السالب يعني أن الزبون دفع أكثر مما عليه.
-            int tint = balance < -0.009 ? Util.GREEN
-                    : balance > BIG_DEBT ? Util.RED : idle >= STALE_DAYS ? AMBER : Util.NAVY;
+            int tint = balance < -0.009 ? Util.GREEN : Util.RED;
             body.addView(flatRow(row[0], money(balance) + " ر.ي",
-                    idle >= STALE_DAYS ? "راكد " + idle + " يومًا" : null, tint));
+                    balance < -0.009 ? "له رصيد عندنا"
+                    : idle >= STALE_DAYS ? "راكد " + idle + " يومًا" : null, tint));
             body.addView(divider());
         }
         body.setVisibility(debtsOpen ? View.VISIBLE : View.GONE);
@@ -308,14 +308,21 @@ public class ControlPanelActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), dp(13), dp(14), dp(13));
+        // بعرض كامل، وإلا انهار الوزن والتصق المبلغ بالاسم.
+        row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text(name, 15, Util.NAVY, true));
-        if (note != null) words.addView(text(note, 10, AMBER, false));
+        TextView title = text(name, 15, Util.NAVY, true);
+        title.setMaxLines(2);
+        words.addView(title);
+        if (note != null) words.addView(text(note, 10, tint == Util.GREEN ? Util.GREEN : AMBER, false));
         row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         TextView amount = text(value, 16, tint, true);
         amount.setTextDirection(View.TEXT_DIRECTION_LTR);
-        row.addView(amount);
+        amount.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
+        ap.setMargins(dp(12), 0, 0, 0);
+        row.addView(amount, ap);
         return row;
     }
 
