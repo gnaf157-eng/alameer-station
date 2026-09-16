@@ -125,7 +125,7 @@ public class OverlayView extends View {
         for (TrackedVehicle t : tracks) {
             RectF r = new RectF(imgX(t.box.left), imgY(t.box.top), imgX(t.box.right), imgY(t.box.bottom));
             c.drawRoundRect(r, 8, 8, t.counted ? countedPaint : boxPaint);
-            c.drawText("#" + t.id, r.left + 6, r.top - 8, textPaint);
+            if (t.id > 0) c.drawText("#" + t.id, r.left + 6, r.top - 8, textPaint);
         }
 
         // خط العد

@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity implements VehicleTracker.Listener {
 
     private static final int REQ_CAMERA = 10;
-    private static final float SCORE_THRESHOLD = 0.45f;
+    private static final float SCORE_THRESHOLD = 0.30f;
 
     private PreviewView previewView;
     private OverlayView overlay;
@@ -82,7 +82,6 @@ public class MainActivity extends AppCompatActivity implements VehicleTracker.Li
             toggleButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     counting ? R.color.out_color : R.color.accent));
             statusText.setText(counting ? R.string.status_running : R.string.status_stopped);
-            if (!counting) overlay.setTracks(new ArrayList<>());
         });
 
         resetButton.setOnClickListener(v -> {
@@ -164,8 +163,9 @@ public class MainActivity extends AppCompatActivity implements VehicleTracker.Li
     /** يعمل في خيط التحليل. لا يُحفظ أي إطار؛ يُعالج ثم يُهمل مباشرة. */
     private void analyze(@NonNull ImageProxy image) {
         try {
-            if (!counting || detector == null || busy) return;
+            if (detector == null || busy) return;
             busy = true;
+            long t0 = android.os.SystemClock.elapsedRealtime();
 
             if (frameBitmap == null || frameBitmap.getWidth() != image.getWidth()
                     || frameBitmap.getHeight() != image.getHeight()) {
@@ -203,8 +203,20 @@ public class MainActivity extends AppCompatActivity implements VehicleTracker.Li
                 norm.add(new RectF(r.left / w, r.top / h, r.right / w, r.bottom / h));
             }
 
-            tracker.update(norm);
-            overlay.setTracks(tracker.getTracks());
+            if (counting) {
+                tracker.update(norm);
+                overlay.setTracks(tracker.getTracks());
+            } else {
+                // قبل بدء العد: اعرض الاكتشافات الخام فقط ليتأكد المستخدم أن النموذج يرى السيارات
+                List<TrackedVehicle> preview = new ArrayList<>(norm.size());
+                for (RectF r : norm) preview.add(new TrackedVehicle(0, r));
+                overlay.setTracks(preview);
+            }
+            long ms = android.os.SystemClock.elapsedRealtime() - t0;
+            final int n = norm.size();
+            final String st = (counting ? getString(R.string.status_running) : getString(R.string.status_stopped))
+                    + "  |  مركبات في الصورة: " + n + "  |  " + ms + " ms";
+            runOnUiThread(() -> statusText.setText(st));
         } catch (Exception ignored) {
         } finally {
             busy = false;
