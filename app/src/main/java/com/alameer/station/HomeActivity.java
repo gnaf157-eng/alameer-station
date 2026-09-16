@@ -87,6 +87,15 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row3, rowWeight(true));
 
+        // ورديات العامل الواردة، بعرض الشاشة مع عدد المنتظر منها.
+        int waiting = db.pendingCount();
+        LinearLayout row4 = new LinearLayout(this);
+        row4.setGravity(Gravity.CENTER);
+        row4.addView(tile("ورديات العامل", waiting == 0 ? "استيراد واعتماد ورديات العامل"
+                        : waiting + " وردية بانتظار اعتمادك", 7,
+                v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
+        shell.addView(row4, rowWeight(true));
+
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
         credit.setPadding(0, dp(12), 0, dp(2));
@@ -283,6 +292,14 @@ public class HomeActivity extends Activity {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(Util.ACCENT);
                 c.drawRoundRect(7, 6.5f, 12.5f, 11.5f, 0.8f, 0.8f, paint);
+            } else if (kind == 7) {
+                // مستند وارد مع سهم نازل: ورديات العامل.
+                c.drawRoundRect(4.5f, 2.5f, 19.5f, 21.5f, 2f, 2f, paint);
+                paint.setColor(Util.ACCENT);
+                c.drawLine(12, 7.5f, 12, 15, paint);
+                c.drawLine(12, 15, 9, 12, paint);
+                c.drawLine(12, 15, 15, 12, paint);
+                c.drawLine(8, 18, 16, 18, paint);
             } else if (kind == 9) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);

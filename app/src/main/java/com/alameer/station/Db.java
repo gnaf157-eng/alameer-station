@@ -917,6 +917,156 @@ public class Db extends SQLiteOpenHelper {
         return out.toString();
     }
 
+    // ==================== تسليم الوردية بين الجهازين ====================
+
+    /** يجمع الوردية في صيغة ملف التسليم. */
+    public ShiftFile.Shift exportShift(long shiftId){
+        ShiftFile.Shift out=new ShiftFile.Shift();
+        out.station=Branding.stationName(this);
+        out.number=shiftId;
+        out.device=setting("device_id","");
+        if(out.device.isEmpty()){
+            out.device=Long.toHexString(System.currentTimeMillis());
+            setSetting("device_id",out.device);
+        }
+        try(Cursor c=shiftHeader(shiftId)){
+            if(!c.moveToFirst())throw new IllegalStateException("الوردية غير موجودة");
+            out.worker=c.getString(0);out.reason=c.getString(4);out.date=c.getString(6);
+        }
+        try(Cursor c=shiftReadings(shiftId)){
+            while(c.moveToNext()){
+                if(c.isNull(4))continue;
+                out.readings.add(new ShiftFile.Reading(c.getString(1),c.getString(2),
+                        c.getDouble(3),c.getDouble(4),c.getDouble(5)));
+            }
+        }
+        try(Cursor c=movements(shiftId)){
+            while(c.moveToNext())out.moves.add(new ShiftFile.Move(c.getString(1),c.getString(2),c.getDouble(3)));
+        }
+        return out;
+    }
+
+    /** هل سبق استيراد هذا الملف؟ يمنع التكرار. */
+    public boolean alreadyImported(ShiftFile.Shift s){
+        String key="import_"+s.device+"_"+s.number+"_"+s.date;
+        return !setting(key,"").isEmpty();
+    }
+    private void markImported(SQLiteDatabase db,ShiftFile.Shift s,long localId){
+        ContentValues v=new ContentValues();
+        v.put("key","import_"+s.device+"_"+s.number+"_"+s.date);
+        v.put("value",String.valueOf(localId));
+        db.insertWithOnConflict("settings",null,v,SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    /**
+     * يقارن القراءات السابقة في الملف بعدّادات هذا الجهاز.
+     * يعيد نصًا فارغًا عند التطابق، وإلا جدولًا بالفروقات.
+     */
+    public String readingMismatch(ShiftFile.Shift s){
+        StringBuilder bad=new StringBuilder();
+        for(ShiftFile.Reading r:s.readings){
+            double mine=-1;
+            try(Cursor c=getReadableDatabase().rawQuery(
+                    "SELECT last_reading FROM pumps WHERE name=? AND active=1",new String[]{r.pump})){
+                if(c.moveToFirst())mine=c.getDouble(0);
+            }
+            if(mine<0){bad.append("\n• ").append(r.pump).append(": غير موجودة عندك");continue;}
+            if(Math.abs(mine-r.previous)>=0.01)
+                bad.append("\n• ").append(r.pump).append(": عندك ").append(Calc.money(mine))
+                   .append(" وفي الملف ").append(Calc.money(r.previous))
+                   .append(" (فرق ").append(Calc.money(Math.abs(mine-r.previous))).append(")");
+        }
+        return bad.toString();
+    }
+
+    /**
+     * يستورد وردية العامل كوردية مُغلقة بانتظار مراجعة المدير.
+     * لا تُقيَّد في الدفتر ولا تُرحّل حتى يعتمدها المدير.
+     */
+    public long importShift(ShiftFile.Shift s){
+        String mismatch=readingMismatch(s);
+        if(!mismatch.isEmpty())
+            throw new IllegalStateException("القراءات السابقة لا تطابق عدّاداتك:"+mismatch);
+        if(alreadyImported(s))
+            throw new IllegalStateException("سبق استيراد هذه الوردية.");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            int worker=workerIdByName(db,s.worker);
+            ContentValues head=new ContentValues();
+            head.put("worker_id",worker);head.put("opened_at",Util.now());
+            head.put("shift_date",s.date);head.put("status","SUBMITTED");
+            head.put("closed_at",Util.now());head.put("sync_state","PENDING");
+            head.put("difference_reason",s.reason);
+            head.put("manager_note","واردة من جهاز العامل");
+            long id=db.insertOrThrow("shifts",null,head);
+            for(ShiftFile.Reading r:s.readings){
+                long pumpId=0;
+                try(Cursor c=db.rawQuery("SELECT id FROM pumps WHERE name=? AND active=1",new String[]{r.pump})){
+                    if(c.moveToFirst())pumpId=c.getLong(0);
+                }
+                if(pumpId==0)continue;
+                ContentValues v=new ContentValues();
+                v.put("shift_id",id);v.put("pump_id",pumpId);
+                v.put("previous",r.previous);v.put("current",r.current);
+                v.put("price",r.price);v.put("sales",r.amount());
+                db.insertOrThrow("readings",null,v);
+            }
+            for(ShiftFile.Move m:s.moves){
+                ContentValues v=new ContentValues();
+                v.put("shift_id",id);v.put("type",m.type);v.put("name",m.name);
+                v.put("amount",m.amount);v.put("created_at",Util.now());
+                db.insertOrThrow("movements",null,v);
+            }
+            ContentValues sums=new ContentValues();
+            sums.put("sales",s.sales());
+            sums.put("collections",s.total("COLLECTION"));
+            sums.put("cash_delivered",s.total("CASH"));
+            sums.put("debts",s.total("DEBT"));
+            sums.put("expenses",s.total("EXPENSE"));
+            sums.put("balance",s.balance());
+            db.update("shifts",sums,"id=?",new String[]{String.valueOf(id)});
+            markImported(db,s,id);
+            audit(db,"shift",id,"IMPORT_SHIFT","",
+                  "وردية العامل "+s.worker+" ("+s.date+") مبيعات "+Calc.money(s.sales()),"استيراد من جهاز العامل");
+            db.setTransactionSuccessful();
+            return id;
+        }finally{db.endTransaction();}
+    }
+
+    private int workerIdByName(SQLiteDatabase db,String name){
+        String clean=name==null?"":name.trim();
+        if(!clean.isEmpty()){
+            try(Cursor c=db.rawQuery("SELECT id FROM workers WHERE name=?",new String[]{clean})){
+                if(c.moveToFirst())return c.getInt(0);
+            }
+            ContentValues v=new ContentValues();
+            v.put("name",clean);v.put("pin_hash",Calc.hash("worker-"+clean));
+            v.put("role","WORKER");v.put("shift_kind","DAY");
+            return (int)db.insertOrThrow("workers",null,v);
+        }
+        return 1;
+    }
+
+    /** الورديات الواردة من العامل بانتظار الاعتماد: 0=id,1=عامل,2=تاريخ,3=مبيعات,4=الباقي. */
+    public Cursor incomingShifts(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.sales,s.balance "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE s.status='SUBMITTED' ORDER BY s.id DESC",null);
+    }
+
+    /**
+     * اعتماد المدير للوردية الواردة: ترحيلها وتقييدها في الدفتر.
+     * الفرق يُقيَّد على عهدة العامل، فلا يضيع ولا يُعاد إدخاله.
+     */
+    public String approveIncoming(long shiftId,long cashboxId){
+        approve(shiftId);
+        String posted=postShift(shiftId,cashboxId);
+        try{ journalShift(shiftId); }catch(Exception ignored){}
+        return posted;
+    }
+
     static String normalizeFuel(String fuel){
         String f=fuel==null?"":fuel.trim();
         if(f.equals("البترول")||f.equals("بنزين")||f.equals("البنزين"))return "بترول";

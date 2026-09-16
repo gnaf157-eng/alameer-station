@@ -1163,10 +1163,12 @@ public class ShiftActivity extends Activity {
     }
     private void chooseReport(long id){
         if(id==shiftId&&!saveReadings())return;
-        if(!reportAllowed(id))return;
         new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
-            .setItems(new String[]{"PDF","Excel (.xlsx)"},(d,which)->{
+            .setItems(new String[]{"PDF","Excel (.xlsx)","إرسال للمدير"},(d,which)->{
                 if(id==shiftId&&!saveReadings())return;
+                // الإرسال للمدير متاح دائمًا؛ التقارير تحتاج وردية مطابقة.
+                if(which==2){sendShift(id);return;}
+                if(!reportAllowed(id))return;
                 if(which==0)sharePdf(id);else shareExcel(id);
             }).show();
     }
@@ -1255,15 +1257,39 @@ public class ShiftActivity extends Activity {
         base=base+journalNote;
         AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
         if(reason.isEmpty()){
-            done.setMessage(base+"\nتستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")
-                .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
-                .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
+            done.setMessage(base+"\nأرسل الوردية للمدير، أو احفظ تقريرها.")
+                .setPositiveButton("إرسال للمدير",(d,w)->sendShift(closed))
+                .setNeutralButton("حفظ PDF",(d,w)->sharePdf(closed))
                 .setNegativeButton("لاحقًا",null);
         }else{
-            done.setMessage(base+"\nالوردية غير مطابقة: حالتها «بانتظار اعتماد المدير» ولا يمكن إخراج تقرير لها.")
-                .setPositiveButton("حسنًا",null);
+            done.setMessage(base+"\nالوردية غير مطابقة: أرسلها للمدير ليراجعها ويعتمدها.")
+                .setPositiveButton("إرسال للمدير",(d,w)->sendShift(closed))
+                .setNegativeButton("لاحقًا",null);
         }
         done.show();
+    }
+    /** يصدّر الوردية كملف تسليم موقّع ويشاركه مع المدير. */
+    void sendShift(long id){
+        try{
+            ShiftFile.Shift data=db.exportShift(id);
+            String text=ShiftFile.write(data);
+            java.io.File dir=new java.io.File(getCacheDir(),"exports");
+            if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("تعذر إنشاء مجلد التصدير");
+            java.io.File file=new java.io.File(dir,ShiftFile.fileName(data));
+            try(java.io.OutputStream out=new java.io.FileOutputStream(file)){
+                out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".files",file);
+            Intent intent=new Intent(Intent.ACTION_SEND);
+            intent.setType("text/plain");
+            intent.putExtra(Intent.EXTRA_STREAM,uri);
+            intent.putExtra(Intent.EXTRA_SUBJECT,"وردية "+data.worker+" — "+data.date);
+            intent.setClipData(android.content.ClipData.newRawUri("وردية",uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(intent,"إرسال الوردية للمدير"));
+        }catch(Exception e){
+            Toast.makeText(this,"تعذر تجهيز ملف الوردية: "+e.getMessage(),Toast.LENGTH_LONG).show();
+        }
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
