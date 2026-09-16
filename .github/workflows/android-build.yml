@@ -33,7 +33,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
+        run: |
+          set +e
+          ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee /tmp/build.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" != "0" ]; then
+            grep -E "^(e: |.*\.java:[0-9]+: error:)" /tmp/build.log | head -20 | while read -r line; do
+              echo "::error::$line"
+            done
+          fi
+          exit $code
 
       - name: Read app version
         id: version
