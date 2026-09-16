@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- خط العدّ -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M24,58 h60 v5 h-60 z" />
+
+    <!-- جسم السيارة -->
+    <path
+        android:fillColor="#FFFFC24B"
+        android:pathData="M36,40 h26 v10 h-26 z" />
+    <path
+        android:fillColor="#FFFFE0A3"
+        android:pathData="M42,32 h14 v8 h-14 z" />
+    <path
+        android:fillColor="#FF263238"
+        android:pathData="M39,50 h7 v4 h-7 z" />
+    <path
+        android:fillColor="#FF263238"
+        android:pathData="M52,50 h7 v4 h-7 z" />
+</vector>

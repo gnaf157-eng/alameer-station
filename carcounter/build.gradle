@@ -1,0 +1,172 @@
+plugins { id 'com.android.application' }
+
+// ---------------------------------------------------------------------------
+// نموذج الذكاء الاصطناعي (TensorFlow Lite) يُنزَّل وقت البناء فقط،
+// ثم يُضمَّن داخل التطبيق ليعمل الكشف والتتبع والعدّ دون إنترنت إطلاقًا.
+//   البناء الافتراضي:  ./gradlew :carcounter:assembleDebug
+//   اختيار نموذج آخر:  ./gradlew :carcounter:assembleDebug -Pmodel=ssd_mobilenet_v1
+//   رابط مخصص:         ./gradlew :carcounter:assembleDebug -PmodelUrl=https://...
+//   نموذج جاهز محليًا:  ضع الملف في carcounter/models/model.tflite
+// ---------------------------------------------------------------------------
+def modelCatalog = [
+        efficientdet_lite0: [
+                url     : 'https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/object_detection/android/lite-model_efficientdet_lite0_detection_metadata_1.tflite',
+                bytes   : 4_400_000L,
+                title   : 'EfficientDet-Lite0 (الأدق — الافتراضي)'
+        ],
+        ssd_mobilenet_v1  : [
+                url     : 'https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/object_detection/android/lite-model_ssd_mobilenet_v1_1_metadata_2.tflite',
+                bytes   : 4_000_000L,
+                title   : 'SSD MobileNet V1 (الأسرع)'
+        ]
+]
+def requestedModel = (project.findProperty('model') ?: 'efficientdet_lite0').toString()
+def modelInfo = modelCatalog[requestedModel] ?: modelCatalog.efficientdet_lite0
+def assetsDir = file("$projectDir/src/main/assets")
+def localModel = file("$projectDir/models/model.tflite")
+def modelAsset = file("$assetsDir/model.tflite")
+def customModelUrl = project.findProperty('modelUrl')
+def forceDownload = project.hasProperty('forceModelDownload')
+def minModelBytes = 300_000L
+
+android {
+    namespace 'com.abognaf.carcounter'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.abognaf.carcounter'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        resConfigs 'ar'
+        // حجم مدخلات النموذج (بالبكسل) — يُستخدم لتقليل العمل قبل الاستدلال.
+        buildConfigField 'int', 'MODEL_INPUT_SIZE', '320'
+        buildConfigField 'String', 'MODEL_NAME', "\"${requestedModel}\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    buildTypes {
+        debug {
+            // نسخة قابلة للتثبيت مباشرة على الهاتف
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions { unitTests.returnDefaultValues = true }
+
+    packaging {
+        resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*']
+    }
+}
+
+tasks.register('prepareModel') {
+    group = 'car counter'
+    description = 'ينزّل نموذج TFLite إلى مجلد assets (مرة واحدة عند البناء، وليس وقت التشغيل).'
+    outputs.file(modelAsset)
+    doLast {
+        if (!forceDownload && modelAsset.exists() && modelAsset.length() > minModelBytes) {
+            logger.lifecycle("[عداد السيارات] النموذج موجود مسبقًا (" + mb(modelAsset.length()) + " م.ب) — تخطي التنزيل.")
+            return
+        }
+        assetsDir.mkdirs()
+        if (localModel.exists() && localModel.length() > minModelBytes) {
+            java.nio.file.Files.copy(localModel.toPath(), modelAsset.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            logger.lifecycle("[عداد السيارات] تم استخدام النموذج المحلي: carcounter/models/model.tflite")
+            return
+        }
+        String url = customModelUrl ? customModelUrl.toString() : modelInfo.url
+        logger.lifecycle("[عداد السيارات] تنزيل النموذج: " + modelInfo.title)
+        boolean ok = false
+        for (int attempt = 1; attempt <= 3 && !ok; attempt++) {
+            ok = downloadTo(url, modelAsset)
+            if (!ok) logger.lifecycle("[عداد السيارات] فشل التنزيل (محاولة " + attempt + "/3)…")
+        }
+        if (!ok || !modelAsset.exists() || modelAsset.length() <= minModelBytes) {
+            modelAsset.delete()
+            throw new GradleException(
+                    "\nتعذّر تنزيل نموذج الذكاء الاصطناعي.\n" +
+                            "الحل: تأكد من الاتصال بالإنترنت، أو نزّل النموذج يدويًا وضعه في:\n" +
+                            "   carcounter/models/model.tflite\n" +
+                            "أي ملف TFLite لكشف الأجسام (COCO) يعمل، مثال:\n" +
+                            "   " + modelInfo.url + "\n")
+        }
+        logger.lifecycle("[عداد السيارات] تم تجهيز النموذج (" + mb(modelAsset.length()) + " م.ب) داخل assets.")
+    }
+}
+
+def mb(long bytes) { return String.format(java.util.Locale.ROOT, '%.1f', bytes / 1048576.0d) }
+
+def downloadTo(String url, File target) {
+    File tmp = new File(target.parentFile, target.name + '.part')
+    java.io.InputStream input = null
+    java.io.OutputStream output = null
+    try {
+        tmp.delete()
+        def conn = new URL(url).openConnection()
+        conn.setConnectTimeout(30000)
+        conn.setReadTimeout(60000)
+        conn.setInstanceFollowRedirects(true)
+        conn.setRequestProperty('User-Agent', 'car-counter-gradle')
+        conn.connect()
+        if (conn.getResponseCode() >= 400) {
+            conn.disconnect()
+            return false
+        }
+        input = conn.getInputStream()
+        output = new java.io.FileOutputStream(tmp)
+        byte[] buffer = new byte[65536]
+        int read
+        while ((read = input.read(buffer)) > 0) {
+            output.write(buffer, 0, read)
+        }
+        output.flush()
+        output.close()
+        output = null
+        input.close()
+        input = null
+        conn.disconnect()
+        if (!tmp.exists() || tmp.length() <= 0) {
+            return false
+        }
+        target.delete()
+        return tmp.renameTo(target)
+    } catch (Exception ignored) {
+        return false
+    } finally {
+        if (output != null) { try { output.close() } catch (Exception ignored) { } }
+        if (input != null) { try { input.close() } catch (Exception ignored) { } }
+    }
+}
+
+// تأكد من تنزيل النموذج قبل دمج الأصول في كل صيغة بناء
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'prepareModel' }
+tasks.matching { it.name.startsWith('merge') && it.name.endsWith('Assets') }.configureEach { dependsOn 'prepareModel' }
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // الكاميرا (CameraX)
+    def camerax = '1.3.4'
+    implementation "androidx.camera:camera-core:$camerax"
+    implementation "androidx.camera:camera-camera2:$camerax"
+    implementation "androidx.camera:camera-lifecycle:$camerax"
+    implementation "androidx.camera:camera-view:$camerax"
+
+    // الذكاء الاصطناعي المحلي (TensorFlow Lite Task Library لكشف الأجسام)
+    implementation 'org.tensorflow:tensorflow-lite-task-vision:0.4.4'
+
+    testImplementation 'junit:junit:4.13.2'
+}

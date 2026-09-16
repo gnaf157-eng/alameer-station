@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">عداد السيارات</string>
+
+    <!-- العدادات -->
+    <string name="label_total">إجمالي السيارات</string>
+    <string name="label_in">داخل</string>
+    <string name="label_out">خارج</string>
+
+    <!-- الأزرار -->
+    <string name="btn_start">بدء العد</string>
+    <string name="btn_stop">إيقاف العد</string>
+    <string name="btn_reset">تصفير العدادات</string>
+    <string name="btn_line">خط العبور</string>
+    <string name="btn_settings">الإعدادات</string>
+    <string name="btn_about">عن التطبيق</string>
+    <string name="btn_flip">عكس الاتجاهين</string>
+    <string name="done">تم</string>
+    <string name="done_editing">إنهاء التعديل</string>
+
+    <!-- الحالات -->
+    <string name="status_counting">العدّ جارٍ — بدون إنترنت</string>
+    <string name="status_stopped">العدّ متوقف</string>
+    <string name="model_loading">جاري تحميل نموذج الذكاء الاصطناعي…</string>
+    <string name="model_loading_short">جاري تحميل النموذج…</string>
+    <string name="model_error">تعذّر تحميل نموذج الكشف. تأكد من تضمين ملف النموذج (model.tflite) ثم أعد بناء التطبيق.</string>
+    <string name="camera_error">تعذّر تشغيل الكاميرا على هذا الجهاز.</string>
+    <string name="counters_reset">تم تصفير العدادات</string>
+    <string name="direction_flipped">تم عكس اتجاه العدّ</string>
+    <string name="line_hint">اسحب الخط أو أحد طرفيه لتحديد مكان العبور، وسيُثبَّت أفقيًا أو عموديًا تلقائيًا.</string>
+    <string name="tip_text">ثبّت الهاتف على حامل ثابت، ثم اضغط «بدء العد».</string>
+
+    <!-- الأذونات -->
+    <string name="permission_denied">لم يُمنح إذن الكاميرا. التطبيق يحتاج الكاميرا لرؤية الطريق وعدّ السيارات فقط — بدون إرسال أو حفظ أي فيديو.</string>
+    <string name="permission_grant">فتح الإعدادات لإعطاء الإذن</string>
+
+    <!-- الإعدادات -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="sec_detect">معدل الكشف</string>
+    <string name="rb_fast">سريع (كشف أكثر ومستهلك أعلى)</string>
+    <string name="rb_balanced">متوازن (مستحسن)</string>
+    <string name="rb_eco">اقتصادي (أخف على الهاتف)</string>
+    <string name="sec_quality">دقة الفيديو للتحليل</string>
+    <string name="rb_low">منخفضة (360p — الأسرع)</string>
+    <string name="rb_medium">متوسطة (480p — متوازنة)</string>
+    <string name="rb_high">عالية (720p — أدق للسيارات البعيدة)</string>
+    <string name="sec_threads">عدد خيوط المعالج للنموذج</string>
+    <string name="rb_threads1">خيط واحد</string>
+    <string name="rb_threads2">خيطان</string>
+    <string name="rb_threads4">أربعة خيوط</string>
+    <string name="sec_score">حد الثقة في الكشف</string>
+    <string name="score_hint">كل ما زاد الحد قلّت الكشوف الخاطئة، وكل ما قلّ زادت الحساسية.</string>
+    <string name="sec_options">خيارات إضافية</string>
+    <string name="sw_motorcycles">احتساب الدراجات النارية</string>
+    <string name="sw_bicycles">احتساب الدراجات الهوائية</string>
+    <string name="sw_boxes">إظهار مستطيلات السيارات المكتشفة</string>
+    <string name="sw_stats">إظهار أرقام التشخيص (السرعة وزمن المعالجة)</string>
+    <string name="sw_accept_all">وضع التوافق: احتساب كل الأجسام المكتشفة</string>
+    <string name="apply">تطبيق</string>
+    <string name="close">إغلاق</string>
+
+    <!-- عن التطبيق -->
+    <string name="about_title">عن التطبيق</string>
+    <string name="about_body">تطبيق «عداد السيارات» يراقب الطريق عبر كاميرا الهاتف ويعدّ السيارات العابرة لخط العبور.\n\n• يعمل بالكامل بدون إنترنت: لا يوجد إذن إنترنت في التطبيق أصلًا، ولا تُرسل الصور أو الفيديو إلى أي خادم.\n• لا يتم تسجيل أو حفظ الفيديو إطلاقًا.\n• يعمل نموذج الذكاء الاصطناعي (TensorFlow Lite) داخل الهاتف فقط.\n• تُحفظ العدادات في الذاكرة أثناء تشغيل التطبيق، وتُصفَّر عند إغلاقه.\n• كل سيارة تُتابَع بمعرّف مستقل ولا تُحتسب إلا مرة واحدة عند عبورها الخط.\n\nالإصدار 1.0.0</string>
+</resources>

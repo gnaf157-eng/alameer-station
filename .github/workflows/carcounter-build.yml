@@ -1,0 +1,88 @@
+name: Build car counter APK
+
+on:
+  push:
+    branches: [ main, 'arena/**' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  carcounter:
+    name: اختبارات منطق العدّ + بناء APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: اختبارات منطق العدّ والتتبّع
+        run: ./gradlew --no-daemon :carcounter:testDebugUnitTest
+
+      - name: بناء نسخة APK قابلة للتثبيت
+        run: ./gradlew --no-daemon :carcounter:assembleDebug
+
+      - name: التأكد من تضمين النموذج داخل التطبيق
+        run: |
+          ls -la carcounter/src/main/assets/ || true
+          test -f carcounter/src/main/assets/model.tflite
+          du -h carcounter/src/main/assets/model.tflite
+
+      - name: تجهيز ملف APK
+        run: cp carcounter/build/outputs/apk/debug/carcounter-debug.apk CarCounter-v1.0.0-debug.apk
+
+      - name: رفع ملف APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarCounter-APK
+          path: CarCounter-v1.0.0-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: نشر أحدث نسخة في صفحة الإصدارات
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view carcounter-latest >/dev/null 2>&1 || \
+            gh release create carcounter-latest \
+              --title "عداد السيارات — أحدث نسخة" \
+              --notes "نسخة (debug) قابلة للتثبيت مباشرة على الهاتف. التطبيق يعمل بالكامل بدون إنترنت."
+          gh release upload carcounter-latest CarCounter-v1.0.0-debug.apk --clobber
+
+  existing-app:
+    name: التأكد من أن تطبيق الورديات ما زال يُبنى
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build shifts app (verification only)
+        run: ./gradlew --no-daemon :app:assembleDebug
