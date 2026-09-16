@@ -62,27 +62,29 @@ public class HomeActivity extends Activity {
         welcome.setPadding(0, dp(24), 0, dp(16));
         shell.addView(welcome);
 
-        // مطابقة العامل أولًا وبعرض الواجهة لأنها المدخل اليومي.
-        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(168));
-        wide.setMargins(dp(6), 0, dp(6), 0);
-        shell.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), wide);
-
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
-                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
-        row1.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
-                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
-        shell.addView(row1, rowGap());
+        row1.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0,
+                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
+        row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
+                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
+        shell.addView(row1);
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
-        row2.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
-                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
-        row2.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
-                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+        row2.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
+                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
+        row2.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
+                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
         shell.addView(row2, rowGap());
+
+        LinearLayout row3 = new LinearLayout(this);
+        row3.setGravity(Gravity.CENTER);
+        row3.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
+                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
+        row3.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
+                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+        shell.addView(row3, rowGap());
 
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
@@ -93,23 +95,7 @@ public class HomeActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.addView(shell);
 
-        // لوحة التحكم شريط ثابت أسفل الشاشة بعرضها كاملًا وبلون العنوان نفسه.
-        TextView panel = text("لوحة التحكم", 18, Color.WHITE, true);
-        panel.setGravity(Gravity.CENTER);
-        panel.setPadding(dp(16), dp(18), dp(16), dp(18));
-        panel.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
-                new android.graphics.drawable.ColorDrawable(Util.NAVY), null));
-        panel.setClickable(true);
-        panel.setOnClickListener(v -> startActivity(new Intent(this, ControlPanelActivity.class)));
-
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        page.setBackgroundColor(Util.BG);
-        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        page.addView(panel, new LinearLayout.LayoutParams(-1, -2));
-        setContentView(page);
+        setContentView(scroll);
         new AppUpdater(this).check(false);
     }
 
