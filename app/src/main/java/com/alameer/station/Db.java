@@ -983,7 +983,7 @@ public class Db extends SQLiteOpenHelper {
      * يتحقّق من كلمة السر ويفتح الجلسة بالدور الذي تخصّها.
      * يعيد MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
      */
-    public String login(String password){
+    public String openSession(String password){
         String hash = Calc.hash(password == null ? "" : password.trim());
         String role = hash.equals(managerHash()) ? "MANAGER"
                     : hash.equals(workerHash()) ? "WORKER" : "";

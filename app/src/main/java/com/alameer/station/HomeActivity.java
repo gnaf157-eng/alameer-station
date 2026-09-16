@@ -188,7 +188,7 @@ public class HomeActivity extends Activity {
 
         Button enter = bigButton("دخول");
         enter.setOnClickListener(v -> {
-            String role = db.login(field.getText().toString());
+            String role = db.openSession(field.getText().toString());
             if (role.isEmpty()) {
                 field.setText("");
                 field.setError("كلمة السر غير صحيحة");
