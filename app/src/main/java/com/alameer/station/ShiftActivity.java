@@ -1078,8 +1078,10 @@ public class ShiftActivity extends Activity {
     private void finishShift(String reason){
         final long closed=shiftId;
         final boolean historical=db.isHistorical(closed);
+        final boolean matched=reason.isEmpty();
         db.submit(closed,workerId,reason);
-        db.approve(closed);
+        // المطابقة وحدها تُعتمد؛ غير المطابقة تبقى «مُرسلة» بانتظار المدير.
+        if(matched)db.approve(closed);else db.closeUnmatched(closed);
         String posted=db.postShift(closed,db.defaultCashbox());
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
@@ -1092,7 +1094,7 @@ public class ShiftActivity extends Activity {
                 .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
                 .setNegativeButton("لاحقًا",null);
         }else{
-            done.setMessage(base+"\nالوردية غير مطابقة، لذلك لا يمكن إخراج تقرير PDF أو Excel لها.")
+            done.setMessage(base+"\nالوردية غير مطابقة: حالتها «بانتظار اعتماد المدير» ولا يمكن إخراج تقرير لها.")
                 .setPositiveButton("حسنًا",null);
         }
         done.show();

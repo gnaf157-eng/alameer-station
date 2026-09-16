@@ -268,6 +268,16 @@ public class Db extends SQLiteOpenHelper {
     public void markSynced(long shiftId){ContentValues v=new ContentValues();v.put("sync_state","SYNCED");getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});}
     public Cursor syncReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT p.name,p.fuel,r.previous,r.current,r.price,r.sales FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY p.id",new String[]{String.valueOf(shiftId)});}
     public Cursor syncMovements(long shiftId){return getReadableDatabase().rawQuery("SELECT type,name,amount FROM movements WHERE shift_id=? ORDER BY id",new String[]{String.valueOf(shiftId)});}
+    /** الوردية غير المطابقة تبقى مُرسلة بانتظار المدير، ولا تُعتمد تلقائيًا. */
+    public void closeUnmatched(long shiftId){
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            if(!isHistorical(shiftId))db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});
+            audit(db,shiftId,1,"CLOSE_UNMATCHED","أُغلقت بفارق وتنتظر مراجعة المدير");
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
     public void approve(long shiftId){SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{if(!isHistorical(shiftId))db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});ContentValues v=new ContentValues();v.put("status","APPROVED");v.put("sync_state","PENDING");db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"APPROVE","اعتماد المدير");db.setTransactionSuccessful();}finally{db.endTransaction();}}
     public void returnToWorker(long shiftId,String note){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("status","RETURNED");v.put("manager_note",note);v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"RETURN","إرجاع للعامل: "+note);}
     public String shiftStatus(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){return c.moveToFirst()?c.getString(0):"OPEN";}}
@@ -648,9 +658,16 @@ public class Db extends SQLiteOpenHelper {
         }
     }
     /** إجمالي الديون غير المسدّدة على المدينين النشطين. */
+    /** الديون المستحقة فقط؛ الأرصدة الدائنة لا تُطرح منها. */
     public double debtsTotal(){
         double total=0;
-        try(Cursor c=debtors(true)){while(c.moveToNext())total+=c.getDouble(7);}
+        try(Cursor c=debtors(true)){while(c.moveToNext()){double b=c.getDouble(7);if(b>0.009)total+=b;}}
+        return total;
+    }
+    /** مجموع ما للزبائن علينا (الأرصدة السالبة) كقيمة موجبة. */
+    public double creditsTotal(){
+        double total=0;
+        try(Cursor c=debtors(true)){while(c.moveToNext()){double b=c.getDouble(7);if(b<-0.009)total-=b;}}
         return total;
     }
     public long addDebtEntry(long debtorId,String direction,double amount,String note,String date){

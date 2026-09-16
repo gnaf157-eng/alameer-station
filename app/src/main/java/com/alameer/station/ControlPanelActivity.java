@@ -257,10 +257,21 @@ public class ControlPanelActivity extends Activity {
                         String.valueOf(daysSince(db.debtorLastActivity(c.getLong(0))))});
             }
         }
-        rows.sort((a, b) -> Double.compare(Math.abs(Double.parseDouble(b[1])),
-                Math.abs(Double.parseDouble(a[1]))));
+        rows.sort((a, b) -> {
+            double x = Double.parseDouble(a[1]), y = Double.parseDouble(b[1]);
+            boolean xc = x < -0.009, yc = y < -0.009;
+            if (xc != yc) return xc ? 1 : -1;
+            return Double.compare(Math.abs(y), Math.abs(x));
+        });
         if (rows.isEmpty()) body.addView(emptyLine("لا ديون مستحقة."));
+        boolean creditHeaderShown = false;
         for (String[] row : rows) {
+            if (Double.parseDouble(row[1]) < -0.009 && !creditHeaderShown) {
+                creditHeaderShown = true;
+                TextView head = text("أرصدة لهم عندنا", 12, Util.GREEN, true);
+                head.setPadding(dp(14), dp(12), dp(14), dp(6));
+                body.addView(head);
+            }
             double balance = Double.parseDouble(row[1]);
             int idle = Integer.parseInt(row[2]);
             // الرصيد السالب يعني أن الزبون دفع أكثر مما عليه.

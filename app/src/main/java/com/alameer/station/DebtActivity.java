@@ -81,15 +81,16 @@ public class DebtActivity extends Activity {
     /** بطاقة إجمالي الديون غير المسدّدة. */
     private void refreshSummary() {
         summaryBox.removeAllViews();
-        double total = 0, debt = 0, paid = 0;
+        double total = 0, credit = 0, paid = 0;
         int count = 0, settled = 0;
         try (Cursor c = db.debtors(true)) {
             while (c.moveToNext()) {
                 count++;
-                total += c.getDouble(7);
-                debt += c.getDouble(5);
+                double balance = c.getDouble(7);
+                if (balance > 0.009) total += balance;
+                else if (balance < -0.009) credit -= balance;
+                else settled++;
                 paid += c.getDouble(6);
-                if (Math.abs(c.getDouble(7)) < 0.01) settled++;
             }
         }
         LinearLayout card = new LinearLayout(this);
@@ -103,7 +104,7 @@ public class DebtActivity extends Activity {
         card.addView(grand);
         LinearLayout stats = new LinearLayout(this);
         stats.addView(stat("المدينون", String.valueOf(count)), cell());
-        stats.addView(stat("إجمالي المسدّد", money(paid)), cell());
+        stats.addView(stat("لهم عندنا", money(credit)), cell());
         stats.addView(stat("مسدّدون بالكامل", String.valueOf(settled)), cell());
         card.addView(stats);
         summaryBox.addView(card);
@@ -115,8 +116,17 @@ public class DebtActivity extends Activity {
         listBox.removeAllViews();
         listBox.addView(sectionTitle("المدينون — اضغط على المدين لتسجيل حركة"));
         int count = 0;
+        boolean creditHeaderShown = false;
+        // جولتان: 0 للمستحق عليهم والمقفلة حساباتهم، 1 لأصحاب الرصيد الدائن مجموعين.
+        for (int pass = 0; pass < 2; pass++) {
         try (Cursor c = db.debtors(false)) {
             while (c.moveToNext()) {
+                boolean isCredit = c.getDouble(7) < -0.009;
+                if (isCredit != (pass == 1)) continue;
+                if (isCredit && !creditHeaderShown) {
+                    creditHeaderShown = true;
+                    listBox.addView(sectionTitle("أرصدة لهم عندنا"));
+                }
                 count++;
                 final long id = c.getLong(0);
                 final String name = c.getString(1);
@@ -180,6 +190,7 @@ public class DebtActivity extends Activity {
                 card.setOnLongClickListener(v -> { debtorOptions(id, name, phone, opening); return true; });
                 listBox.addView(card, space());
             }
+        }
         }
         if (count == 0) {
             LinearLayout empty = panel();

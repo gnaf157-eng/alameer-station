@@ -18,11 +18,21 @@ public class ArchiveActivity extends Activity {
             if(c.getCount()==0)root.addView(Util.card(this,"لا توجد ورديات محفوظة بعد."),Util.spaced());
             while(c.moveToNext()){
                 double bal=c.getDouble(5);String note=c.getString(7);
-                TextView card=Util.card(this,"وردية #"+c.getLong(0)+" — "+c.getString(1)+"\n"+c.getString(2)+"\nالحالة: "+status(c.getString(3))+" | المبيعات: "+fmt(c.getDouble(4))+"\nالباقي: "+fmt(bal)+" | المزامنة: "+sync(c.getString(6))+(note==null||note.isEmpty()?"":"\nملاحظة المدير: "+note));
-                card.setTextColor(Math.abs(bal)<0.01?Util.GREEN:Util.RED);
+                boolean ok=Math.abs(bal)<0.01;
+                TextView card=Util.card(this,"وردية #"+c.getLong(0)+" — "+c.getString(1)+"\n"+c.getString(2)
+                    +"\nالحالة: "+status(c.getString(3))+" | المبيعات: "+fmt(c.getDouble(4))
+                    +"\nالباقي: "+fmt(bal)+" | المزامنة: "+sync(c.getString(6))
+                    +(ok?"":"\n⚠ غير مطابقة — "+(bal>0?"عجز ":"زيادة ")+fmt(Math.abs(bal))+" ريال")
+                    +(note==null||note.isEmpty()?"":"\nملاحظة المدير: "+note));
+                card.setTextColor(ok?Util.GREEN:Util.RED);
                 final long shiftId=c.getLong(0);
                 card.setClickable(true);
-                card.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+shiftId).setMessage("أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة.").setPositiveButton("تقرير PDF",(d,w)->exportPdf(shiftId)).setNegativeButton("إغلاق",null).show());
+                final boolean matched=ok;
+                card.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+shiftId)
+                    .setMessage(matched?"أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة."
+                        :"هذه الوردية غير مطابقة، ولا يمكن إخراج تقرير لها حتى يُصحَّح الفرق.")
+                    .setPositiveButton(matched?"تقرير PDF":"حسنًا",matched?(d,w)->exportPdf(shiftId):null)
+                    .setNegativeButton(matched?"إغلاق":null,null).show());
                 root.addView(card,Util.spaced());
             }
         }
