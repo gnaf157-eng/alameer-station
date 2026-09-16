@@ -258,24 +258,66 @@ public class ControlPanelActivity extends Activity {
         ask.show();
     }
 
-    /** يرحّل الورديات القديمة إلى الدفتر، ويعرض ما رُفض منها ولماذا. */
+    /**
+     * يرحّل الورديات القديمة إلى الدفتر.
+     * إذا كانت فترتها مقفلة، يطلب السبب مرة واحدة ثم يفتحها ويرحّل ويعيد إقفالها تلقائيًا.
+     */
     private void runBacklog() {
+        final String blocked = db.blockingPeriod();
+        if (blocked.isEmpty()) { doBacklog(""); return; }
+
+        final EditText reason = new EditText(this);
+        reason.setHint("سبب فتح الفترة مؤقتًا");
+        reason.setText("ترحيل ورديات مُغلقة قبل تفعيل الدفتر");
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(10), dp(24), 0);
+        wrap.addView(reason);
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("الفترة " + blocked + " مقفلة")
+                .setMessage("سأفتح الفترة، وأرحّل الورديات، ثم أعيد إقفالها — كل ذلك مسجّل في سجل التدقيق.")
+                .setView(wrap)
+                .setPositiveButton("افتح ورحّل", (d, w) -> {
+                    String why = reason.getText().toString().trim();
+                    if (why.isEmpty()) why = "ترحيل ورديات مُغلقة";
+                    try { db.unlockPeriod(blocked, why); }
+                    catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    doBacklog(blocked);
+                })
+                .setNegativeButton("إلغاء", null)
+                .show();
+    }
+
+    /** ينفّذ الترحيل، ثم يعيد إقفال الفترة إن كانت مقفلة قبله ونجح الترحيل كاملًا. */
+    private void doBacklog(String relock) {
         String report;
         try { report = db.journalBacklog(); }
         catch (Exception e) { report = "تعذّر الترحيل: " + e.getMessage(); }
+
+        int stillWaiting = 0;
+        try (Cursor c = db.unpostedShifts()) { stillWaiting = c.getCount(); }
+        if (!relock.isEmpty() && stillWaiting == 0) {
+            try {
+                db.lockPeriod(relock, "أُعيد الإقفال بعد الترحيل");
+                report = report + "\n\nأُعيد إقفال الفترة " + relock + ".";
+            } catch (Exception e) {
+                report = report + "\n\nتعذّر إعادة الإقفال: " + e.getMessage();
+            }
+        } else if (!relock.isEmpty()) {
+            report = report + "\n\nبقيت الفترة " + relock + " مفتوحة حتى تكتمل الورديات.";
+        }
         build();
 
         int unexplained = 0;
         try (Cursor c = db.unexplainedShifts()) { unexplained = c.getCount(); }
-        // الفترة المقفلة أشيع سبب للرفض، فتُعرض معالجتها مباشرة.
-        final String blocked = db.blockingPeriod();
         android.app.AlertDialog.Builder done = new android.app.AlertDialog.Builder(this)
                 .setTitle("ترحيل الورديات")
                 .setMessage(report);
-        if (!blocked.isEmpty())
-            done.setPositiveButton("فتح الفترة " + blocked, (d, w) -> unlockDialog(blocked));
-        else if (unexplained > 0)
-            done.setPositiveButton("تعليل الفروقات", (d, w) -> settleDialog());
+        if (unexplained > 0) done.setPositiveButton("تعليل الفروقات", (d, w) -> settleDialog());
         done.setNegativeButton("حسنًا", null);
         done.show();
     }
@@ -304,11 +346,18 @@ public class ControlPanelActivity extends Activity {
                 .setPositiveButton("حفظ وترحيل", (d, w) -> {
                     try {
                         db.settleShift(shiftId, input.getText().toString());
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    // السبب حُفظ؛ الترحيل قد يصطدم بفترة مقفلة فيُعالَج تلقائيًا.
+                    try {
                         db.journalShift(shiftId);
                         build();
                         settleDialog();
                     } catch (Exception e) {
-                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                        build();
+                        runBacklog();
                     }
                 })
                 .setNegativeButton("لاحقًا", null)
