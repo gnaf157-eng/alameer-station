@@ -1,0 +1,158 @@
+name: Build car counter APK
+
+on:
+  push:
+    branches: [ main, 'arena/**' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  carcounter:
+    name: اختبارات منطق العدّ + بناء APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: تجهيز Android SDK من صورة المشغّل
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then SDK=/usr/local/lib/android/sdk; fi
+          echo "Android SDK: $SDK"
+          ls "$SDK" || true
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -n "$SDKMANAGER" ]; then
+            (yes || true) | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          fi
+          echo "--- platforms ---"; ls "$SDK/platforms" || true
+          echo "--- build-tools ---"; ls "$SDK/build-tools" || true
+
+      - name: إصدارات الأدوات
+        run: |
+          java -version
+          ./gradlew --version
+
+      - name: اختبارات منطق العدّ والتتبّع
+        run: ./gradlew --no-daemon --stacktrace :carcounter:testDebugUnitTest
+
+      - name: بناء نسخة APK قابلة للتثبيت
+        run: ./gradlew --no-daemon --stacktrace :carcounter:assembleDebug
+
+      - name: التحقق من النموذج والأذونات وحجم APK
+        run: |
+          set -e
+          APK=carcounter/build/outputs/apk/debug/carcounter-debug.apk
+          echo "--- حجم APK ---"
+          ls -lh "$APK"
+          du -h carcounter/src/main/assets/model.tflite
+          APK_BYTES=$(stat -c%s "$APK")
+          echo "APK bytes: $APK_BYTES"
+          if [ "$APK_BYTES" -gt 35000000 ]; then
+            echo "::error::حجم APK أكبر من المتوقع — تأكد من فلترة معالجات الهواتف (abiFilters)"
+            exit 1
+          fi
+          echo "--- محتويات lib داخل APK ---"
+          unzip -l "$APK" | grep -E "lib/" | awk '{print $4}' | sed 's|/[^/]*$||' | sort -u
+
+          echo "--- النموذج داخل APK ---"
+          unzip -l "$APK" | grep -E "assets/model.tflite"
+          unzip -l "$APK" | grep -E "lib/arm64-v8a/libtensorflowlite" | head -3
+
+          echo "--- الأذونات ---"
+          AAPT2="$(ls "${ANDROID_SDK_ROOT}"/build-tools/*/aapt2 | tail -1)"
+          "$AAPT2" dump badging "$APK" | grep -E "^package:|uses-permission|uses-feature" || true
+          if "$AAPT2" dump badging "$APK" | grep -q "uses-permission: name='android.permission.INTERNET'"; then
+            echo "::error::التطبيق يطلب إذن الإنترنت وهذا مرفوض"
+            exit 1
+          fi
+          "$AAPT2" dump badging "$APK" | grep -q "uses-permission: name='android.permission.CAMERA'"
+          echo "OK: لا يوجد إذن إنترنت، وإذن الكاميرا موجود"
+
+          echo "--- اسم الحزمة والتطبيق ---"
+          "$AAPT2" dump badging "$APK" | grep -q "package: name='com.abognaf.carcounter'"
+          "$AAPT2" dump badging "$APK" | grep -E "^package:|^application-label" || true
+          echo "OK: اسم الحزمة com.abognaf.carcounter"
+
+          echo "--- أسماء الأصناف داخل النموذج ---"
+          python3 - <<'PY'
+          data = open('carcounter/src/main/assets/model.tflite', 'rb').read()
+          print('model bytes:', len(data))
+          expected = [b'car', b'truck', b'bus', b'motorcycle', b'bicycle', b'person']
+          for word in expected:
+              print(word.decode(), '->', word in data)
+          for word in [b'car', b'truck', b'bus', b'motorcycle']:
+              assert word in data, 'labelmap is missing: ' + word.decode()
+          index = data.find(b'car\n')
+          print('labelmap context:', repr(data[max(0, index - 160):index + 260]))
+          print('OK: النموذج يحتوي أسماء أصناف المركبات المتوقعة')
+          PY
+
+      - name: تجهيز ملف APK
+        run: cp carcounter/build/outputs/apk/debug/carcounter-debug.apk CarCounter-v1.0.0-debug.apk
+
+      - name: رفع ملف APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarCounter-APK
+          path: CarCounter-v1.0.0-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: نشر أحدث نسخة في صفحة الإصدارات
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view carcounter-latest >/dev/null 2>&1 || \
+            gh release create carcounter-latest \
+              --title "عداد السيارات — أحدث نسخة" \
+              --notes "نسخة (debug) قابلة للتثبيت مباشرة على الهاتف. التطبيق يعمل بالكامل بدون إنترنت."
+          gh release upload carcounter-latest CarCounter-v1.0.0-debug.apk --clobber
+
+  existing-app:
+    name: التأكد من أن تطبيق الورديات ما زال يُبنى
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: تجهيز Android SDK من صورة المشغّل
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then SDK=/usr/local/lib/android/sdk; fi
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          if [ -n "$SDKMANAGER" ]; then
+            (yes || true) | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          fi
+
+      - name: Build shifts app (verification only)
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="space_s">8dp</dimen>
+    <dimen name="space_m">12dp</dimen>
+    <dimen name="card_radius">14dp</dimen>
+    <dimen name="counter_text">32sp</dimen>
+</resources>

@@ -12,3 +12,11 @@ app/release/
 *.jks
 *.keystore
 signing.properties
+
+# ---------------------------------------------------------------------------
+# تطبيق "عداد السيارات": ملف النموذج يُنزَّل وقت البناء ولا يُرفع للمستودع.
+# (يمكن وضعه يدويًا في carcounter/models/model.tflite قبل البناء)
+# ---------------------------------------------------------------------------
+carcounter/src/main/assets/model.tflite
+carcounter/src/main/assets/*.part
+carcounter/models/*.tflite
