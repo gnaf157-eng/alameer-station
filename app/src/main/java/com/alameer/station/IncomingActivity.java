@@ -33,8 +33,8 @@ public class IncomingActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("ورديات العامل", 19, Color.WHITE, true));
-        words.addView(text("تصل من جهاز العامل — راجعها ثم اعتمدها", 11, 0xffCFE2FA, false));
+        words.addView(text("سجل الورديات المنتظرة", 19, Color.WHITE, true));
+        words.addView(text("اضغط الوردية لمراجعتها ثم ترحيلها إلى الدفاتر", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -43,7 +43,7 @@ public class IncomingActivity extends Activity {
         content.setPadding(dp(14), dp(12), dp(14), dp(24));
 
         Button pick = new Button(this);
-        pick.setText("⟳  جلب ورديات العامل");
+        pick.setText("⟳  تحديث السجل");
         pick.setAllCaps(false);
         pick.setTextSize(16);
         pick.setTextColor(Color.WHITE);
@@ -85,7 +85,6 @@ public class IncomingActivity extends Activity {
 
     private void refresh() {
         listBox.removeAllViews();
-        listBox.addView(text("بانتظار الاعتماد", 16, Util.NAVY, true));
         int count = 0;
         try (Cursor c = db.incomingShifts()) {
             while (c.moveToNext()) {
@@ -93,79 +92,53 @@ public class IncomingActivity extends Activity {
                 final long id = c.getLong(0);
                 final String who = c.getString(1);
                 String date = c.getString(2);
-                double sales = c.getDouble(3), balance = c.getDouble(4);
+                double balance = c.getDouble(4);
+                int pumps = c.getInt(5);
                 boolean matched = Math.abs(balance) < 0.01;
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
-                card.setPadding(dp(15), dp(14), dp(15), dp(14));
-                card.setBackground(Util.round(Color.WHITE, dp(16)));
+                card.setPadding(dp(16), dp(15), dp(16), dp(15));
+                card.setBackground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x18000000),
+                        Util.round(Color.WHITE, dp(16)), null));
                 card.setElevation(dp(2));
-                card.addView(text("وردية #" + id + " — " + who, 17, Util.NAVY, true));
-                card.addView(text(date + "  •  مبيعات " + money(sales) + " ر.ي", 13, 0xff7c8186, false));
-                card.addView(text(matched ? "مطابقة" : "فرق " + money(Math.abs(balance)) + " ر.ي "
-                                + (balance > 0 ? "(عجز على العامل)" : "(زيادة)"),
-                        14, matched ? Util.GREEN : Util.RED, true));
+                card.setClickable(true);
+                card.setOnClickListener(v -> review(id));
 
-                Button review = new Button(this);
-                review.setText("فتح للمراجعة والتعديل");
-                review.setAllCaps(false);
-                review.setTextColor(Color.WHITE);
-                review.setBackground(Util.round(Util.NAVY, dp(12)));
-                review.setOnClickListener(v -> {
-                    try {
-                        db.reopenShift(id, "مراجعة المدير");
-                        Intent open = new Intent(this, ShiftActivity.class);
-                        open.putExtra("openShift", id);
-                        startActivity(open);
-                    } catch (Exception e) {
-                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
-                    }
-                });
-                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-                rp.setMargins(0, dp(10), 0, 0);
-                card.addView(review, rp);
+                // اسم العامل أولًا، فهو عنوان الوردية.
+                card.addView(text(who, 19, Util.NAVY, true));
+                card.addView(text(pumps + " طرمبة  •  " + date, 14, 0xff667078, false));
+                card.addView(text(matched ? "مطابقة — جاهزة للترحيل"
+                                : "فرق " + money(Math.abs(balance)) + " ر.ي "
+                                  + (balance > 0 ? "(عجز على العامل)" : "(زيادة)"),
+                        13, matched ? Util.GREEN : Util.RED, true));
 
-                Button approve = new Button(this);
-                approve.setText("اعتماد وترحيل");
-                approve.setAllCaps(false);
-                approve.setTextColor(Color.WHITE);
-                approve.setBackground(Util.round(Util.GREEN, dp(12)));
-                approve.setOnClickListener(v -> approve(id, who, balance));
-                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
-                bp.setMargins(0, dp(8), 0, 0);
-                card.addView(approve, bp);
+                TextView go = text("اضغط للمراجعة والترحيل  ‹", 12, Util.ACCENT, true);
+                go.setPadding(0, dp(8), 0, 0);
+                card.addView(go);
 
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-                cp.setMargins(0, dp(8), 0, dp(4));
+                cp.setMargins(0, dp(6), 0, dp(6));
                 listBox.addView(card, cp);
             }
         }
-        if (count == 0) listBox.addView(text("لا توجد ورديات واردة. اضغط «جلب ورديات العامل».", 14, 0xff777d84, false));
+        if (count == 0)
+            listBox.addView(text("لا توجد ورديات منتظرة.\nالورديات الواردة من العامل تظهر هنا.",
+                    14, 0xff777d84, false));
     }
 
-    /** الاعتماد يرحّل الوردية ويقيّدها؛ الفرق يبقى محسوبًا على العامل. */
-    private void approve(final long id, String who, double balance) {
-        boolean matched = Math.abs(balance) < 0.01;
-        String message = matched
-                ? "ستُرحَّل الوردية إلى الصناديق والديون والمخزون، ويُسجَّل قيدها المحاسبي."
-                : "الفرق " + money(Math.abs(balance)) + " ر.ي سيُقيَّد على عهدة " + who
-                  + " ويظهر في حسابه، ثم تُرحَّل الوردية ويُسجَّل قيدها.";
-        new AlertDialog.Builder(this).setTitle("اعتماد وردية #" + id)
-                .setMessage(message)
-                .setPositiveButton("اعتماد", (d, w) -> {
-                    try {
-                        if (!matched) db.settleShift(id, "فرق محسوب على العامل");
-                        String posted = db.approveIncoming(id, db.defaultCashbox());
-                        new AlertDialog.Builder(this).setTitle("اعتُمدت الوردية #" + id)
-                                .setMessage(posted.isEmpty() ? "تمّ الاعتماد والترحيل." : "رُحّلت:\n" + posted)
-                                .setPositiveButton("حسنًا", null).show();
-                        refresh();
-                    } catch (Exception e) {
-                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
-                    }
-                })
-                .setNegativeButton("إلغاء", null).show();
+    /** يفتح الوردية في خانات المطابقة ليراجعها المدير قبل الترحيل. */
+    private void review(long id) {
+        try {
+            db.reopenShift(id, "مراجعة المدير");
+            Intent open = new Intent(this, ShiftActivity.class);
+            open.putExtra("openShift", id);
+            open.putExtra("reviewing", true);
+            startActivity(open);
+        } catch (Exception e) {
+            Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+        }
     }
 
     private TextView text(String value, int size, int color, boolean bold) {

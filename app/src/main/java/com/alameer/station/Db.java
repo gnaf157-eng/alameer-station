@@ -1287,9 +1287,11 @@ public class Db extends SQLiteOpenHelper {
     }
 
     /** الورديات الواردة من العامل بانتظار الاعتماد: 0=id,1=عامل,2=تاريخ,3=مبيعات,4=الباقي. */
+    /** 0=id,1=عامل,2=تاريخ,3=مبيعات,4=الباقي,5=عدد الطرمبات */
     public Cursor incomingShifts(){
         return getReadableDatabase().rawQuery(
-            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.sales,s.balance "+
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.sales,s.balance,"+
+            "(SELECT COUNT(*) FROM readings r WHERE r.shift_id=s.id AND r.current IS NOT NULL) "+
             "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
             "WHERE s.status='SUBMITTED' ORDER BY s.id DESC",null);
     }

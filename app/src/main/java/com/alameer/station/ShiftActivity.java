@@ -18,7 +18,7 @@ public class ShiftActivity extends Activity {
         }
         // فتح وردية بعينها قادمًا من شاشة ورديات العامل.
         long requested=getIntent().getLongExtra("openShift",0);
-        if(requested>0)shiftId=requested;
+        if(requested>0){shiftId=requested;reviewing=getIntent().getBooleanExtra("reviewing",false);}
         build();
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
@@ -41,6 +41,8 @@ public class ShiftActivity extends Activity {
     LinearLayout navBar;
     int settingsReturnPage=0;
     boolean settingsOnly=false;
+    boolean reviewing=false;
+    Button postButton;
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance,stationTitle;
@@ -157,6 +159,12 @@ public class ShiftActivity extends Activity {
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
         Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
         Button close=action("إغلاق الوردية وبدء وردية جديدة",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
+        // المرحلة الأخيرة في رحلة الوردية: الترحيل إلى الدفاتر بعد مراجعة المدير.
+        postButton=action("ترحيل إلى الدفاتر  ✓",true);
+        postButton.setOnClickListener(v->postToBooks());
+        postButton.setVisibility(reviewing?View.VISIBLE:View.GONE);
+        pages[2].addView(postButton,space());
+        if(reviewing)close.setVisibility(View.GONE);
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
@@ -1488,6 +1496,33 @@ public class ShiftActivity extends Activity {
         }catch(Exception e){
             Toast.makeText(this,"تعذر تجهيز ملف الوردية: "+e.getMessage(),Toast.LENGTH_LONG).show();
         }
+    }
+    /** يرحّل الوردية المراجَعة إلى الدفاتر: اعتماد وترحيل وقيد مزدوج. */
+    private void postToBooks(){
+        if(!saveReadings())return;
+        String issue=db.validateShift(shiftId);
+        if(!issue.isEmpty()){Toast.makeText(this,issue,Toast.LENGTH_LONG).show();return;}
+        final long id=shiftId;
+        double balance=db.balance(id);
+        final boolean matched=Math.abs(balance)<0.01;
+        String message=matched
+            ? "ستُرحَّل الوردية إلى الصناديق والديون والمخزون، ويُسجَّل قيدها المحاسبي."
+            : "الفرق "+money(Math.abs(balance))+" ر.ي سيُقيَّد على عهدة العامل ويظهر في حسابه، ثم تُرحَّل الوردية.";
+        new AlertDialog.Builder(this).setTitle("ترحيل الوردية #"+id+" إلى الدفاتر")
+            .setMessage(message)
+            .setPositiveButton("ترحيل",(d,w)->{
+                try{
+                    db.submit(id,workerId,matched?"":"فرق محسوب على العامل");
+                    if(!matched)db.settleShift(id,"فرق محسوب على العامل");
+                    String posted=db.approveIncoming(id,db.defaultCashbox());
+                    new AlertDialog.Builder(this).setTitle("رُحّلت الوردية #"+id)
+                        .setMessage(posted.isEmpty()?"تمّ الترحيل والتقييد في الدفاتر.":"رُحّلت:\n"+posted)
+                        .setPositiveButton("حسنًا",(a,b)->finish()).show();
+                }catch(Exception e){
+                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("إلغاء",null).show();
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
