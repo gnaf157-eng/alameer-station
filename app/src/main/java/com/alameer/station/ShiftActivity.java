@@ -216,7 +216,8 @@ public class ShiftActivity extends Activity {
         back.setOnClickListener(v->{showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
         pages[4].addView(back,space());
-        buildStationSettings();
+        final boolean boss=Db.managerMode();
+        if(boss)buildStationSettings();
 
         pages[4].addView(sectionTitle("اسم العامل"));
         LinearLayout nameBox=panel(Color.WHITE);
@@ -231,7 +232,9 @@ public class ShiftActivity extends Activity {
         nameBox.addView(nameRow);
         pages[4].addView(nameBox,space());
 
+        if(boss){
         pages[4].addView(sectionTitle("أسعار اللتر"));
+
         LinearLayout priceBox=panel(Color.WHITE);
         int types=0;
         try(Cursor c=db.fuelPrices()){
@@ -255,8 +258,9 @@ public class ShiftActivity extends Activity {
         }
         if(types==0)priceBox.addView(text("لا توجد طرمبات نشطة بعد.",15,0xff777d84,false));
         pages[4].addView(priceBox,space());
+        }
 
-        pages[4].addView(sectionTitle("الطرمبات"));
+        pages[4].addView(sectionTitle(boss?"الطرمبات":"الطرمبات — إيقاف أو تفعيل"));
         LinearLayout pumpBox=panel(Color.WHITE);
         try(Cursor c=db.pumps()){
             while(c.moveToNext()){
@@ -280,26 +284,30 @@ public class ShiftActivity extends Activity {
                     }
                     db.setPumpActive(id,!active);refreshAll();});
                 row.addView(toggle);
-                Button edit=action("تعديل",false);edit.setTextSize(14);
-                edit.setOnClickListener(v->pumpDialog(id,name,fuel,price,reading));
-                row.addView(edit);
+                if(boss){
+                    Button edit=action("تعديل",false);edit.setTextSize(14);
+                    edit.setOnClickListener(v->pumpDialog(id,name,fuel,price,reading));
+                    row.addView(edit);
+                }
                 pumpBox.addView(row);
                 View line=new View(this);line.setBackgroundColor(0xffeceef0);
                 pumpBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
             }
         }
         pages[4].addView(pumpBox,space());
-        Button addPump=action("＋  إضافة طرمبة",true);
-        addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
-        pages[4].addView(addPump,space());
+        if(boss){
+            Button addPump=action("＋  إضافة طرمبة",true);
+            addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
+            pages[4].addView(addPump,space());
 
-        buildLinkSettings();
-        buildTankSettings();
-        buildThresholdSettings();
+            buildLinkSettings();
+            buildTankSettings();
+            buildThresholdSettings();
 
-        Button backupBtn=action("نسخة احتياطية",false);
-        backupBtn.setOnClickListener(v->new Backup(this).export());
-        pages[4].addView(backupBtn,space());
+            Button backupBtn=action("نسخة احتياطية",false);
+            backupBtn.setOnClickListener(v->new Backup(this).export());
+            pages[4].addView(backupBtn,space());
+        }
         pages[4].addView(sectionTitle("حول التطبيق"));
         LinearLayout about=panel(Color.WHITE);
         about.addView(text("طابق ورحّل  •  "+BuildConfig.VERSION_NAME,19,Util.NAVY,true));
@@ -633,6 +641,7 @@ public class ShiftActivity extends Activity {
     private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
     private void refreshAll(){db.syncShiftWithSettings(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
     private void fuelPriceDialog(String fuel,double current){
+        if(!Db.managerMode())return; // إعداد إداري لا يفتحه العامل
         EditText price=new EditText(this);styleInput(price);
         price.setHint("سعر اللتر بالريال");
         price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -651,6 +660,7 @@ public class ShiftActivity extends Activity {
         d.show();
     }
     private void pumpDialog(long id,String oldName,String oldFuel,double oldPrice,double oldReading){
+        if(!Db.managerMode())return; // إعداد إداري لا يفتحه العامل
         boolean creating=id==0;
         LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);
         EditText name=dialogInput("اسم الطرمبة",oldName,false);
