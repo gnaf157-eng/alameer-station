@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">عداد السيارات</string>
+    <string name="total">إجمالي السيارات</string>
+    <string name="in_count">الداخل</string>
+    <string name="out_count">الخارج</string>
+    <string name="start">بدء العد</string>
+    <string name="stop">إيقاف العد</string>
+    <string name="reset">تصفير العدادات</string>
+    <string name="swap">عكس الاتجاه</string>
+    <string name="hint_line">اسحب الخط الأصفر لتحديد مكان العد</string>
+    <string name="status_stopped">العد متوقف</string>
+    <string name="status_running">جارٍ العد…</string>
+    <string name="camera_permission_needed">يحتاج التطبيق إلى إذن الكاميرا للعمل</string>
+    <string name="model_error">تعذر تحميل نموذج الاكتشاف</string>
+</resources>

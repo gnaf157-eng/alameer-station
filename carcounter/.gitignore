@@ -1,0 +1,12 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+build/
+captures/
+*.apk
+*.aab
+*.jks
+*.keystore
+# النموذج يُنزَّل تلقائيًا أثناء البناء
+app/src/main/assets/*.tflite
