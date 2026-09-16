@@ -40,8 +40,8 @@ jobs:
           APK=app/build/outputs/apk/debug/app-debug.apk
           ls -la app/src/main/assets/
           unzip -lv "$APK" | grep -E "assets/.*tflite|lib/.*tensorflowlite" || true
-          unzip -p "$APK" assets/efficientdet_lite0.tflite | head -c 8 | od -c
-          unzip -p "$APK" assets/efficientdet_lite0.tflite | head -c 8 | tail -c 4 | grep -q TFL3
+          unzip -p "$APK" assets/detect.tflite | head -c 8 | od -c
+          unzip -p "$APK" assets/detect.tflite | head -c 8 | tail -c 4 | grep -q TFL3
           echo "Model OK"
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk CarCounter-v1.0.0-debug.apk

@@ -25,11 +25,11 @@ import java.util.Map;
 
 /**
  * كاشف المركبات باستخدام TensorFlow Lite Interpreter مباشرة (بدون Task Library).
- * النموذج: EfficientDet-Lite0 (COCO) — يعمل محليًا بالكامل دون إنترنت.
+ * النموذج: SSD-MobileNet-v1 (COCO, Quantized) مع ما بعد المعالجة المدمجة — يعمل محليًا دون إنترنت.
  */
 public class VehicleDetector {
 
-    private static final String MODEL = "efficientdet_lite0.tflite";
+    private static final String MODEL = "detect.tflite";
     // فهارس COCO (بدون خلفية): car=2, motorcycle=3, bus=5, truck=7
     private static final int[] VEHICLE_CLASSES = {2, 3, 5, 7};
 

@@ -35,15 +35,23 @@ def isValidModel(File f) {
     f.withInputStream { it.read(h) }
     return new String(h, 4, 4, 'US-ASCII') == 'TFL3'
 }
-def modelFile = file('src/main/assets/efficientdet_lite0.tflite')
-def modelUrl = 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite'
+// نموذج SSD-MobileNet-v1 COCO (Quantized, 300x300, ~4MB) مع مرحلة ما بعد المعالجة المدمجة
+// (يُخرج صناديق جاهزة: boxes[1,10,4] classes[1,10] scores[1,10] count[1])
+def modelFile = file('src/main/assets/detect.tflite')
+def modelZipUrl = 'https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip'
 tasks.register('downloadModel') {
     outputs.file(modelFile)
     onlyIf { !isValidModel(modelFile) }
     doLast {
         modelFile.parentFile.mkdirs()
-        println "Downloading TFLite model -> ${modelFile}"
-        new URL(modelUrl).withInputStream { i -> modelFile.withOutputStream { o -> o << i } }
+        println "Downloading TFLite model zip -> ${modelFile}"
+        File zip = new File(temporaryDir, 'model.zip')
+        new URL(modelZipUrl).withInputStream { i -> zip.withOutputStream { o -> o << i } }
+        def zf = new java.util.zip.ZipFile(zip)
+        def entry = zf.entries().find { it.name.endsWith('detect.tflite') }
+        if (entry == null) throw new GradleException("detect.tflite not found in zip")
+        zf.getInputStream(entry).withStream { i -> modelFile.withOutputStream { o -> o << i } }
+        zf.close()
         if (!isValidModel(modelFile)) throw new GradleException("Downloaded model is invalid: ${modelFile}")
         println "Model OK: ${modelFile.length()} bytes"
     }

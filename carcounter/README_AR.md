@@ -10,7 +10,7 @@
 | المكوّن | التفاصيل |
 |---|---|
 | الكاميرا | CameraX (معاينة + تحليل إطارات بدقة 640×480 لتخفيف الحمل) |
-| الاكتشاف | نموذج **TensorFlow Lite** محلي `EfficientDet-Lite0` (Int8، ≈4.5 ميغابايت) عبر مكتبة Task Vision — يكتشف `car / truck / bus / motorcycle` فقط |
+| الاكتشاف | نموذج **TensorFlow Lite** محلي `SSD-MobileNet-v1 COCO` (Quantized، ≈4 ميغابايت) عبر TFLite Interpreter مباشرة — يكتشف `car / truck / bus / motorcycle` فقط |
 | التتبع | متتبِّع خفيف بمطابقة الصناديق (IoU + المسافة) يعطي كل سيارة **معرّفًا مستقلًا** |
 | العد | يُحتسب المعرّف **مرة واحدة فقط** عند عبور مركز الصندوق لخط العد؛ جهة العبور تحدد "داخل" أو "خارج" |
 | السيارة الواقفة | لا تعبر الخط ⇒ لا تُحسب، ولا يتكرر عدّها مهما طال ظهورها |
@@ -35,9 +35,9 @@ gradle :app:assembleDebug     # أو ./gradlew إذا ولّدت الـ wrapper
 # الناتج: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-> ملاحظة: ملف النموذج `app/src/main/assets/efficientdet_lite0.tflite` **يُنزَّل تلقائيًا** أثناء أول بناء (مهمة `downloadModel`). إذا كان جهاز البناء بلا إنترنت، نزّله يدويًا من:
-> `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite`
-> وضعه في المسار أعلاه. بعد ذلك يعمل التطبيق نفسه بلا إنترنت تمامًا.
+> ملاحظة: ملف النموذج `app/src/main/assets/detect.tflite` **يُنزَّل تلقائيًا** أثناء أول بناء (مهمة `downloadModel`). إذا كان جهاز البناء بلا إنترنت، نزّله يدويًا من:
+> `https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip`
+> واستخرج منه `detect.tflite` إلى المسار أعلاه. بعد ذلك يعمل التطبيق نفسه بلا إنترنت تمامًا.
 
 ## نصائح للاستخدام
 - ثبّت الهاتف بحيث يكون الخط عموديًا على اتجاه سير السيارات.
