@@ -1,68 +1,165 @@
 package com.abognaf.carcounter;
 
 import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.RectF;
 
-import org.tensorflow.lite.support.image.ImageProcessor;
-import org.tensorflow.lite.support.image.TensorImage;
-import org.tensorflow.lite.support.image.ops.Rot90Op;
-import org.tensorflow.lite.task.core.BaseOptions;
-import org.tensorflow.lite.task.vision.detector.Detection;
-import org.tensorflow.lite.task.vision.detector.ObjectDetector;
+import org.tensorflow.lite.DataType;
+import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.Tensor;
 
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
- * كاشف المركبات: نموذج TensorFlow Lite محلي (EfficientDet-Lite0 مدرّب على COCO).
- * يعمل بالكامل على الجهاز دون أي اتصال بالإنترنت.
+ * كاشف المركبات باستخدام TensorFlow Lite Interpreter مباشرة (بدون Task Library).
+ * النموذج: EfficientDet-Lite0 (COCO) — يعمل محليًا بالكامل دون إنترنت.
  */
 public class VehicleDetector {
 
     private static final String MODEL = "efficientdet_lite0.tflite";
-    private static final Set<String> VEHICLE_LABELS =
-            new HashSet<>(Arrays.asList("car", "truck", "bus", "motorcycle"));
+    // فهارس COCO (بدون خلفية): car=2, motorcycle=3, bus=5, truck=7
+    private static final int[] VEHICLE_CLASSES = {2, 3, 5, 7};
 
-    private final ObjectDetector detector;
+    private final Interpreter interpreter;
+    private final float threshold;
+    private final int inW, inH;
+    private final boolean quantizedInput;
+    private final ByteBuffer inputBuf;
+    private final int[] pixels;
+    private final Bitmap inputBitmap;
+    private final Canvas inputCanvas;
+    private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+
+    private final int idxBoxes, idxClasses, idxScores, idxCount, maxDet;
+    private final float[][][] boxes;
+    private final float[][] classes;
+    private final float[][] scores;
+    private final float[] count;
 
     public VehicleDetector(Context ctx, float scoreThreshold) throws IOException {
-        BaseOptions base = BaseOptions.builder().setNumThreads(3).build();
-        ObjectDetector.ObjectDetectorOptions opts = ObjectDetector.ObjectDetectorOptions.builder()
-                .setBaseOptions(base)
-                .setScoreThreshold(scoreThreshold)
-                .setMaxResults(10)
-                .build();
-        detector = ObjectDetector.createFromFileAndOptions(ctx, MODEL, opts);
+        threshold = scoreThreshold;
+        Interpreter.Options opts = new Interpreter.Options();
+        opts.setNumThreads(3);
+        interpreter = new Interpreter(loadModel(ctx), opts);
+
+        Tensor in = interpreter.getInputTensor(0);
+        int[] s = in.shape(); // [1, H, W, 3]
+        inH = s[1];
+        inW = s[2];
+        quantizedInput = in.dataType() == DataType.UINT8;
+        inputBuf = ByteBuffer.allocateDirect(inW * inH * 3 * (quantizedInput ? 1 : 4));
+        inputBuf.order(ByteOrder.nativeOrder());
+        pixels = new int[inW * inH];
+        inputBitmap = Bitmap.createBitmap(inW, inH, Bitmap.Config.ARGB_8888);
+        inputCanvas = new Canvas(inputBitmap);
+
+        // تحديد ترتيب المخرجات (boxes / classes / scores / count) حسب الشكل والاسم
+        int b = -1, c = -1, sc = -1, n = -1, md = 25;
+        int outCount = interpreter.getOutputTensorCount();
+        List<Integer> oneD = new ArrayList<>();
+        for (int i = 0; i < outCount; i++) {
+            Tensor t = interpreter.getOutputTensor(i);
+            int[] sh = t.shape();
+            if (sh.length == 3 && sh[2] == 4) { b = i; md = sh[1]; }
+            else if (sh.length == 1 || (sh.length == 2 && sh[1] == 1 && sh[0] == 1 && t.name().toLowerCase().contains("num"))) n = i;
+            else if (sh.length == 2) oneD.add(i);
+        }
+        for (int i : oneD) {
+            String name = interpreter.getOutputTensor(i).name().toLowerCase();
+            if (name.contains("score")) sc = i;
+            else if (name.contains("class")) c = i;
+        }
+        if (sc < 0 || c < 0) {
+            // ترتيب TFLite_Detection_PostProcess المعتاد: boxes, classes, scores, count
+            if (oneD.size() >= 2) { c = oneD.get(0); sc = oneD.get(1); }
+        }
+        if (b < 0 || c < 0 || sc < 0) throw new IOException("شكل مخرجات النموذج غير متوقع");
+        idxBoxes = b; idxClasses = c; idxScores = sc; idxCount = n; maxDet = md;
+        boxes = new float[1][maxDet][4];
+        classes = new float[1][maxDet];
+        scores = new float[1][maxDet];
+        count = new float[1];
+    }
+
+    private static MappedByteBuffer loadModel(Context ctx) throws IOException {
+        try (AssetFileDescriptor fd = ctx.getAssets().openFd(MODEL);
+             FileInputStream is = new FileInputStream(fd.getFileDescriptor())) {
+            return is.getChannel().map(FileChannel.MapMode.READ_ONLY, fd.getStartOffset(), fd.getDeclaredLength());
+        }
     }
 
     /**
-     * @param bitmap    الإطار الحالي
-     * @param rotation  دوران الصورة بالدرجات (0/90/180/270)
-     * @return صناديق المركبات بإحداثيات الصورة المدوَّرة (المستقيمة)
+     * @param bitmap   الإطار الحالي (بإحداثيات المستشعر)
+     * @param rotation دوران الصورة بالدرجات
+     * @return صناديق المركبات بإحداثيات نسبية (0..1) للصورة المستقيمة
      */
-    public List<RectF> detect(Bitmap bitmap, int rotation) {
-        ImageProcessor proc = new ImageProcessor.Builder()
-                .add(new Rot90Op(-rotation / 90))
-                .build();
-        TensorImage img = proc.process(TensorImage.fromBitmap(bitmap));
-        List<Detection> results = detector.detect(img);
-        List<RectF> out = new ArrayList<>();
-        for (Detection d : results) {
-            if (d.getCategories().isEmpty()) continue;
-            String label = d.getCategories().get(0).getLabel();
-            if (VEHICLE_LABELS.contains(label)) {
-                out.add(new RectF(d.getBoundingBox()));
+    public synchronized List<RectF> detect(Bitmap bitmap, int rotation) {
+        // تدوير + تغيير حجم إلى مدخل النموذج في خطوة رسم واحدة
+        int srcW = bitmap.getWidth(), srcH = bitmap.getHeight();
+        boolean swap = rotation == 90 || rotation == 270;
+        float upW = swap ? srcH : srcW, upH = swap ? srcW : srcH;
+        Matrix m = new Matrix();
+        m.postTranslate(-srcW / 2f, -srcH / 2f);
+        m.postRotate(rotation);
+        m.postScale(inW / upW, inH / upH);
+        m.postTranslate(inW / 2f, inH / 2f);
+        inputCanvas.drawBitmap(bitmap, m, paint);
+
+        inputBitmap.getPixels(pixels, 0, inW, 0, 0, inW, inH);
+        inputBuf.rewind();
+        if (quantizedInput) {
+            for (int p : pixels) {
+                inputBuf.put((byte) ((p >> 16) & 0xFF));
+                inputBuf.put((byte) ((p >> 8) & 0xFF));
+                inputBuf.put((byte) (p & 0xFF));
             }
+        } else {
+            for (int p : pixels) {
+                inputBuf.putFloat(((p >> 16) & 0xFF) / 255f);
+                inputBuf.putFloat(((p >> 8) & 0xFF) / 255f);
+                inputBuf.putFloat((p & 0xFF) / 255f);
+            }
+        }
+        inputBuf.rewind();
+
+        Map<Integer, Object> outputs = new HashMap<>();
+        outputs.put(idxBoxes, boxes);
+        outputs.put(idxClasses, classes);
+        outputs.put(idxScores, scores);
+        if (idxCount >= 0) outputs.put(idxCount, count);
+        interpreter.runForMultipleInputsOutputs(new Object[]{inputBuf}, outputs);
+
+        int n = idxCount >= 0 ? Math.min((int) count[0], maxDet) : maxDet;
+        List<RectF> out = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            if (scores[0][i] < threshold) continue;
+            if (!isVehicle((int) classes[0][i])) continue;
+            float[] bx = boxes[0][i]; // ymin, xmin, ymax, xmax (نسبية)
+            RectF r = new RectF(clamp(bx[1]), clamp(bx[0]), clamp(bx[3]), clamp(bx[2]));
+            if (r.width() > 0.01f && r.height() > 0.01f) out.add(r);
         }
         return out;
     }
 
-    public void close() {
-        detector.close();
+    private static boolean isVehicle(int cls) {
+        for (int v : VEHICLE_CLASSES) if (v == cls) return true;
+        return false;
     }
+
+    private static float clamp(float v) { return Math.max(0f, Math.min(1f, v)); }
+
+    public void close() { interpreter.close(); }
 }

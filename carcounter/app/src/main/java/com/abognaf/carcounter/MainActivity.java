@@ -201,10 +201,7 @@ public class MainActivity extends AppCompatActivity implements VehicleTracker.Li
             float w = swapWH ? image.getHeight() : image.getWidth();
             float h = swapWH ? image.getWidth() : image.getHeight();
             overlay.setImageAspect(w / h);
-            List<RectF> norm = new ArrayList<>(boxes.size());
-            for (RectF r : boxes) {
-                norm.add(new RectF(r.left / w, r.top / h, r.right / w, r.bottom / h));
-            }
+            List<RectF> norm = boxes;
 
             if (counting) {
                 tracker.update(norm);
