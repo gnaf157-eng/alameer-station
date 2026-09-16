@@ -963,6 +963,48 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    // ==================== دور الجهاز وكلمات المرور ====================
+
+    /** هل ضُبطت كلمات المرور لهذا الجهاز بعد؟ */
+    public boolean passwordsSet(){ return !setting("pw_manager","").isEmpty(); }
+
+    /** يضبط كلمتي المرور مرة واحدة عند أول تشغيل. */
+    public void setPasswords(String manager,String worker){
+        String m=manager==null?"":manager.trim();
+        String w=worker==null?"":worker.trim();
+        if(m.length()<4)throw new IllegalArgumentException("كلمة مرور المدير: 4 أحرف على الأقل");
+        if(w.length()<4)throw new IllegalArgumentException("كلمة مرور العامل: 4 أحرف على الأقل");
+        if(m.equals(w))throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا المرور");
+        setSetting("pw_manager",Calc.hash(m));
+        setSetting("pw_worker",Calc.hash(w));
+        audit("device",0,"SET_PASSWORDS","","ضُبطت كلمتا المرور","أول تشغيل");
+    }
+
+    /** يغيّر كلمة مرور دور واحد، بعد التحقّق من الحالية. */
+    public void changePassword(String role,String current,String fresh){
+        String key="MANAGER".equals(role)?"pw_manager":"pw_worker";
+        if(!Calc.hash(current==null?"":current.trim()).equals(setting(key,"")))
+            throw new IllegalArgumentException("كلمة المرور الحالية غير صحيحة");
+        String clean=fresh==null?"":fresh.trim();
+        if(clean.length()<4)throw new IllegalArgumentException("كلمة المرور الجديدة: 4 أحرف على الأقل");
+        String other="MANAGER".equals(role)?"pw_worker":"pw_manager";
+        if(Calc.hash(clean).equals(setting(other,"")))
+            throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا المرور");
+        setSetting(key,Calc.hash(clean));
+        audit("device",0,"CHANGE_PASSWORD",role,"غُيّرت كلمة المرور","");
+    }
+
+    /**
+     * يتحقّق من كلمة المرور ويعيد الدور الذي تفتحه:
+     * MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
+     */
+    public String roleForPassword(String password){
+        String hash=Calc.hash(password==null?"":password.trim());
+        if(hash.equals(setting("pw_manager","")))return "MANAGER";
+        if(hash.equals(setting("pw_worker","")))return "WORKER";
+        return "";
+    }
+
     // ==================== دور الجهاز ====================
 
     /** هل اختير دور هذا الجهاز بعد؟ */
@@ -970,6 +1012,13 @@ public class Db extends SQLiteOpenHelper {
 
     /** جهاز العامل يرى شاشة الوردية وحدها. */
     public boolean workerDevice(){ return "WORKER".equals(setting("device_role","")); }
+
+    /** خروج: يُنسى الدور فتُطلب كلمة المرور من جديد. */
+    public void signOut(){
+        String before=setting("device_role","");
+        setSetting("device_role","");
+        audit("device",0,"SIGN_OUT",before,"خروج","تبديل المستخدم");
+    }
 
     public void setRole(String role){
         String before=setting("device_role","");

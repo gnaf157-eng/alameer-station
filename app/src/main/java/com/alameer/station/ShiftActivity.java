@@ -276,27 +276,49 @@ public class ShiftActivity extends Activity {
         about.addView(call,space());pages[4].addView(about,space());
     }
 
+    /** تغيير كلمة مرور المستخدم الحالي بعد التحقّق من الحالية. */
+    private void changePasswordDialog(final String role){
+        final EditText current=new EditText(this);styleInput(current);
+        current.setHint("كلمة المرور الحالية");
+        current.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        final EditText fresh=new EditText(this);styleInput(fresh);
+        fresh.setHint("كلمة المرور الجديدة");
+        fresh.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);
+        form.addView(current);form.addView(fresh);
+        new AlertDialog.Builder(this).setTitle("تغيير كلمة المرور").setView(form)
+            .setPositiveButton("حفظ",(d,w)->{
+                try{
+                    db.changePassword(role,current.getText().toString(),fresh.getText().toString());
+                    Toast.makeText(this,"غُيّرت كلمة المرور",Toast.LENGTH_LONG).show();
+                }catch(Exception e){Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();}
+            })
+            .setNegativeButton("إلغاء",null).show();
+    }
+
     /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
     private void buildLinkSettings(){
-        pages[4].addView(sectionTitle("دور هذا الجهاز"));
+        pages[4].addView(sectionTitle("المستخدم الحالي"));
         LinearLayout roleBox=panel(Color.WHITE);
         final boolean worker=db.workerDevice();
-        roleBox.addView(text(worker?"جهاز العامل":"جهاز المدير",19,Util.NAVY,true));
-        roleBox.addView(text(worker?"يفتح على شاشة الوردية مباشرة، ويرسلها للمدير."
-                                   :"يفتح الواجهة كاملة لمراجعة الورديات واعتمادها.",13,0xff7c8186,false));
-        Button swap=action(worker?"تحويله إلى جهاز المدير":"تحويله إلى جهاز العامل",false);
-        swap.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("تغيير دور الجهاز")
-            .setMessage(worker?"ستظهر الواجهة كاملة بكل الأيقونات."
-                              :"سيفتح التطبيق على شاشة الوردية وحدها، وتختفي بقية الأيقونات.")
-            .setPositiveButton("تغيير",(d,w)->{
-                db.setRole(worker?"MANAGER":"WORKER");
+        roleBox.addView(text(worker?"العامل":"المدير",19,Util.NAVY,true));
+        roleBox.addView(text(worker?"شاشة الوردية وحدها. للدخول كمدير اخرج ثم أدخل كلمة مروره."
+                                   :"الواجهة كاملة: مراجعة واعتماد وتقارير.",13,0xff7c8186,false));
+        Button out=action("خروج وتبديل المستخدم",false);
+        out.setOnClickListener(v->new AlertDialog.Builder(this)
+            .setTitle("خروج")
+            .setMessage("ستُطلب كلمة المرور عند الفتح القادم.")
+            .setPositiveButton("خروج",(d,w)->{
+                db.signOut();
                 Intent home=new Intent(this,HomeActivity.class);
                 home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
                 startActivity(home);finish();
             })
             .setNegativeButton("إلغاء",null).show());
-        roleBox.addView(swap,space());
+        roleBox.addView(out,space());
+        Button pw=action("تغيير كلمة مروري",false);
+        pw.setOnClickListener(v->changePasswordDialog(worker?"WORKER":"MANAGER"));
+        roleBox.addView(pw,space());
         pages[4].addView(roleBox,space());
 
         pages[4].addView(sectionTitle("الربط بين الجهازين"));

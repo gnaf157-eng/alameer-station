@@ -21,8 +21,10 @@ public class HomeActivity extends Activity {
         db = new Db(this);
         Db.signIn(Branding.stationName(db));
 
-        // أول تشغيل: يختار الجهاز دوره مرة واحدة.
-        if (!db.roleChosen()) { chooseRole(); return; }
+        // أول تشغيل: تُضبط كلمتا المرور مرة واحدة.
+        if (!db.passwordsSet()) { setupPasswords(); return; }
+        // كل تشغيل: كلمة المرور هي التي تحدّد الواجهة.
+        if (!db.roleChosen()) { askPassword(); return; }
         // جهاز العامل لا يرى إلا شاشة الوردية.
         if (db.workerDevice()) {
             Intent shift = new Intent(this, ShiftActivity.class);
@@ -116,34 +118,121 @@ public class HomeActivity extends Activity {
         new AppUpdater(this).check(false);
     }
 
-    /** يُسأل مرة واحدة عند أول تشغيل: أهذا جهاز العامل أم المدير؟ */
-    private void chooseRole() {
+    /** غلاف موحّد لشاشات الدخول. */
+    private LinearLayout loginShell(String title, String note) {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         shell.setBackgroundColor(Util.BG);
         shell.setGravity(Gravity.CENTER);
-        shell.setPadding(dp(24), dp(24), dp(24), dp(24));
+        shell.setPadding(dp(28), dp(24), dp(28), dp(24));
 
-        TextView title = text("لمن هذا الجهاز؟", 24, Util.NAVY, true);
-        title.setGravity(Gravity.CENTER);
-        shell.addView(title);
-        TextView note = text("يُسأل مرة واحدة فقط، ويمكن تغييره لاحقًا من الإعدادات.", 13, 0xff7c8186, false);
-        note.setGravity(Gravity.CENTER);
-        note.setPadding(0, dp(8), 0, dp(28));
-        shell.addView(note);
+        ImageView mark = new ImageView(this);
+        android.graphics.Bitmap logo = Branding.logo(this);
+        if (logo != null) mark.setImageBitmap(logo); else mark.setImageResource(R.drawable.ic_wardiya_mark);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(74), dp(74));
+        lp.gravity = Gravity.CENTER;
+        lp.bottomMargin = dp(16);
+        shell.addView(mark, lp);
 
-        LinearLayout worker = tile("جهاز العامل", "شاشة الوردية وحدها — يسجّل ويرسل للمدير", 0,
-                v -> { db.setRole("WORKER"); recreate(); });
-        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(150));
-        wide.setMargins(0, 0, 0, dp(14));
-        shell.addView(worker, wide);
+        TextView name = text(Branding.stationName(db), 22, Util.NAVY, true);
+        name.setGravity(Gravity.CENTER);
+        shell.addView(name);
 
-        LinearLayout manager = tile("جهاز المدير", "الواجهة كاملة — مراجعة واعتماد وتقارير", 2,
-                v -> { db.setRole("MANAGER"); recreate(); });
-        shell.addView(manager, new LinearLayout.LayoutParams(-1, dp(150)));
+        TextView head = text(title, 17, Util.NAVY, true);
+        head.setGravity(Gravity.CENTER);
+        head.setPadding(0, dp(18), 0, dp(4));
+        shell.addView(head);
 
+        TextView hint = text(note, 13, 0xff7c8186, false);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, 0, 0, dp(18));
+        shell.addView(hint);
+        return shell;
+    }
+
+    private EditText passwordField(String hint) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setTextSize(18);
+        field.setTextColor(Util.NAVY);
+        field.setSingleLine(true);
+        field.setGravity(Gravity.CENTER);
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setPadding(dp(14), dp(13), dp(14), dp(13));
+        android.graphics.drawable.GradientDrawable bg = Util.round(Color.WHITE, dp(12));
+        bg.setStroke(dp(1), 0xffdedfe2);
+        field.setBackground(bg);
+        return field;
+    }
+
+    private Button bigButton(String label) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(17);
+        b.setTextColor(Color.WHITE);
+        b.setBackground(Util.round(Util.NAVY, dp(14)));
+        b.setPadding(dp(16), dp(14), dp(16), dp(14));
+        b.setStateListAnimator(null);
+        return b;
+    }
+
+    /** أول تشغيل: يضبط المدير كلمتي المرور — واحدة له وواحدة للعامل. */
+    private void setupPasswords() {
+        LinearLayout shell = loginShell("ضبط كلمتي المرور",
+                "تُضبط مرة واحدة على هذا الجهاز.\nكلمة المدير تفتح الواجهة كاملة، وكلمة العامل تفتح شاشة الوردية وحدها.");
+        final EditText manager = passwordField("كلمة مرور المدير");
+        final EditText worker = passwordField("كلمة مرور العامل");
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.bottomMargin = dp(12);
+        shell.addView(manager, fp);
+        shell.addView(worker, fp);
+
+        Button save = bigButton("حفظ وبدء الاستخدام");
+        save.setOnClickListener(v -> {
+            try {
+                db.setPasswords(manager.getText().toString(), worker.getText().toString());
+                Toast.makeText(this, "حُفظت كلمتا المرور", Toast.LENGTH_LONG).show();
+                recreate();
+            } catch (Exception e) {
+                Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
+        shell.addView(save, new LinearLayout.LayoutParams(-1, -2));
         setContentView(shell);
+    }
+
+    /** كلمة المرور تحدّد الواجهة: المدير أو العامل. */
+    private void askPassword() {
+        LinearLayout shell = loginShell("أدخل كلمة المرور",
+                "كلمة المدير تفتح الواجهة كاملة، وكلمة العامل تفتح شاشة الوردية.");
+        final EditText field = passwordField("كلمة المرور");
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.bottomMargin = dp(14);
+        shell.addView(field, fp);
+
+        Button enter = bigButton("دخول");
+        enter.setOnClickListener(v -> {
+            String role = db.roleForPassword(field.getText().toString());
+            if (role.isEmpty()) {
+                field.setText("");
+                field.setError("كلمة المرور غير صحيحة");
+                Toast.makeText(this, "كلمة المرور غير صحيحة", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            db.setRole(role);
+            recreate();
+        });
+        shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
+        setContentView(shell);
+    }
+
+    @Override public void onBackPressed() {
+        // من شاشة الدخول: الخروج من التطبيق لا الدوران فيه.
+        if (!db.passwordsSet() || !db.roleChosen()) { finishAffinity(); return; }
+        super.onBackPressed();
     }
 
     @Override protected void onResume() {
