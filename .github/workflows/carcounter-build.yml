@@ -54,11 +54,49 @@ jobs:
       - name: بناء نسخة APK قابلة للتثبيت
         run: ./gradlew --no-daemon --stacktrace :carcounter:assembleDebug
 
-      - name: التأكد من تضمين النموذج داخل التطبيق
+      - name: التحقق من النموذج والأذونات وحجم APK
         run: |
-          ls -la carcounter/src/main/assets/ || true
-          test -f carcounter/src/main/assets/model.tflite
+          set -e
+          APK=carcounter/build/outputs/apk/debug/carcounter-debug.apk
+          echo "--- حجم APK ---"
+          ls -lh "$APK"
           du -h carcounter/src/main/assets/model.tflite
+          APK_BYTES=$(stat -c%s "$APK")
+          echo "APK bytes: $APK_BYTES"
+          if [ "$APK_BYTES" -gt 35000000 ]; then
+            echo "::error::حجم APK أكبر من المتوقع — تأكد من فلترة معالجات الهواتف (abiFilters)"
+            exit 1
+          fi
+          echo "--- محتويات lib داخل APK ---"
+          unzip -l "$APK" | grep -E "lib/" | awk '{print $4}' | sed 's|/[^/]*$||' | sort -u
+
+          echo "--- النموذج داخل APK ---"
+          unzip -l "$APK" | grep -E "assets/model.tflite"
+          unzip -l "$APK" | grep -E "lib/arm64-v8a/libtensorflowlite" | head -3
+
+          echo "--- الأذونات ---"
+          AAPT2="$(ls "${ANDROID_SDK_ROOT}"/build-tools/*/aapt2 | tail -1)"
+          "$AAPT2" dump badging "$APK" | grep -E "^package:|uses-permission|uses-feature" || true
+          if "$AAPT2" dump badging "$APK" | grep -q "uses-permission: name='android.permission.INTERNET'"; then
+            echo "::error::التطبيق يطلب إذن الإنترنت وهذا مرفوض"
+            exit 1
+          fi
+          "$AAPT2" dump badging "$APK" | grep -q "uses-permission: name='android.permission.CAMERA'"
+          echo "OK: لا يوجد إذن إنترنت، وإذن الكاميرا موجود"
+
+          echo "--- أسماء الأصناف داخل النموذج ---"
+          python3 - <<'PY'
+          data = open('carcounter/src/main/assets/model.tflite', 'rb').read()
+          print('model bytes:', len(data))
+          expected = [b'car', b'truck', b'bus', b'motorcycle', b'bicycle', b'person']
+          for word in expected:
+              print(word.decode(), '->', word in data)
+          for word in [b'car', b'truck', b'bus', b'motorcycle']:
+              assert word in data, 'labelmap is missing: ' + word.decode()
+          index = data.find(b'car\n')
+          print('labelmap context:', repr(data[max(0, index - 160):index + 260]))
+          print('OK: النموذج يحتوي أسماء أصناف المركبات المتوقعة')
+          PY
 
       - name: تجهيز ملف APK
         run: cp carcounter/build/outputs/apk/debug/carcounter-debug.apk CarCounter-v1.0.0-debug.apk
