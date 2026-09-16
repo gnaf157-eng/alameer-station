@@ -29,6 +29,8 @@ public class ShiftActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
+        // بعد تسجيل الخروج لا تبقى أي شاشة مفتوحة خلف شاشة كلمة السر.
+        if(!Db.signedIn()){ finish(); return; }
         if(readingsBox!=null){ // قد تكون الأسعار أو العدّادات تغيّرت من الإعدادات
             if(db.isOpen(shiftId))db.syncShiftWithSettings(shiftId);
             loadReadings();loadMovements();refreshTotals();
@@ -197,6 +199,19 @@ public class ShiftActivity extends Activity {
         TextView version=text("النسخة الحالية "+BuildConfig.VERSION_NAME,12,0xff7c8186,false);
         version.setGravity(Gravity.CENTER);
         pages[4].addView(version,space());
+        Button logout=action("تسجيل خروج",false);
+        logout.setOnClickListener(v->new AlertDialog.Builder(this)
+            .setTitle("تسجيل خروج")
+            .setMessage("ستعود شاشة كلمة السر.")
+            .setPositiveButton("خروج",(d,w)->{
+                Db.endSession();
+                Intent home=new Intent(this,HomeActivity.class);
+                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(home);finish();
+            })
+            .setNegativeButton("إلغاء",null).show());
+        pages[4].addView(logout,space());
+
         Button back=action("رجوع إلى الوردية",false);
         back.setOnClickListener(v->{showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});

@@ -75,6 +75,7 @@ public class IncomingActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (!Db.managerMode()) { finish(); return; }
         if (isFinishing() || listBox == null) return;
         refresh();
         // جلب صامت عند الفتح، فلا ينتظر المدير ضغط زر.

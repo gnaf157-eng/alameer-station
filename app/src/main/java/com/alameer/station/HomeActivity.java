@@ -67,6 +67,20 @@ public class HomeActivity extends Activity {
             startActivity(intent);
         });
         brand.addView(gear, new LinearLayout.LayoutParams(dp(46), dp(46)));
+
+        // تسجيل خروج: يُنهي الجلسة فتعود شاشة كلمة السر ليدخل العامل برمزه.
+        ImageButton exit = new ImageButton(this);
+        exit.setContentDescription("تسجيل خروج");
+        exit.setTooltipText("تسجيل خروج");
+        exit.setPadding(dp(11), dp(11), dp(11), dp(11));
+        exit.setImageDrawable(new LockIcon());
+        exit.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(0x22FFFFFF, dp(23)), Util.round(Color.WHITE, dp(23))));
+        exit.setOnClickListener(v -> logout());
+        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(dp(46), dp(46));
+        ep.setMargins(dp(8), 0, 0, 0);
+        brand.addView(exit, ep);
         shell.addView(brand);
 
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
@@ -175,6 +189,50 @@ public class HomeActivity extends Activity {
         b.setPadding(dp(16), dp(14), dp(16), dp(14));
         b.setStateListAnimator(null);
         return b;
+    }
+
+    /** ينهي الجلسة ويعود إلى شاشة كلمة السر. */
+    private void logout() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تسجيل خروج")
+                .setMessage("ستعود شاشة كلمة السر.\nأدخل 6114 لواجهة العامل، أو كلمة سر المدير للعودة إلى هنا.")
+                .setPositiveButton("خروج", (d, w) -> {
+                    Db.endSession();
+                    Intent home = new Intent(this, HomeActivity.class);
+                    home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(home);
+                    finish();
+                })
+                .setNegativeButton("إلغاء", null)
+                .show();
+    }
+
+    /** قفل مرسوم: جسم القفل وقوسه. */
+    private class LockIcon extends android.graphics.drawable.Drawable {
+        final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        public void draw(android.graphics.Canvas c) {
+            c.save();
+            c.translate(getBounds().left, getBounds().top);
+            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+            ink.setColor(Color.WHITE);
+            ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setStrokeWidth(2.2f);
+            ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            // القوس مفتوح جهة اليمين ليدل على الخروج.
+            android.graphics.RectF arc = new android.graphics.RectF(7.5f, 3.5f, 16.5f, 12.5f);
+            c.drawArc(arc, 180, 150, false, ink);
+            ink.setStyle(android.graphics.Paint.Style.FILL);
+            c.drawRoundRect(5.5f, 10.5f, 18.5f, 20.5f, 2.4f, 2.4f, ink);
+            ink.setColor(Util.NAVY);
+            c.drawCircle(12, 15.5f, 1.7f, ink);
+            ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setStrokeWidth(2f);
+            c.drawLine(12, 15.5f, 12, 18, ink);
+            c.restore();
+        }
+        public void setAlpha(int a) {}
+        public void setColorFilter(android.graphics.ColorFilter f) {}
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     /** شاشة الدخول: كلمة السر هي التي تفتح واجهة المدير أو واجهة العامل. */

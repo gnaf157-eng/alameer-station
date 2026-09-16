@@ -63,6 +63,7 @@ public class ControlPanelActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (!Db.managerMode()) { finish(); return; }
         if (isFinishing() || content == null) return;
         LOW_CASH = db.lowCash();
         STALE_DAYS = db.staleDays();
