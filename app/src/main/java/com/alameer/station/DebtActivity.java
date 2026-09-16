@@ -56,10 +56,9 @@ public class DebtActivity extends Activity {
         newDebtor.setOnClickListener(v -> debtorDialog(0, "", "", 0));
         content.addView(newDebtor, space());
 
-        entriesTitle = sectionTitle("آخر الحركات");
-        content.addView(entriesTitle);
         entriesBox = panel();
-        content.addView(entriesBox, space());
+        entriesBox.setVisibility(View.GONE);
+        content.addView(entriesBox);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -155,6 +154,7 @@ public class DebtActivity extends Activity {
                 unit.setGravity(Gravity.LEFT);
                 amountBox.addView(unit);
                 top.addView(amountBox);
+                top.addView(historyButton(() -> debtorHistory(id, name)));
                 card.addView(top);
 
                 View line = new View(this);
@@ -189,7 +189,7 @@ public class DebtActivity extends Activity {
     /** آخر الحركات مع الحذف بضغطة مطوّلة. */
     private void refreshEntries() {
         entriesBox.removeAllViews();
-        entriesTitle.setText(filterDebtor > 0 ? "حركات المدين المختار" : "آخر الحركات");
+        if (entriesTitle != null) entriesTitle.setText("");
         int count = 0;
         try (Cursor c = db.debtEntries(filterDebtor, 40)) {
             while (c.moveToNext()) {
@@ -297,14 +297,13 @@ public class DebtActivity extends Activity {
     private void debtorOptions(long id, String name, String phone, double opening) {
         int entries = db.debtEntryCount(id);
         new AlertDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{"📄  كشف حساب وإرساله", "تعديل البيانات", "عرض حركات هذا المدين", "كل الحركات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
+                .setItems(new String[]{"📄  كشف حساب وإرساله", "سجل حركاته", "تعديل البيانات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
                         (d, which) -> {
                             if (which == 0) sendStatement(id, phone);
-                            else if (which == 1) debtorDialog(id, name, phone, opening);
-                            else if (which == 2) { filterDebtor = id; refreshEntries(); Toast.makeText(this, "عرض حركات " + name, Toast.LENGTH_SHORT).show(); }
-                            else if (which == 3) { filterDebtor = 0; refreshEntries(); }
-                            else if (which == 4) { db.setDebtorActive(id, false); refresh(); }
-                            else if (which == 5) { db.setDebtorActive(id, true); refresh(); }
+                            else if (which == 1) debtorHistory(id, name);
+                            else if (which == 2) debtorDialog(id, name, phone, opening);
+                            else if (which == 3) { db.setDebtorActive(id, false); refresh(); }
+                            else if (which == 4) { db.setDebtorActive(id, true); refresh(); }
                             else {
                                 if (entries > 0) {
                                     new AlertDialog.Builder(this).setTitle("لا يمكن الحذف")
@@ -587,6 +586,122 @@ public class DebtActivity extends Activity {
 
     private String trim(double value) {
         return String.format(Locale.US, value == Math.rint(value) ? "%.0f" : "%.2f", value);
+    }
+
+
+    /** سجل حركات مدين واحد بالترتيب الزمني. */
+    private void debtorHistory(long debtorId, String name) {
+        java.util.List<String[]> lines = new java.util.ArrayList<>();
+        java.util.List<String[]> reversed = new java.util.ArrayList<>();
+        try (Cursor c = db.debtEntries(debtorId, 200)) {
+            while (c.moveToNext()) {
+                boolean isDebt = "DEBT".equals(c.getString(1));
+                String note = c.getString(3);
+                if (note == null || note.trim().isEmpty()) note = isDebt ? "دين" : "سداد";
+                reversed.add(new String[]{isDebt ? "دين" : "سداد",
+                        note + "  •  " + c.getString(4),
+                        (isDebt ? "+ " : "− ") + money(c.getDouble(2)),
+                        String.valueOf(isDebt ? Util.RED : Util.GREEN),
+                        String.valueOf(c.getLong(0)),
+                        c.getLong(6) > 0 ? "1" : "0"});
+            }
+        }
+        for (int i = reversed.size() - 1; i >= 0; i--) lines.add(reversed.get(i));
+        historyDialog("سجل " + name, lines, "لا توجد حركات على هذا المدين بعد.");
+    }
+
+    private void deleteEntry(long id) { db.deleteDebtEntry(id); }
+
+    /** زر دائري صغير يفتح سجل حركات هذا السجل وحده. */
+    private View historyButton(final Runnable action) {
+        ImageButton button = new ImageButton(this);
+        button.setContentDescription("سجل الحركات");
+        button.setTooltipText("سجل الحركات");
+        button.setPadding(dp(8), dp(8), dp(8), dp(8));
+        button.setImageDrawable(new HistoryIcon());
+        button.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x22000000),
+                Util.round(Util.ACCENT_SOFT, dp(18)), null));
+        button.setOnClickListener(v -> action.run());
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(36), dp(36));
+        p.setMargins(dp(8), 0, 0, 0);
+        button.setLayoutParams(p);
+        return button;
+    }
+
+    /** أيقونة ساعة بعقارب للخلف. */
+    private class HistoryIcon extends android.graphics.drawable.Drawable {
+        final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        public void draw(android.graphics.Canvas c) {
+            c.save();
+            c.translate(getBounds().left, getBounds().top);
+            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+            paint.setColor(Util.ACCENT);
+            paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setStrokeWidth(2f);
+            paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+            c.drawArc(3.5f, 3.5f, 20.5f, 20.5f, 110, 300, false, paint);
+            c.drawLine(12, 7.5f, 12, 12, paint);
+            c.drawLine(12, 12, 15.4f, 14.1f, paint);
+            c.drawLine(3.6f, 8.6f, 3.6f, 4.2f, paint);
+            c.drawLine(3.6f, 8.6f, 7.9f, 8.6f, paint);
+            c.restore();
+        }
+        public void setAlpha(int a) { paint.setAlpha(a); }
+        public void setColorFilter(android.graphics.ColorFilter f) { paint.setColorFilter(f); }
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
+    /** نافذة تعرض حركات سجل واحد. الأقدم أولًا كدفتر اليومية. */
+    private void historyDialog(String title, java.util.List<String[]> lines, String empty) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), dp(8));
+        if (lines.isEmpty()) {
+            box.addView(text(empty, 15, 0xff8b9097, false));
+        } else {
+            for (String[] line : lines) {
+                LinearLayout row = new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(9), 0, dp(9));
+                LinearLayout words = new LinearLayout(this);
+                words.setOrientation(LinearLayout.VERTICAL);
+                words.addView(text(line[0], 15, Util.NAVY, true));
+                words.addView(text(line[1], 11, 0xff8b9097, false));
+                row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+                TextView value = text(line[2], 16, Integer.parseInt(line[3]), true);
+                value.setTextDirection(View.TEXT_DIRECTION_LTR);
+                row.addView(value);
+                // الحذف بضغطة مطوّلة؛ الحركات المرحّلة من وردية محميّة.
+                if (line.length >= 6) {
+                    final long entryId = Long.parseLong(line[4]);
+                    final boolean locked = "1".equals(line[5]);
+                    row.setOnLongClickListener(v -> {
+                        if (locked) {
+                            new AlertDialog.Builder(this).setTitle("حركة مرتبطة بوردية")
+                                    .setMessage("هذه الحركة رُحّلت تلقائيًا من وردية مُغلقة ولا تُحذف يدويًا.")
+                                    .setPositiveButton("حسنًا", null).show();
+                            return true;
+                        }
+                        new AlertDialog.Builder(this).setTitle("حذف الحركة")
+                                .setMessage("سيُحذف هذا السطر نهائيًا ويتغيّر الرصيد.")
+                                .setPositiveButton("حذف", (d, w) -> { deleteEntry(entryId); refresh(); })
+                                .setNegativeButton("إلغاء", null).show();
+                        return true;
+                    });
+                }
+                box.addView(row);
+                View divider = new View(this);
+                divider.setBackgroundColor(0xffeef1f4);
+                box.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+            }
+        }
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+        new AlertDialog.Builder(this).setTitle(title).setView(scroll)
+                .setMessage(lines.isEmpty() ? null : "اضغط مطوّلًا على أي حركة لحذفها")
+                .setPositiveButton("إغلاق", null).show();
     }
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
