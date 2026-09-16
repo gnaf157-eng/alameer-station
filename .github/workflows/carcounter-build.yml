@@ -115,6 +115,7 @@ jobs:
           retention-days: 30
 
       - name: نشر أحدث نسخة في صفحة الإصدارات
+        if: github.event_name != 'pull_request'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
