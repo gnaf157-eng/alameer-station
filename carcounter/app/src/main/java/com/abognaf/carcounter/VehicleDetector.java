@@ -66,27 +66,34 @@ public class VehicleDetector {
         inputBitmap = Bitmap.createBitmap(inW, inH, Bitmap.Config.ARGB_8888);
         inputCanvas = new Canvas(inputBitmap);
 
-        // تحديد ترتيب المخرجات (boxes / classes / scores / count) حسب الشكل والاسم
+        // تحديد ترتيب المخرجات اعتمادًا على الأشكال (أسماء المخرجات غير موثوقة)
+        // المتوقع: boxes [1,N,4] ، classes [1,N] ، scores [1,N] ، count [1]
         int b = -1, c = -1, sc = -1, n = -1, md = 25;
         int outCount = interpreter.getOutputTensorCount();
-        List<Integer> oneD = new ArrayList<>();
+        StringBuilder desc = new StringBuilder();
+        List<Integer> vec = new ArrayList<>();
         for (int i = 0; i < outCount; i++) {
             Tensor t = interpreter.getOutputTensor(i);
             int[] sh = t.shape();
-            if (sh.length == 3 && sh[2] == 4) { b = i; md = sh[1]; }
-            else if (sh.length == 1 || (sh.length == 2 && sh[1] == 1 && sh[0] == 1 && t.name().toLowerCase().contains("num"))) n = i;
-            else if (sh.length == 2) oneD.add(i);
+            desc.append(i).append(':').append(t.name()).append(java.util.Arrays.toString(sh)).append(' ');
+            int elems = 1; for (int d : sh) elems *= d;
+            if (sh.length >= 2 && sh[sh.length - 1] == 4 && elems > 4) { b = i; md = elems / 4; }
+            else if (elems == 1) n = i;
+            else vec.add(i);
         }
-        for (int i : oneD) {
+        // التمييز بين classes و scores: حسب الاسم إن وُجد، وإلا حسب الترتيب المعتاد (classes ثم scores)
+        for (int i : vec) {
             String name = interpreter.getOutputTensor(i).name().toLowerCase();
             if (name.contains("score")) sc = i;
             else if (name.contains("class")) c = i;
         }
-        if (sc < 0 || c < 0) {
-            // ترتيب TFLite_Detection_PostProcess المعتاد: boxes, classes, scores, count
-            if (oneD.size() >= 2) { c = oneD.get(0); sc = oneD.get(1); }
+        if ((sc < 0 || c < 0) && vec.size() >= 2) {
+            // ترتيب TFLite_Detection_PostProcess: boxes(0), classes(1), scores(2), count(3)
+            java.util.Collections.sort(vec);
+            c = vec.get(0); sc = vec.get(1);
         }
-        if (b < 0 || c < 0 || sc < 0) throw new IOException("شكل مخرجات النموذج غير متوقع");
+        if (b < 0 || c < 0 || sc < 0) throw new IOException("مخرجات غير متوقعة: " + desc);
+        android.util.Log.i("CarCounter", "outputs: " + desc + " -> boxes=" + b + " classes=" + c + " scores=" + sc + " count=" + n);
         idxBoxes = b; idxClasses = c; idxScores = sc; idxCount = n; maxDet = md;
         boxes = new float[1][maxDet][4];
         classes = new float[1][maxDet];
