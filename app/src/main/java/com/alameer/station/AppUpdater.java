@@ -33,7 +33,12 @@ public class AppUpdater {
                     .setMessage(manifest.optString("notes","تحسينات وإصلاحات"))
                     .setPositiveButton("تنزيل وتثبيت",(d,w)->download(manifest))
                     .setNegativeButton("لاحقًا",null).show());
-                else if(requested)ui(()->Toast.makeText(activity,"لديك أحدث نسخة",Toast.LENGTH_LONG).show());
+                else if(requested){
+                    final String remote=manifest.optString("versionName");
+                    final long remoteCode=manifest.optLong("versionCode");
+                    ui(()->message("لديك أحدث نسخة.\n\nالمثبَّت: "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+")"
+                        +"\nالمتاح: "+remote+" ("+remoteCode+")"));
+                }
             }catch(Exception e){
                 final String detail=e.getMessage()==null?"":e.getMessage();
                 if(requested)message(detail.isEmpty()
@@ -43,10 +48,15 @@ public class AppUpdater {
         }).start();
     }
     private String readUrl(String address)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
+        // رابط «latest» يمرّ عبر إعادة توجيه وشبكة توزيع تحتفظ بنسخة قديمة،
+        // فنضيف بصمة وقت ونمنع التخزين حتى يصل أحدث مانيفست دائمًا.
+        String fresh=address+(address.contains("?")?"&":"?")+"t="+System.currentTimeMillis();
+        HttpURLConnection c=(HttpURLConnection)new URL(fresh).openConnection();
         c.setConnectTimeout(15000);c.setReadTimeout(20000);c.setUseCaches(false);
         c.setInstanceFollowRedirects(true);
         c.setRequestProperty("Accept","application/json");
+        c.setRequestProperty("Cache-Control","no-cache, no-store, max-age=0");
+        c.setRequestProperty("Pragma","no-cache");
         c.setRequestProperty("User-Agent","TabiqUpdater");
         int status=c.getResponseCode();
         if(status==404)throw new IOException("ملف التحديث غير متاح للعموم (404). اجعل المستودع public أو استضف المانيفست برابط مفتوح.");
