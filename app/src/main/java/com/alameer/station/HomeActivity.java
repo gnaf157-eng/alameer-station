@@ -23,7 +23,7 @@ public class HomeActivity extends Activity {
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         shell.setBackgroundColor(Util.BG);
-        shell.setPadding(dp(20), dp(28), dp(20), dp(24));
+        shell.setPadding(dp(14), dp(18), dp(14), dp(12));
 
         LinearLayout brand = new LinearLayout(this);
         brand.setGravity(Gravity.CENTER_VERTICAL);
@@ -59,7 +59,7 @@ public class HomeActivity extends Activity {
 
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
         welcome.setGravity(Gravity.CENTER);
-        welcome.setPadding(0, dp(24), 0, dp(16));
+        welcome.setPadding(0, dp(14), 0, dp(10));
         shell.addView(welcome);
 
         LinearLayout row1 = new LinearLayout(this);
@@ -68,7 +68,7 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
         row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
-        shell.addView(row1);
+        shell.addView(row1, rowWeight(false));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
@@ -76,7 +76,7 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
         row2.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
                 v -> startActivity(new Intent(this, DebtActivity.class))), cell());
-        shell.addView(row2, rowGap());
+        shell.addView(row2, rowWeight(true));
 
         LinearLayout row3 = new LinearLayout(this);
         row3.setGravity(Gravity.CENTER);
@@ -84,18 +84,14 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
         row3.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
-        shell.addView(row3, rowGap());
+        shell.addView(row3, rowWeight(true));
 
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
-        credit.setPadding(0, dp(22), 0, dp(6));
+        credit.setPadding(0, dp(12), 0, dp(2));
         shell.addView(credit);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(shell);
-
-        setContentView(scroll);
+        setContentView(shell);
         new AppUpdater(this).check(false);
     }
 
@@ -112,15 +108,17 @@ public class HomeActivity extends Activity {
     }
 
     /** بطاقة كبيرة قابلة للنقر تمثّل أحد المدخلين. */
+    /** البطاقة تملأ ارتفاع صفّها كاملًا حتى تبقى الشاشة بلا تمرير. */
     private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(150), 1);
-        p.setMargins(dp(6), 0, dp(6), 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1);
+        p.setMargins(dp(5), 0, dp(5), 0);
         return p;
     }
 
-    private LinearLayout.LayoutParams rowGap() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.setMargins(0, dp(12), 0, 0);
+    /** الصفوف الثلاثة تتقاسم ما تبقّى من الشاشة بالتساوي. */
+    private LinearLayout.LayoutParams rowWeight(boolean gap) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 0, 1);
+        p.setMargins(0, gap ? dp(10) : 0, 0, 0);
         return p;
     }
 
@@ -128,7 +126,7 @@ public class HomeActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(10), dp(16), dp(10), dp(16));
+        box.setPadding(dp(8), dp(10), dp(8), dp(10));
         box.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
         box.setElevation(dp(3));
@@ -136,25 +134,26 @@ public class HomeActivity extends Activity {
         box.setOnClickListener(action);
 
         FrameLayout disc = new FrameLayout(this);
-        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(32)));
+        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(28)));
         ImageView art = new ImageView(this);
         HomeIcon drawable = new HomeIcon(icon);
-        drawable.setBounds(0, 0, dp(36), dp(36));
+        drawable.setBounds(0, 0, dp(32), dp(32));
         art.setImageDrawable(drawable);
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(36), dp(36));
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(32), dp(32));
         ip.gravity = Gravity.CENTER;
         disc.addView(art, ip);
-        box.addView(disc, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        box.addView(disc, new LinearLayout.LayoutParams(dp(56), dp(56)));
 
-        TextView name = text(title, 16, Util.NAVY, true);
+        TextView name = text(title, 15, Util.NAVY, true);
         name.setGravity(Gravity.CENTER);
-        name.setPadding(0, dp(12), 0, dp(3));
-        name.setMaxLines(2);
+        name.setPadding(0, dp(8), 0, dp(2));
+        name.setMaxLines(1);
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 12, 0xff7c8186, false);
+        TextView caption = text(note, 11, 0xff7c8186, false);
         caption.setGravity(Gravity.CENTER);
         caption.setMaxLines(2);
+        caption.setEllipsize(android.text.TextUtils.TruncateAt.END);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
         return box;
