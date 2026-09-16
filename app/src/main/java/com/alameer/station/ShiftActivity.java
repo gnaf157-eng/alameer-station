@@ -33,6 +33,7 @@ public class ShiftActivity extends Activity {
     }
     LinearLayout[] pages=new LinearLayout[5];
     Button[] tabs=new Button[3];
+    LinearLayout navBar;
     int settingsReturnPage=0;
     ScrollView screenScroll;
     int page=0;
@@ -143,6 +144,7 @@ public class ShiftActivity extends Activity {
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
         LinearLayout nav=new LinearLayout(this);
+        navBar=nav;
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
@@ -548,6 +550,8 @@ public class ShiftActivity extends Activity {
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
         movementSummary.setVisibility(selected==1?View.VISIBLE:View.GONE);
         for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
+        // شاشة الإعدادات لا تحتاج شريط التنقّل السفلي.
+        if(navBar!=null)navBar.setVisibility(selected==4?View.GONE:View.VISIBLE);
         int active=selected==2?0:selected==3?2:selected==4?-1:selected;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
