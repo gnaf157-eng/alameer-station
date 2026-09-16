@@ -28,11 +28,18 @@ public class ArchiveActivity extends Activity {
                 final long shiftId=c.getLong(0);
                 card.setClickable(true);
                 final boolean matched=ok;
-                card.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("وردية #"+shiftId)
-                    .setMessage(matched?"أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة."
-                        :"هذه الوردية غير مطابقة، ولا يمكن إخراج تقرير لها حتى يُصحَّح الفرق.")
-                    .setPositiveButton(matched?"تقرير PDF":"حسنًا",matched?(d,w)->exportPdf(shiftId):null)
-                    .setNegativeButton(matched?"إغلاق":null,null).show());
+                card.setOnClickListener(v->{
+                    AlertDialog.Builder ask=new AlertDialog.Builder(this).setTitle("وردية #"+shiftId);
+                    if(matched){
+                        ask.setMessage("أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة.")
+                           .setPositiveButton("تقرير PDF",(d,w)->exportPdf(shiftId))
+                           .setNegativeButton("إغلاق",null);
+                    }else{
+                        ask.setMessage("هذه الوردية غير مطابقة، ولا يمكن إخراج تقرير لها حتى يُصحَّح الفرق.")
+                           .setPositiveButton("حسنًا",null);
+                    }
+                    ask.show();
+                });
                 root.addView(card,Util.spaced());
             }
         }
