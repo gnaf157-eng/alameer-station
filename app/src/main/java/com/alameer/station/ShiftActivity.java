@@ -35,6 +35,7 @@ public class ShiftActivity extends Activity {
     Button[] tabs=new Button[3];
     LinearLayout navBar;
     int settingsReturnPage=0;
+    boolean settingsOnly=false;
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance,stationTitle;
@@ -167,6 +168,8 @@ public class ShiftActivity extends Activity {
         }
         shell.addView(nav);setContentView(shell);
         boolean openSettings=getIntent().getBooleanExtra("openSettings",false);
+        // الدخول من ترس الواجهة الرئيسية: الرجوع يخرج إليها مباشرة لا إلى الوردية.
+        settingsOnly=openSettings;
         showPage(openSettings?4:0);loadMovements();
     }
     /** تبويب الإعدادات: الأسعار والطرمبات قبل بدء المطابقة. */
@@ -254,7 +257,8 @@ public class ShiftActivity extends Activity {
         buildThresholdSettings();
 
         Button startShift=action("ابدأ المطابقة  ➤",true);
-        startShift.setOnClickListener(v->{db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
+        // الانتقال المتعمّد إلى الوردية يُلغي وضع «الإعدادات وحدها».
+        startShift.setOnClickListener(v->{settingsOnly=false;db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();showPage(0);});
         pages[4].addView(startShift,space());
 
         Button update=action("فحص تحديث التطبيق",false);
@@ -623,7 +627,7 @@ public class ShiftActivity extends Activity {
         }
     }
     @Override public void onBackPressed(){
-        if(page==4){
+        if(page==4&&!settingsOnly){
             showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
         }else super.onBackPressed();
