@@ -114,8 +114,8 @@ public final class PdfReport {
     private void draw(Canvas canvas,Block b,int y){
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
         int left=WIDTH-MARGIN-COLUMN*5,right=WIDTH-MARGIN;
-        if(b.kind>=4){
-            // EXPENSE, COLLECTION, DEBT, CASH — match the amount column, including zero.
+        if(b.kind>=4&&b.kind<8){
+            // المخاريج والمقبوضات والديون والفلوس — لون يطابق عمود المبلغ.
             int[] backgrounds={0xffffedd9,0xffe4f2e7,0xfff7e5eb,0xffe3edf9};
             p.setColor(backgrounds[b.kind-4]);
             canvas.drawRect(left,y,right,y+b.height,p);

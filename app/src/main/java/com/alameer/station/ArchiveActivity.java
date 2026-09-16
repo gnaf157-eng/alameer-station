@@ -60,7 +60,13 @@ public class ArchiveActivity extends Activity {
         try{
             File file=new PdfReport(this,db).build(shiftId);
             share(file,"application/pdf","تقرير وردية #"+shiftId,"مشاركة تقرير الوردية");
-        }catch(Exception e){Toast.makeText(this,"تعذر إنشاء تقرير PDF",Toast.LENGTH_LONG).show();}
+        }catch(Throwable e){
+            // اعرض سبب الفشل الحقيقي بدل رسالة عامة لا تدل على شيء.
+            String reason=e.getMessage();
+            if(reason==null||reason.trim().isEmpty())reason=e.getClass().getSimpleName();
+            new AlertDialog.Builder(this).setTitle("تعذر إنشاء تقرير PDF")
+                .setMessage(reason).setPositiveButton("حسنًا",null).show();
+        }
     }
     private void share(File file,String mime,String subject,String chooser){
         Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
