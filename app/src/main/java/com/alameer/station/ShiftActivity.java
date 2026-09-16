@@ -1083,10 +1083,15 @@ public class ShiftActivity extends Activity {
         // المطابقة وحدها تُعتمد؛ غير المطابقة تبقى «مُرسلة» بانتظار المدير.
         if(matched)db.approve(closed);else db.closeUnmatched(closed);
         String posted=db.postShift(closed,db.defaultCashbox());
+        // قيد الوردية المزدوج: يُرفض إن كان فيه فرق بلا تعليل، ولا يُكتب إلا متوازنًا.
+        String journalNote="";
+        try{ db.journalShift(closed); }
+        catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
         String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
+        base=base+journalNote;
         AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("حُفظت الوردية #"+closed);
         if(reason.isEmpty()){
             done.setMessage(base+"\nتستطيع حفظ تقرير الوردية المُغلقة الآن أو لاحقًا من الأرشيف.")

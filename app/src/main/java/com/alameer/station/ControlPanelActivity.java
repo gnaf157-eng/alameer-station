@@ -89,12 +89,20 @@ public class ControlPanelActivity extends Activity {
      * الضغط على الفرق يفتح الحركات المسبّبة له.
      */
     private View auditBoard() {
-        java.util.List<Ledger.Row> rows = db.ledgerRows();
-        double debit = Ledger.totalDebit(rows);
-        double credit = Ledger.totalCredit(rows);
-        double gap = Ledger.gap(rows);
-        boolean ok = Ledger.balanced(gap);
+        double debit = db.journalDebit();
+        double credit = db.journalCredit();
+        double gap = debit - credit;
+
+        int unbalanced = 0;
+        try (Cursor c = db.unbalancedEntries()) { unbalanced = c.getCount(); }
+        int unposted = 0;
+        try (Cursor c = db.unpostedShifts()) { unposted = c.getCount(); }
+        int lockedPeriods = 0;
+        try (Cursor c = db.periodLocks()) { lockedPeriods = c.getCount(); }
+
+        boolean ok = Journal.balanced(gap) && unbalanced == 0 && unposted == 0;
         int tint = ok ? Util.GREEN : Util.RED;
+        final int flagged = unbalanced + unposted;
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -104,9 +112,9 @@ public class ControlPanelActivity extends Activity {
 
         LinearLayout head = new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.addView(text("الرقابة المحاسبية", 15, Color.WHITE, true),
+        head.addView(text("الرقابة المحاسبية — القيد المزدوج", 15, Color.WHITE, true),
                 new LinearLayout.LayoutParams(0, -2, 1));
-        TextView state = text(Ledger.state(gap), 12, Color.WHITE, true);
+        TextView state = text(ok ? "متوازن" : "يحتاج مراجعة", 12, Color.WHITE, true);
         state.setPadding(dp(12), dp(5), dp(12), dp(5));
         state.setBackground(Util.round(tint, dp(10)));
         head.addView(state);
@@ -118,7 +126,7 @@ public class ControlPanelActivity extends Activity {
         sums.addView(sideCell("إجمالي الدائن", credit), sideParams());
         box.addView(sums);
 
-        // الفرق: بطاقة قابلة للضغط تكشف الحركات المسبّبة.
+        // الفرق: بطاقة قابلة للضغط تكشف القيود والورديات المسبّبة.
         LinearLayout diff = new LinearLayout(this);
         diff.setOrientation(LinearLayout.VERTICAL);
         diff.setPadding(dp(13), dp(11), dp(13), dp(11));
@@ -126,7 +134,7 @@ public class ControlPanelActivity extends Activity {
                 android.content.res.ColorStateList.valueOf(0x33FFFFFF),
                 Util.round(ok ? 0x1A12805C : 0x33B42335, dp(13)), null));
         diff.setClickable(true);
-        diff.setOnClickListener(v -> showOffenders(rows, gap));
+        diff.setOnClickListener(v -> showAuditDetail());
 
         LinearLayout line = new LinearLayout(this);
         line.setGravity(Gravity.CENTER_VERTICAL);
@@ -136,13 +144,22 @@ public class ControlPanelActivity extends Activity {
         line.addView(value);
         diff.addView(line);
 
-        TextView why = text(Ledger.explain(gap) + "  •  اضغط لعرض الحركات", 11, 0xffCFE2FA, false);
-        why.setPadding(0, dp(4), 0, 0);
-        diff.addView(why);
+        String why = Journal.explain(gap)
+                + (flagged == 0 ? "" : "  •  " + flagged + " بند يحتاج مراجعة")
+                + "  •  اضغط للتفصيل";
+        TextView note = text(why, 11, 0xffCFE2FA, false);
+        note.setPadding(0, dp(4), 0, 0);
+        diff.addView(note);
 
-        LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(-1, -2);
-        dp2.setMargins(0, dp(12), 0, 0);
-        box.addView(diff, dp2);
+        LinearLayout.LayoutParams gapParams = new LinearLayout.LayoutParams(-1, -2);
+        gapParams.setMargins(0, dp(12), 0, 0);
+        box.addView(diff, gapParams);
+
+        if (lockedPeriods > 0) {
+            TextView locks = text("🔒 " + lockedPeriods + " فترة مقفلة — لا تقبل قيودًا جديدة", 11, 0xffCFE2FA, false);
+            locks.setPadding(0, dp(9), 0, 0);
+            box.addView(locks);
+        }
         return box;
     }
 
@@ -165,29 +182,121 @@ public class ControlPanelActivity extends Activity {
         return cell;
     }
 
-    /** الحركات التي سبّبت الفرق، مرتّبة بالأكبر أثرًا. */
-    private void showOffenders(java.util.List<Ledger.Row> rows, double gap) {
-        java.util.List<Ledger.Row> bad = Ledger.offenders(rows);
+    /** تفصيل الفرق: ميزان المراجعة، والقيود المختلّة، والورديات بلا قيد، والفترات المقفلة. */
+    private void showAuditDetail() {
         StringBuilder sb = new StringBuilder();
-        if (Ledger.balanced(gap) && bad.isEmpty()) {
-            sb.append("النظام متوازن تمامًا.\nمجموع المدين يساوي مجموع الدائن في كل الورديات المُغلقة.");
-        } else {
-            sb.append(Ledger.explain(gap)).append("\n\nالحركات المسبّبة للفرق:\n");
-            int shown = 0;
-            for (Ledger.Row r : bad) {
-                if (shown++ == 20) { sb.append("\n… وحركات أخرى"); break; }
-                double g = r.gap();
-                sb.append("\n• وردية #").append(r.shiftId).append(" — ").append(r.label)
-                  .append("\n   ").append(r.date)
-                  .append("\n   مدين ").append(money(r.debit))
-                  .append(" • دائن ").append(money(r.credit))
-                  .append(" • فرق ").append(g > 0 ? "+" : "-").append(money(Math.abs(g)))
-                  .append(" ر.ي\n");
+        double gap = db.journalDebit() - db.journalCredit();
+        sb.append(Journal.explain(gap)).append("\n");
+
+        sb.append("\n— ميزان المراجعة —\n");
+        try (Cursor c = db.trialBalance()) {
+            if (c.getCount() == 0) sb.append("لا قيود مسجّلة بعد.\n");
+            while (c.moveToNext()) {
+                sb.append("\n• ").append(c.getString(0))
+                  .append("\n   مدين ").append(money(c.getDouble(1)))
+                  .append(" • دائن ").append(money(c.getDouble(2)))
+                  .append("\n   الرصيد ").append(money(Math.abs(c.getDouble(3))))
+                  .append(c.getDouble(3) >= 0 ? " مدين\n" : " دائن\n");
             }
-            if (bad.isEmpty()) sb.append("\nلا وردية مفردة غير متوازنة؛ الفرق ناتج عن أرصدة افتتاحية أو حركات خارج الورديات.");
+        }
+
+        try (Cursor c = db.unbalancedEntries()) {
+            if (c.getCount() > 0) {
+                sb.append("\n— قيود غير متوازنة —\n");
+                while (c.moveToNext())
+                    sb.append("\n• قيد #").append(c.getLong(0)).append(" — ").append(c.getString(1))
+                      .append("\n   ").append(c.getString(2))
+                      .append("\n   مدين ").append(money(c.getDouble(3)))
+                      .append(" • دائن ").append(money(c.getDouble(4))).append("\n");
+            }
+        }
+
+        try (Cursor c = db.unpostedShifts()) {
+            if (c.getCount() > 0) {
+                sb.append("\n— ورديات مُغلقة بلا قيد —\n");
+                while (c.moveToNext())
+                    sb.append("\n• وردية #").append(c.getLong(0)).append(" — ").append(c.getString(1))
+                      .append("\n   ").append(c.getString(2))
+                      .append(" • فرق ").append(money(Math.abs(c.getDouble(3)))).append(" ر.ي\n");
+            }
+        }
+
+        try (Cursor c = db.periodLocks()) {
+            if (c.getCount() > 0) {
+                sb.append("\n— فترات مقفلة —\n");
+                while (c.moveToNext())
+                    sb.append("\n• ").append(c.getString(0))
+                      .append("  (أقفلها ").append(c.getString(2)).append(")\n");
+            }
+        }
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تفصيل حالة التوازن")
+                .setMessage(sb.toString())
+                .setPositiveButton("حسنًا", null)
+                .setNeutralButton("سجل التدقيق", (d, w) -> showAuditLog())
+                .setNegativeButton("إقفال فترة", (d, w) -> lockPeriodDialog())
+                .show();
+    }
+
+    /** إقفال فترة محاسبية أو فتحها بسبب مكتوب. */
+    private void lockPeriodDialog() {
+        final EditText input = new EditText(this);
+        input.setHint("الفترة بصيغة 2026-09");
+        input.setText(ShiftDates.today().length() >= 7 ? ShiftDates.today().substring(0, 7) : "");
+        input.setGravity(Gravity.CENTER);
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(10), dp(24), 0);
+        wrap.addView(input);
+        final EditText note = new EditText(this);
+        note.setHint("ملاحظة أو سبب الفتح");
+        wrap.addView(note);
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("إقفال الفترات")
+                .setMessage("الفترة المقفلة لا تقبل أي قيد جديد ولا قيدًا عكسيًا حتى تُفتح.")
+                .setView(wrap)
+                .setPositiveButton("إقفال", (d, w) -> {
+                    try {
+                        db.lockPeriod(input.getText().toString().trim(), note.getText().toString().trim());
+                        Toast.makeText(this, "أُقفلت الفترة", Toast.LENGTH_SHORT).show();
+                        build();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNeutralButton("فتح", (d, w) -> {
+                    try {
+                        db.unlockPeriod(input.getText().toString().trim(), note.getText().toString().trim());
+                        Toast.makeText(this, "فُتحت الفترة", Toast.LENGTH_SHORT).show();
+                        build();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null)
+                .show();
+    }
+
+    /** سجل التدقيق: من فعل ماذا ومتى وبأي قيمة قبل وبعد. */
+    private void showAuditLog() {
+        StringBuilder sb = new StringBuilder();
+        try (Cursor c = db.auditLog(60)) {
+            if (c.getCount() == 0) sb.append("لا حركات مسجّلة بعد.");
+            while (c.moveToNext()) {
+                sb.append("• ").append(c.getString(1)).append("  —  ").append(c.getString(2))
+                  .append("\n   ").append(c.getString(3)).append("  ").append(c.getString(4));
+                String before = c.getString(5), after = c.getString(6), reason = c.getString(7);
+                if (!before.isEmpty() || !after.isEmpty())
+                    sb.append("\n   ").append(before.isEmpty() ? "—" : before).append("  ←  ")
+                      .append(after.isEmpty() ? "—" : after);
+                if (!reason.isEmpty()) sb.append("\n   السبب: ").append(reason);
+                sb.append("\n\n");
+            }
         }
         new android.app.AlertDialog.Builder(this)
-                .setTitle("تفصيل الفرق")
+                .setTitle("سجل التدقيق")
                 .setMessage(sb.toString())
                 .setPositiveButton("حسنًا", null)
                 .show();

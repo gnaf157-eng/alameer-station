@@ -19,6 +19,7 @@ public class HomeActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
+        Db.signIn(Branding.stationName(db));
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);

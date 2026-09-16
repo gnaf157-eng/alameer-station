@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 10;
+    private static final int DB_VERSION = 11;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -25,6 +25,10 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(DEBTORS_SQL);
         db.execSQL(DEBT_ENTRIES_SQL);
         db.execSQL("CREATE TABLE audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER,worker_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL)");
+        db.execSQL(JOURNAL_SQL);
+        db.execSQL(JOURNAL_LINES_SQL);
+        db.execSQL(LEDGER_AUDIT_SQL);
+        db.execSQL(PERIOD_LOCKS_SQL);
         seed(db);
     }
 
@@ -51,7 +55,26 @@ public class Db extends SQLiteOpenHelper {
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0)";
+    /** دفتر القيود: رأس القيد وأطرافه، وسجل التدقيق، وإقفال الفترات. */
+    static final String JOURNAL_SQL="CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY AUTOINCREMENT,"+
+        "memo TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',source_id INTEGER NOT NULL DEFAULT 0,"+
+        "total REAL NOT NULL DEFAULT 0,posted_at TEXT NOT NULL,actor TEXT NOT NULL DEFAULT '',"+
+        "reversed_by INTEGER NOT NULL DEFAULT 0,reverses INTEGER NOT NULL DEFAULT 0,locked INTEGER NOT NULL DEFAULT 1)";
+    static final String JOURNAL_LINES_SQL="CREATE TABLE IF NOT EXISTS journal_lines(id INTEGER PRIMARY KEY AUTOINCREMENT,"+
+        "entry_id INTEGER NOT NULL,account TEXT NOT NULL,side TEXT NOT NULL,amount REAL NOT NULL,party TEXT NOT NULL DEFAULT '')";
+    static final String LEDGER_AUDIT_SQL="CREATE TABLE IF NOT EXISTS ledger_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,"+
+        "created_at TEXT NOT NULL,actor TEXT NOT NULL DEFAULT '',action TEXT NOT NULL,entity TEXT NOT NULL DEFAULT '',"+
+        "entity_id INTEGER NOT NULL DEFAULT 0,old_value TEXT NOT NULL DEFAULT '',new_value TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '')";
+    static final String PERIOD_LOCKS_SQL="CREATE TABLE IF NOT EXISTS period_locks(period TEXT PRIMARY KEY,"+
+        "locked_at TEXT NOT NULL,actor TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '')";
+
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<11){
+            try{db.execSQL(JOURNAL_SQL);}catch(Exception ignored){}
+            try{db.execSQL(JOURNAL_LINES_SQL);}catch(Exception ignored){}
+            try{db.execSQL(LEDGER_AUDIT_SQL);}catch(Exception ignored){}
+            try{db.execSQL(PERIOD_LOCKS_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<10){
             try{db.execSQL(EXPENSE_ENTRIES_SQL);}catch(Exception ignored){}
         }
@@ -592,26 +615,221 @@ public class Db extends SQLiteOpenHelper {
         }finally{db.endTransaction();}
         return log.toString().trim();
     }
-    // ==================== الرقابة المحاسبية ====================
+    // ==================== دفتر القيد المزدوج ====================
+
+    /** المستخدم الحالي، يُكتب في كل قيد وكل سطر تدقيق. */
+    private static String actor="النظام";
+    public static void signIn(String name){actor=name==null||name.trim().isEmpty()?"النظام":name.trim();}
+    public static String actor(){return actor;}
+
+    /** سطر تدقيق كامل: من، وماذا، ومتى، والقيمة قبل وبعد، والسبب. */
+    void audit(SQLiteDatabase db,String entity,long entityId,String action,String oldValue,String newValue,String reason){
+        ContentValues v=new ContentValues();
+        v.put("created_at",Util.now());v.put("actor",actor);v.put("action",action);
+        v.put("entity",entity);v.put("entity_id",entityId);
+        v.put("old_value",oldValue==null?"":oldValue);
+        v.put("new_value",newValue==null?"":newValue);
+        v.put("reason",reason==null?"":reason);
+        db.insert("ledger_audit",null,v);
+    }
+    public void audit(String entity,long entityId,String action,String oldValue,String newValue,String reason){
+        audit(getWritableDatabase(),entity,entityId,action,oldValue,newValue,reason);
+    }
+    /** 0=id,1=وقت,2=من,3=عملية,4=السجل,5=قبل,6=بعد,7=سبب */
+    public Cursor auditLog(int limit){
+        return getReadableDatabase().rawQuery(
+            "SELECT id,created_at,COALESCE(NULLIF(actor,''),'النظام'),action,entity||' #'||entity_id,"+
+            "old_value,new_value,reason FROM ledger_audit ORDER BY id DESC LIMIT ?",
+            new String[]{String.valueOf(limit)});
+    }
+
+    public boolean periodLocked(String date){
+        String period=Journal.periodOf(date);
+        if(period.isEmpty())return false;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM period_locks WHERE period=?",new String[]{period})){
+            return c.moveToFirst();
+        }
+    }
+    /** يقفل فترة: لا قيد جديد فيها بعد الإقفال. */
+    public void lockPeriod(String period,String note){
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            ContentValues v=new ContentValues();
+            v.put("period",period);v.put("locked_at",Util.now());v.put("actor",actor);v.put("note",note==null?"":note);
+            db.insertWithOnConflict("period_locks",null,v,SQLiteDatabase.CONFLICT_REPLACE);
+            audit(db,"period",0,"LOCK_PERIOD","مفتوحة","مقفلة "+period,note);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    public void unlockPeriod(String period,String reason){
+        if(reason==null||reason.trim().isEmpty())throw new IllegalArgumentException("اكتب سبب فتح الفترة");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            db.delete("period_locks","period=?",new String[]{period});
+            audit(db,"period",0,"UNLOCK_PERIOD","مقفلة "+period,"مفتوحة",reason.trim());
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    /** 0=period,1=وقت الإقفال,2=من,3=ملاحظة */
+    public Cursor periodLocks(){
+        return getReadableDatabase().rawQuery("SELECT period,locked_at,actor,note FROM period_locks ORDER BY period DESC",null);
+    }
 
     /**
-     * يبني قيود القيد المزدوج من كل وردية مُغلقة.
-     * الدائن = المبيعات + المقبوضات، والمدين = النقد + الديون + المخاريج + الباقي.
+     * يحفظ قيدًا مزدوجًا داخل معاملة واحدة.
+     * يرفض القيد غير المتوازن أو الناقص أو الواقع في فترة مقفلة، ولا يكتب شيئًا عند الرفض.
      */
-    public java.util.List<Ledger.Row> ledgerRows(){
-        java.util.List<Ledger.Row> rows=Ledger.newList();
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),"+
-                "s.sales,s.collections,s.cash_delivered,s.debts,s.expenses,s.balance "+
-                "FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.status<>'OPEN' "+
-                "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null)){
-            while(c.moveToNext()){
-                double debit=Ledger.debit(c.getDouble(5),c.getDouble(6),c.getDouble(7),c.getDouble(8));
-                double credit=Ledger.credit(c.getDouble(3),c.getDouble(4));
-                rows.add(new Ledger.Row(c.getLong(0),c.getString(1),c.getString(2),debit,credit));
+    public long postEntry(Journal.Entry entry){
+        String reject=Journal.rejectReason(entry);
+        if(!reject.isEmpty())throw new IllegalStateException(reject);
+        if(periodLocked(entry.date))
+            throw new IllegalStateException("الفترة "+Journal.periodOf(entry.date)+" مقفلة. افتحها بصلاحية المدير أولًا.");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            ContentValues head=new ContentValues();
+            head.put("memo",entry.memo);head.put("entry_date",entry.date);
+            head.put("source",entry.source);head.put("source_id",entry.sourceId);
+            head.put("total",entry.totalDebit());head.put("posted_at",Util.now());head.put("actor",actor);
+            long id=db.insertOrThrow("journal",null,head);
+            for(Journal.Line l:entry.lines){
+                ContentValues v=new ContentValues();
+                v.put("entry_id",id);v.put("account",l.account);v.put("side",l.side);
+                v.put("amount",l.amount);v.put("party",l.party);
+                db.insertOrThrow("journal_lines",null,v);
             }
+            // تحقّق أخير من داخل قاعدة البيانات نفسها قبل الإقرار.
+            double d=0,cr=0;
+            try(Cursor c=db.rawQuery("SELECT side,COALESCE(SUM(amount),0) FROM journal_lines WHERE entry_id=? GROUP BY side",
+                    new String[]{String.valueOf(id)})){
+                while(c.moveToNext()){
+                    if(Journal.DEBIT.equals(c.getString(0)))d=c.getDouble(1);else cr=c.getDouble(1);
+                }
+            }
+            if(!Journal.balanced(d-cr))
+                throw new IllegalStateException("رُفض القيد: مدين "+Calc.money(d)+" لا يساوي دائن "+Calc.money(cr));
+            audit(db,"journal",id,"POST_ENTRY","",entry.memo+" — "+Calc.money(entry.totalDebit())+" ر.ي","");
+            db.setTransactionSuccessful();
+            return id;
+        }finally{db.endTransaction();}
+    }
+
+    /**
+     * التصحيح الوحيد المسموح: قيد عكسي. لا تعديل ولا حذف لقيد معتمد.
+     */
+    public long reverseEntry(long entryId,String reason){
+        if(reason==null||reason.trim().isEmpty())throw new IllegalArgumentException("اكتب سبب التصحيح");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            String memo="",date="",source="";long sourceId=0;int reversedBy=0;
+            try(Cursor c=db.rawQuery("SELECT memo,entry_date,source,source_id,reversed_by FROM journal WHERE id=?",
+                    new String[]{String.valueOf(entryId)})){
+                if(!c.moveToFirst())throw new IllegalStateException("القيد غير موجود");
+                memo=c.getString(0);date=c.getString(1);source=c.getString(2);sourceId=c.getLong(3);reversedBy=c.getInt(4);
+            }
+            if(reversedBy>0)throw new IllegalStateException("سبق عكس هذا القيد بالقيد #"+reversedBy);
+            if(periodLocked(date))throw new IllegalStateException("فترة القيد مقفلة. افتحها بصلاحية المدير أولًا.");
+
+            Journal.Entry rev=new Journal.Entry("عكس القيد #"+entryId+" ("+memo+") — "+reason.trim(),date,source,sourceId);
+            try(Cursor c=db.rawQuery("SELECT account,side,amount,party FROM journal_lines WHERE entry_id=? ORDER BY id",
+                    new String[]{String.valueOf(entryId)})){
+                while(c.moveToNext()){
+                    if(Journal.DEBIT.equals(c.getString(1)))rev.credit(c.getString(0),c.getDouble(2),c.getString(3));
+                    else rev.debit(c.getString(0),c.getDouble(2),c.getString(3));
+                }
+            }
+            String reject=Journal.rejectReason(rev);
+            if(!reject.isEmpty())throw new IllegalStateException(reject);
+
+            ContentValues head=new ContentValues();
+            head.put("memo",rev.memo);head.put("entry_date",rev.date);
+            head.put("source",rev.source);head.put("source_id",rev.sourceId);
+            head.put("total",rev.totalDebit());head.put("posted_at",Util.now());head.put("actor",actor);
+            head.put("reverses",entryId);
+            long newId=db.insertOrThrow("journal",null,head);
+            for(Journal.Line l:rev.lines){
+                ContentValues v=new ContentValues();
+                v.put("entry_id",newId);v.put("account",l.account);v.put("side",l.side);
+                v.put("amount",l.amount);v.put("party",l.party);
+                db.insertOrThrow("journal_lines",null,v);
+            }
+            ContentValues mark=new ContentValues();
+            mark.put("reversed_by",newId);
+            db.update("journal",mark,"id=?",new String[]{String.valueOf(entryId)});
+            audit(db,"journal",entryId,"REVERSE_ENTRY",memo,"مُلغى بالقيد العكسي #"+newId,reason.trim());
+            db.setTransactionSuccessful();
+            return newId;
+        }finally{db.endTransaction();}
+    }
+
+    /** مجموع طرف واحد في الدفتر كله (القيود العكسية داخلة لأنها تلغي أثر أصلها). */
+    public double journalSide(String side){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(amount),0) FROM journal_lines WHERE side=?",new String[]{side})){
+            return c.moveToFirst()?c.getDouble(0):0;
         }
-        return rows;
+    }
+    public double journalDebit(){return journalSide(Journal.DEBIT);}
+    public double journalCredit(){return journalSide(Journal.CREDIT);}
+
+    /** القيود غير المتوازنة إن وُجدت: 0=id,1=بيان,2=تاريخ,3=مدين,4=دائن. */
+    public Cursor unbalancedEntries(){
+        return getReadableDatabase().rawQuery(
+            "SELECT j.id,j.memo,j.entry_date,"+
+            "COALESCE(SUM(CASE WHEN l.side='DEBIT' THEN l.amount ELSE 0 END),0),"+
+            "COALESCE(SUM(CASE WHEN l.side='CREDIT' THEN l.amount ELSE 0 END),0) "+
+            "FROM journal j LEFT JOIN journal_lines l ON l.entry_id=j.id GROUP BY j.id "+
+            "HAVING ABS(COALESCE(SUM(CASE WHEN l.side='DEBIT' THEN l.amount ELSE 0 END),0)"+
+            "-COALESCE(SUM(CASE WHEN l.side='CREDIT' THEN l.amount ELSE 0 END),0))>=0.005 ORDER BY j.id DESC",null);
+    }
+
+    /** ميزان المراجعة: 0=حساب,1=مدين,2=دائن,3=الرصيد. */
+    public Cursor trialBalance(){
+        return getReadableDatabase().rawQuery(
+            "SELECT account,"+
+            "COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE 0 END),0),"+
+            "COALESCE(SUM(CASE WHEN side='CREDIT' THEN amount ELSE 0 END),0),"+
+            "COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END),0) "+
+            "FROM journal_lines GROUP BY account ORDER BY ABS(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END)) DESC",null);
+    }
+
+    /** الورديات المُغلقة التي لم يُسجَّل لها قيد بعد: 0=id,1=عامل,2=تاريخ,3=الفرق. */
+    public Cursor unpostedShifts(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+            "ORDER BY s.id DESC",null);
+    }
+
+    /** هل للوردية قيد مسجّل؟ */
+    public boolean shiftJournalled(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='SHIFT' AND source_id=?",
+                new String[]{String.valueOf(shiftId)})){
+            return c.moveToFirst();
+        }
+    }
+
+    /** يسجّل قيد الوردية المُغلقة. يرفض الترحيل إذا كان هناك فرق غير مسوّى. */
+    public long journalShift(long shiftId){
+        if(shiftJournalled(shiftId))return 0;
+        String date="",reason="";double sales=0,collections=0,cash=0,debts=0,expenses=0,balance=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(NULLIF(shift_date,''),substr(opened_at,1,10)),sales,collections,cash_delivered,"+
+                "debts,expenses,balance,COALESCE(difference_reason,'') FROM shifts WHERE id=?",
+                new String[]{String.valueOf(shiftId)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الوردية غير موجودة");
+            date=c.getString(0);sales=c.getDouble(1);collections=c.getDouble(2);cash=c.getDouble(3);
+            debts=c.getDouble(4);expenses=c.getDouble(5);balance=c.getDouble(6);reason=c.getString(7);
+        }
+        // فرق بلا تسوية أو تعليل يمنع الترحيل.
+        if(Math.abs(balance)>=0.01&&reason.trim().isEmpty())
+            throw new IllegalStateException("لا يمكن ترحيل وردية بفرق "+Calc.money(Math.abs(balance))+" ر.ي بلا سبب مكتوب.");
+        Journal.Entry e=Journal.shiftEntry(shiftId,date,sales,collections,cash,debts,expenses,balance);
+        return postEntry(e);
     }
 
     static String normalizeFuel(String fuel){
