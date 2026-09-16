@@ -45,10 +45,10 @@ public class IncomingActivity extends Activity {
         Button pick = new Button(this);
         pick.setText("⟳  تحديث السجل");
         pick.setAllCaps(false);
-        pick.setTextSize(16);
-        pick.setTextColor(Color.WHITE);
-        pick.setBackground(Util.round(Util.NAVY, dp(14)));
-        pick.setPadding(dp(16), dp(14), dp(16), dp(14));
+        pick.setTextSize(14);
+        pick.setTextColor(Util.NAVY);
+        pick.setBackground(Util.round(Util.ACCENT_SOFT, dp(12)));
+        pick.setPadding(dp(14), dp(11), dp(14), dp(11));
         pick.setOnClickListener(v -> {
             Relay relay = new Relay(this);
             if (!relay.linked()) {
@@ -86,40 +86,56 @@ public class IncomingActivity extends Activity {
     private void refresh() {
         listBox.removeAllViews();
         int count = 0;
+        String lastDate = "";
         try (Cursor c = db.incomingShifts()) {
             while (c.moveToNext()) {
                 count++;
                 final long id = c.getLong(0);
-                final String who = c.getString(1);
+                String who = c.getString(1);
                 String date = c.getString(2);
                 double balance = c.getDouble(4);
                 int pumps = c.getInt(5);
                 boolean matched = Math.abs(balance) < 0.01;
+                int tint = matched ? Util.GREEN : Util.RED;
 
+                // عنوان تاريخ واحد يجمع ورديات اليوم، كسجل حركة.
+                if (!date.equals(lastDate)) {
+                    lastDate = date;
+                    TextView day = text(ShiftDates.day(date) + "  •  " + date, 12, 0xff8b9097, true);
+                    day.setPadding(dp(4), count == 1 ? 0 : dp(14), dp(4), dp(6));
+                    listBox.addView(day);
+                }
+
+                // كرت خفيف: شريط حالة ملوّن ثم سطران فقط.
                 LinearLayout card = new LinearLayout(this);
-                card.setOrientation(LinearLayout.VERTICAL);
-                card.setPadding(dp(16), dp(15), dp(16), dp(15));
+                card.setGravity(Gravity.CENTER_VERTICAL);
+                card.setPadding(dp(12), dp(11), dp(12), dp(11));
                 card.setBackground(new android.graphics.drawable.RippleDrawable(
-                        android.content.res.ColorStateList.valueOf(0x18000000),
-                        Util.round(Color.WHITE, dp(16)), null));
-                card.setElevation(dp(2));
+                        android.content.res.ColorStateList.valueOf(0x14000000),
+                        Util.round(Color.WHITE, dp(12)), null));
                 card.setClickable(true);
                 card.setOnClickListener(v -> review(id));
 
-                // اسم العامل أولًا، فهو عنوان الوردية.
-                card.addView(text(who, 19, Util.NAVY, true));
-                card.addView(text(pumps + " طرمبة  •  " + date, 14, 0xff667078, false));
-                card.addView(text(matched ? "مطابقة — جاهزة للترحيل"
-                                : "فرق " + money(Math.abs(balance)) + " ر.ي "
-                                  + (balance > 0 ? "(عجز على العامل)" : "(زيادة)"),
-                        13, matched ? Util.GREEN : Util.RED, true));
+                View stripe = new View(this);
+                stripe.setBackground(Util.round(tint, dp(2)));
+                LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(4), dp(34));
+                sp.setMargins(0, 0, dp(11), 0);
+                card.addView(stripe, sp);
 
-                TextView go = text("اضغط للمراجعة والترحيل  ‹", 12, Util.ACCENT, true);
-                go.setPadding(0, dp(8), 0, 0);
-                card.addView(go);
+                LinearLayout lines = new LinearLayout(this);
+                lines.setOrientation(LinearLayout.VERTICAL);
+                lines.addView(text(who, 16, Util.NAVY, true));
+                lines.addView(text(pumps + " طرمبة  •  " + db.shiftCode(id), 12, 0xff8b9097, false));
+                card.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
+
+                TextView state = text(matched ? "مطابقة" : money(Math.abs(balance)), 13, tint, true);
+                state.setGravity(Gravity.CENTER);
+                state.setPadding(dp(10), dp(4), dp(10), dp(4));
+                state.setBackground(Util.round(matched ? 0x1A12805C : 0x1AB42335, dp(9)));
+                card.addView(state);
 
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-                cp.setMargins(0, dp(6), 0, dp(6));
+                cp.setMargins(0, dp(3), 0, dp(3));
                 listBox.addView(card, cp);
             }
         }

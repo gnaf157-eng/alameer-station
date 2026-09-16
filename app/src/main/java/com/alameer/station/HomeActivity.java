@@ -88,10 +88,13 @@ public class HomeActivity extends Activity {
         welcome.setPadding(0, dp(14), 0, dp(10));
         shell.addView(welcome);
 
+        // سجل الانتظار أولًا: منه تُفتح الوردية للمراجعة والترحيل.
+        int waiting = db.pendingCount();
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("فحص الوردية", "مراجعة القراءات والحركات", 0,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
+        row1.addView(tile("سجل الورديات المنتظرة", waiting == 0 ? "لا ورديات منتظرة"
+                        : waiting + " وردية بانتظار اعتمادك", 7,
+                v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
         row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
         shell.addView(row1, rowWeight(false));
@@ -112,13 +115,8 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row3, rowWeight(true));
 
-        // سجل الانتظار والدفاتر: مرحلتا الرحلة الأخيرتان.
-        int waiting = db.pendingCount();
         LinearLayout row4 = new LinearLayout(this);
         row4.setGravity(Gravity.CENTER);
-        row4.addView(tile("سجل الورديات المنتظرة", waiting == 0 ? "لا ورديات منتظرة"
-                        : waiting + " وردية بانتظار اعتمادك", 7,
-                v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
         row4.addView(tile("الدفاتر الرسمية", "تقارير الورديات المرحّلة", 8,
                 v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
         shell.addView(row4, rowWeight(true));
