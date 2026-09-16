@@ -113,7 +113,7 @@ def downloadTo(String url, File target) {
     java.io.OutputStream output = null
     try {
         tmp.delete()
-        def conn = new URL(url).openConnection()
+        def conn = (java.net.HttpURLConnection) new URL(url).openConnection()
         conn.setConnectTimeout(30000)
         conn.setReadTimeout(60000)
         conn.setInstanceFollowRedirects(true)

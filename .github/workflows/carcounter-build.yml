@@ -24,17 +24,35 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: تجهيز Android SDK من صورة المشغّل
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then SDK=/usr/local/lib/android/sdk; fi
+          echo "Android SDK: $SDK"
+          ls "$SDK" || true
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          echo "sdkmanager: $SDKMANAGER"
+          if [ -n "$SDKMANAGER" ]; then
+            (yes || true) | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          fi
+          echo "--- platforms ---"; ls "$SDK/platforms" || true
+          echo "--- build-tools ---"; ls "$SDK/build-tools" || true
 
-      - name: Install required Android packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: إصدارات الأدوات
+        run: |
+          java -version
+          ./gradlew --version
 
       - name: اختبارات منطق العدّ والتتبّع
-        run: ./gradlew --no-daemon :carcounter:testDebugUnitTest
+        run: ./gradlew --no-daemon --stacktrace :carcounter:testDebugUnitTest
 
       - name: بناء نسخة APK قابلة للتثبيت
-        run: ./gradlew --no-daemon :carcounter:assembleDebug
+        run: ./gradlew --no-daemon --stacktrace :carcounter:assembleDebug
 
       - name: التأكد من تضمين النموذج داخل التطبيق
         run: |
@@ -78,11 +96,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install required Android packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: تجهيز Android SDK من صورة المشغّل
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then SDK=/usr/local/lib/android/sdk; fi
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager || true)"; fi
+          if [ -n "$SDKMANAGER" ]; then
+            (yes || true) | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0" "platform-tools" || true
+          fi
 
       - name: Build shifts app (verification only)
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
