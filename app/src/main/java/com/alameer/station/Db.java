@@ -917,6 +917,163 @@ public class Db extends SQLiteOpenHelper {
         return out.toString();
     }
 
+    /**
+     * يفتح وردية مُغلقة للتعديل: يعكس قيدها ويلغي ترحيلها
+     * حتى تُراجَع في نفس خانات الطرمبات والحركات ثم تُعتمد من جديد.
+     */
+    public void reopenShift(long shiftId,String reason){
+        String why=reason==null||reason.trim().isEmpty()?"فتح الوردية للتعديل":reason.trim();
+        String before="";
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",
+                new String[]{String.valueOf(shiftId)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الوردية غير موجودة");
+            before=c.getString(0);
+        }
+        if("OPEN".equals(before))return;
+
+        // القيود تُعكس أولًا خارج المعاملة، فلكل عكس معاملته المستقلة.
+        java.util.List<Long> entries=new java.util.ArrayList<>();
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0",
+                new String[]{String.valueOf(shiftId)})){
+            while(c.moveToNext())entries.add(c.getLong(0));
+        }
+        for(long entry:entries)reverseEntry(entry,why);
+
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+            db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+            db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
+            db.delete("material_entries","note LIKE ?",new String[]{"وردية #"+shiftId+"%"});
+            ContentValues v=new ContentValues();
+            v.put("status","OPEN");v.put("closed_at","");v.put("sync_state","PENDING");
+            db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
+            audit(db,"shift",shiftId,"REOPEN_SHIFT",before,"OPEN",why);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+
+    /** هل الوردية مفتوحة للتعديل الآن؟ */
+    public boolean isOpen(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",
+                new String[]{String.valueOf(shiftId)})){
+            return c.moveToFirst()&&("OPEN".equals(c.getString(0))||"RETURNED".equals(c.getString(0)));
+        }
+    }
+
+    /** معرّف ثابت لهذا الجهاز، يميّز ورديات كل جهاز عن غيره. */
+    public String deviceId(){
+        String id=setting("device_id","");
+        if(id.isEmpty()){
+            id=Long.toHexString(System.currentTimeMillis());
+            setSetting("device_id",id);
+        }
+        return id;
+    }
+
+    /**
+     * يستورد وردية قادمة من جهاز العامل عبر المزامنة.
+     * تُحفظ مُغلقة بانتظار مراجعة المدير، ولا تُرحّل ولا تُقيَّد.
+     * يعيد المعرّف المحلي، أو صفرًا إذا كانت مستوردة من قبل.
+     */
+    public long importRemoteShift(org.json.JSONObject j){
+        String device=j.optString("device","");
+        long remote=j.optLong("shiftId",0);
+        String date=j.optString("shiftDate",j.optString("openedAt","")).trim();
+        if(date.length()>10)date=date.substring(0,10);
+        String key="remote_"+device+"_"+remote+"_"+date;
+        if(!setting(key,"").isEmpty())return 0;
+
+        org.json.JSONArray readings=j.optJSONArray("readings");
+        if(readings==null||readings.length()==0)
+            throw new IllegalStateException("وردية #"+remote+" بلا قراءات");
+
+        // شرط التسلسل: القراءة السابقة في الوردية الواردة تطابق عدّادك.
+        StringBuilder bad=new StringBuilder();
+        for(int i=0;i<readings.length();i++){
+            org.json.JSONObject r=readings.optJSONObject(i);
+            if(r==null)continue;
+            String pump=r.optString("pump","");
+            double previous=r.optDouble("previous",0);
+            double mine=-1;
+            try(Cursor c=getReadableDatabase().rawQuery(
+                    "SELECT last_reading FROM pumps WHERE name=? AND active=1",new String[]{pump})){
+                if(c.moveToFirst())mine=c.getDouble(0);
+            }
+            if(mine<0){bad.append(" ").append(pump).append(" غير موجودة؛");continue;}
+            if(Math.abs(mine-previous)>=0.01)
+                bad.append(" ").append(pump).append(": عندك ").append(Calc.money(mine))
+                   .append(" والوارد ").append(Calc.money(previous)).append("؛");
+        }
+        if(bad.length()>0)
+            throw new IllegalStateException("وردية #"+remote+" قراءاتها لا تتسلسل مع عدّاداتك:"+bad);
+
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            String worker=j.optString("worker","عامل");
+            int workerId=workerIdByName(db,worker);
+            ContentValues head=new ContentValues();
+            head.put("worker_id",workerId);head.put("opened_at",Util.now());
+            head.put("shift_date",date);head.put("status","SUBMITTED");
+            head.put("closed_at",Util.now());head.put("sync_state","SYNCED");
+            head.put("difference_reason",j.optString("differenceReason",""));
+            head.put("manager_note","واردة من جهاز العامل");
+            long id=db.insertOrThrow("shifts",null,head);
+
+            double sales=0;
+            for(int i=0;i<readings.length();i++){
+                org.json.JSONObject r=readings.optJSONObject(i);
+                if(r==null)continue;
+                long pumpId=0;
+                try(Cursor c=db.rawQuery("SELECT id FROM pumps WHERE name=? AND active=1",
+                        new String[]{r.optString("pump","")})){
+                    if(c.moveToFirst())pumpId=c.getLong(0);
+                }
+                if(pumpId==0)continue;
+                double previous=r.optDouble("previous",0),current=r.optDouble("current",0),price=r.optDouble("price",0);
+                double amount=Math.max(0,current-previous)*Math.max(0,price);
+                sales+=amount;
+                ContentValues v=new ContentValues();
+                v.put("shift_id",id);v.put("pump_id",pumpId);
+                v.put("previous",previous);v.put("current",current);
+                v.put("price",price);v.put("sales",amount);
+                db.insertOrThrow("readings",null,v);
+            }
+
+            double[] totals=new double[4];
+            String[] types={"COLLECTION","CASH","DEBT","EXPENSE"};
+            org.json.JSONArray moves=j.optJSONArray("movements");
+            if(moves!=null)for(int i=0;i<moves.length();i++){
+                org.json.JSONObject m=moves.optJSONObject(i);
+                if(m==null)continue;
+                String type=m.optString("type","");
+                double amount=m.optDouble("amount",0);
+                for(int t=0;t<types.length;t++)if(types[t].equals(type))totals[t]+=amount;
+                ContentValues v=new ContentValues();
+                v.put("shift_id",id);v.put("type",type);v.put("name",m.optString("name",""));
+                v.put("amount",amount);v.put("created_at",Util.now());
+                db.insertOrThrow("movements",null,v);
+            }
+
+            ContentValues sums=new ContentValues();
+            sums.put("sales",sales);sums.put("collections",totals[0]);sums.put("cash_delivered",totals[1]);
+            sums.put("debts",totals[2]);sums.put("expenses",totals[3]);
+            sums.put("balance",Calc.balance(sales,totals[0],totals[1],totals[2],totals[3]));
+            db.update("shifts",sums,"id=?",new String[]{String.valueOf(id)});
+
+            ContentValues mark=new ContentValues();
+            mark.put("key",key);mark.put("value",String.valueOf(id));
+            db.insertWithOnConflict("settings",null,mark,SQLiteDatabase.CONFLICT_REPLACE);
+            audit(db,"shift",id,"RECEIVE_SHIFT","","وردية "+worker+" ("+date+") مبيعات "+Calc.money(sales),
+                  "واردة من جهاز العامل");
+            db.setTransactionSuccessful();
+            return id;
+        }finally{db.endTransaction();}
+    }
+
     // ==================== تسليم الوردية بين الجهازين ====================
 
     /** يجمع الوردية في صيغة ملف التسليم. */

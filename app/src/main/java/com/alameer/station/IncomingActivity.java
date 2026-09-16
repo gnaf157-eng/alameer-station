@@ -14,7 +14,6 @@ import java.util.Locale;
 
 /** ورديات العامل الواردة: استيراد الملف ثم مراجعتها واعتمادها. */
 public class IncomingActivity extends Activity {
-    private static final int PICK_FILE = 71;
     private Db db;
     private LinearLayout listBox;
 
@@ -33,7 +32,7 @@ public class IncomingActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("ورديات العامل", 19, Color.WHITE, true));
-        words.addView(text("استورد ملف الوردية ثم راجعها واعتمدها", 11, 0xffCFE2FA, false));
+        words.addView(text("تصل من جهاز العامل — راجعها ثم اعتمدها", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -42,13 +41,13 @@ public class IncomingActivity extends Activity {
         content.setPadding(dp(14), dp(12), dp(14), dp(24));
 
         Button pick = new Button(this);
-        pick.setText("＋  استيراد ملف وردية");
+        pick.setText("⟳  جلب ورديات العامل");
         pick.setAllCaps(false);
         pick.setTextSize(16);
         pick.setTextColor(Color.WHITE);
         pick.setBackground(Util.round(Util.NAVY, dp(14)));
         pick.setPadding(dp(16), dp(14), dp(16), dp(14));
-        pick.setOnClickListener(v -> pickFile());
+        pick.setOnClickListener(v -> new Sync(this).pullShifts(true));
         content.addView(pick, new LinearLayout.LayoutParams(-1, -2));
 
         listBox = new LinearLayout(this);
@@ -64,75 +63,6 @@ public class IncomingActivity extends Activity {
     }
 
     @Override protected void onResume() { super.onResume(); refresh(); }
-
-    private void pickFile() {
-        try {
-            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT)
-                    .setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
-            startActivityForResult(pick, PICK_FILE);
-        } catch (Exception e) {
-            Toast.makeText(this, "لا يوجد تطبيق لاختيار الملفات", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @Override protected void onActivityResult(int request, int result, Intent data) {
-        super.onActivityResult(request, result, data);
-        if (request != PICK_FILE || result != RESULT_OK || data == null || data.getData() == null) return;
-        try (java.io.InputStream in = getContentResolver().openInputStream(data.getData());
-             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
-            int n;
-            while ((n = in.read(buffer)) != -1) {
-                if (out.size() + n > 1024 * 1024) throw new java.io.IOException("الملف كبير جدًا");
-                out.write(buffer, 0, n);
-            }
-            String body = out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
-            ShiftFile.Shift shift = ShiftFile.read(body);
-            confirmImport(shift);
-        } catch (Exception e) {
-            new AlertDialog.Builder(this).setTitle("تعذر قراءة الملف")
-                    .setMessage(String.valueOf(e.getMessage()))
-                    .setPositiveButton("حسنًا", null).show();
-        }
-    }
-
-    /** يعرض ملخّص الوردية قبل الاستيراد، ويمنعه إن لم تطابق القراءات السابقة. */
-    private void confirmImport(final ShiftFile.Shift s) {
-        String mismatch = db.readingMismatch(s);
-        StringBuilder sb = new StringBuilder();
-        sb.append("العامل: ").append(s.worker).append("\n")
-          .append("التاريخ: ").append(s.date).append("\n")
-          .append("الطرمبات: ").append(s.readings.size())
-          .append("  •  الحركات: ").append(s.moves.size()).append("\n\n")
-          .append("المبيعات ").append(money(s.sales())).append(" ر.ي\n")
-          .append("المقبوضات ").append(money(s.total("COLLECTION"))).append(" ر.ي\n")
-          .append("النقد المسلّم ").append(money(s.total("CASH"))).append(" ر.ي\n")
-          .append("الديون ").append(money(s.total("DEBT"))).append(" ر.ي\n")
-          .append("المخاريج ").append(money(s.total("EXPENSE"))).append(" ر.ي\n")
-          .append("الباقي ").append(money(s.balance())).append(" ر.ي");
-
-        if (!mismatch.isEmpty()) {
-            new AlertDialog.Builder(this).setTitle("القراءات لا تطابق عدّاداتك")
-                    .setMessage("لا يمكن الاستيراد لأن القراءة السابقة تختلف:" + mismatch
-                            + "\n\nتأكد أن العامل يرسل وردية متسلسلة مع آخر وردية اعتمدتها.")
-                    .setPositiveButton("حسنًا", null).show();
-            return;
-        }
-        new AlertDialog.Builder(this).setTitle("استيراد وردية " + s.worker)
-                .setMessage(sb.toString())
-                .setPositiveButton("استيراد للمراجعة", (d, w) -> {
-                    try {
-                        long id = db.importShift(s);
-                        Toast.makeText(this, "استُوردت كوردية #" + id, Toast.LENGTH_LONG).show();
-                        refresh();
-                    } catch (Exception e) {
-                        new AlertDialog.Builder(this).setTitle("تعذر الاستيراد")
-                                .setMessage(String.valueOf(e.getMessage()))
-                                .setPositiveButton("حسنًا", null).show();
-                    }
-                })
-                .setNegativeButton("إلغاء", null).show();
-    }
 
     private void refresh() {
         listBox.removeAllViews();
@@ -158,6 +88,25 @@ public class IncomingActivity extends Activity {
                                 + (balance > 0 ? "(عجز على العامل)" : "(زيادة)"),
                         14, matched ? Util.GREEN : Util.RED, true));
 
+                Button review = new Button(this);
+                review.setText("فتح للمراجعة والتعديل");
+                review.setAllCaps(false);
+                review.setTextColor(Color.WHITE);
+                review.setBackground(Util.round(Util.NAVY, dp(12)));
+                review.setOnClickListener(v -> {
+                    try {
+                        db.reopenShift(id, "مراجعة المدير");
+                        Intent open = new Intent(this, ShiftActivity.class);
+                        open.putExtra("openShift", id);
+                        startActivity(open);
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                });
+                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+                rp.setMargins(0, dp(10), 0, 0);
+                card.addView(review, rp);
+
                 Button approve = new Button(this);
                 approve.setText("اعتماد وترحيل");
                 approve.setAllCaps(false);
@@ -165,7 +114,7 @@ public class IncomingActivity extends Activity {
                 approve.setBackground(Util.round(Util.GREEN, dp(12)));
                 approve.setOnClickListener(v -> approve(id, who, balance));
                 LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
-                bp.setMargins(0, dp(10), 0, 0);
+                bp.setMargins(0, dp(8), 0, 0);
                 card.addView(approve, bp);
 
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
@@ -173,7 +122,7 @@ public class IncomingActivity extends Activity {
                 listBox.addView(card, cp);
             }
         }
-        if (count == 0) listBox.addView(text("لا توجد ورديات واردة. استورد ملفًا من العامل.", 14, 0xff777d84, false));
+        if (count == 0) listBox.addView(text("لا توجد ورديات واردة. اضغط «جلب ورديات العامل».", 14, 0xff777d84, false));
     }
 
     /** الاعتماد يرحّل الوردية ويقيّدها؛ الفرق يبقى محسوبًا على العامل. */

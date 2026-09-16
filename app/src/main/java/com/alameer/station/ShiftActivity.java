@@ -16,6 +16,9 @@ public class ShiftActivity extends Activity {
             shiftId=db.openSoloShift(workerId);
             askNameOnFirstRun=db.setting("name_set","0").equals("0");
         }
+        // فتح وردية بعينها قادمًا من شاشة ورديات العامل.
+        long requested=getIntent().getLongExtra("openShift",0);
+        if(requested>0)shiftId=requested;
         build();
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
@@ -27,8 +30,8 @@ public class ShiftActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         if(readingsBox!=null){ // قد تكون الأسعار أو العدّادات تغيّرت من الإعدادات
-            db.syncShiftWithSettings(shiftId);
-            loadReadings();refreshTotals();
+            if(db.isOpen(shiftId))db.syncShiftWithSettings(shiftId);
+            loadReadings();loadMovements();refreshTotals();
         }
     }
     LinearLayout[] pages=new LinearLayout[5];
@@ -615,8 +618,11 @@ public class ShiftActivity extends Activity {
                 card.addView(text("تاريخ الوردية: "+c.getString(8),15,Util.NAVY,true));
                 card.addView(text("تاريخ الإدخال: "+c.getString(2),13,0xff667078,false));
                 card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
-                card.addView(text(Math.abs(c.getDouble(5))<0.01?"اضغط لمشاركة PDF أو Excel":"غير مطابقة — لا يمكن إخراج تقرير",12,Math.abs(c.getDouble(5))<0.01?0xff667078:0xffb3261e,false));
-                card.setClickable(true);card.setOnClickListener(v->chooseReport(archivedId));
+                card.addView(text(Math.abs(c.getDouble(5))<0.01?"اضغط لفتحها ومراجعتها":"غير مطابقة — اضغط لفتحها ومراجعتها",12,Math.abs(c.getDouble(5))<0.01?0xff667078:0xffb3261e,false));
+                final boolean live="OPEN".equals(state)||"RETURNED".equals(state);
+                card.setClickable(true);
+                card.setOnClickListener(v->openArchived(archivedId,live));
+                card.setOnLongClickListener(v->{chooseReport(archivedId);return true;});
                 pages[3].addView(card,Util.spaced());
             }
         }
@@ -1161,6 +1167,36 @@ public class ShiftActivity extends Activity {
         }
         return true;
     }
+    /**
+     * يفتح وردية من الأرشيف في نفس خانات الطرمبات والحركات.
+     * المُغلقة تُفتح للتعديل بعد تأكيد، فيُعكس قيدها ويُلغى ترحيلها.
+     */
+    private void openArchived(final long id,boolean live){
+        if(live){ switchTo(id); return; }
+        new AlertDialog.Builder(this).setTitle("وردية #"+id)
+            .setMessage("تفتح الوردية بقراءاتها وحركاتها كما سُجّلت، وتصير قابلة للتعديل.\n\n"
+                + "سيُعكس قيدها المحاسبي ويُلغى ترحيلها حتى تعتمدها من جديد، ويُحفظ ذلك في سجل التدقيق.")
+            .setPositiveButton("فتح للتعديل",(d,w)->{
+                try{
+                    db.reopenShift(id,"مراجعة المدير");
+                    switchTo(id);
+                    Toast.makeText(this,"فُتحت الوردية #"+id+" للتعديل",Toast.LENGTH_LONG).show();
+                }catch(Exception e){
+                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNeutralButton("تقرير",(d,w)->chooseReport(id))
+            .setNegativeButton("إلغاء",null).show();
+    }
+
+    /** ينقل الشاشة كلها إلى وردية أخرى ويعرض قراءاتها وحركاتها. */
+    private void switchTo(long id){
+        shiftId=id;
+        loadReadings();loadMovements();refreshTotals();
+        showPage(0);
+        if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
+    }
+
     private void chooseReport(long id){
         if(id==shiftId&&!saveReadings())return;
         new AlertDialog.Builder(this).setTitle("مشاركة تقرير الوردية")
@@ -1268,8 +1304,13 @@ public class ShiftActivity extends Activity {
         }
         done.show();
     }
-    /** يصدّر الوردية كملف تسليم موقّع ويشاركه مع المدير. */
+    /** يرفع الوردية إلى المدير عبر المزامنة، بلا ملفات ولا واتساب. */
     void sendShift(long id){
+        new Sync(this).run(true);
+    }
+
+    /** نسخة الملف محفوظة للطوارئ حين لا يتوفر إنترنت. */
+    void sendShiftAsFile(long id){
         try{
             ShiftFile.Shift data=db.exportShift(id);
             String text=ShiftFile.write(data);

@@ -49,10 +49,55 @@ public class Sync {
         try{return readAll(c.getInputStream());}finally{c.disconnect();}
     }
 
+    /**
+     * يسحب ورديات العامل من الشيت ويحفظها في الأرشيف بانتظار المراجعة.
+     * لا تُرحّل ولا تُقيَّد؛ تُفتح من الأرشيف وتُعدَّل ثم تُعتمد.
+     */
+    public void pullShifts(boolean userRequested){
+        String url=BuildConfig.SYNC_URL;
+        if(url==null||url.trim().isEmpty()){if(userRequested)toast("لم يُفعّل رابط المزامنة بعد.");return;}
+        if(userRequested)toast("جاري جلب ورديات العامل...");
+        new Thread(()->{
+            try{
+                String separator=url.contains("?")?"&":"?";
+                JSONObject response=new JSONObject(get(url+separator+"action=shifts&secret="
+                        +URLEncoder.encode(BuildConfig.SYNC_SECRET,"UTF-8")));
+                if(!response.optBoolean("ok",false)){
+                    if(userRequested)activity.runOnUiThread(()->toast("تعذر جلب الورديات من الشيت."));return;
+                }
+                JSONArray list=response.optJSONArray("shifts");
+                if(list==null||list.length()==0){
+                    if(userRequested)activity.runOnUiThread(()->toast("لا توجد ورديات جديدة."));return;
+                }
+                int added=0,skipped=0;
+                StringBuilder problems=new StringBuilder();
+                for(int i=0;i<list.length();i++){
+                    JSONObject item=list.optJSONObject(i);
+                    if(item==null)continue;
+                    try{
+                        if(db.importRemoteShift(item)>0)added++;else skipped++;
+                    }catch(Exception e){
+                        skipped++;
+                        if(problems.length()<300)problems.append("\n• ").append(e.getMessage());
+                    }
+                }
+                final int fAdded=added,fSkipped=skipped;
+                final String detail=problems.toString();
+                activity.runOnUiThread(()->{
+                    if(fAdded>0)toast("وصلت "+fAdded+" وردية إلى الأرشيف للمراجعة.");
+                    else if(userRequested)toast(fSkipped>0?"لا جديد. "+fSkipped+" وردية مُتجاهلة."+detail:"لا توجد ورديات جديدة.");
+                });
+            }catch(Exception e){
+                if(userRequested)activity.runOnUiThread(()->toast("تعذر الاتصال بالشيت."));
+            }
+        }).start();
+    }
+
     private JSONObject payload(Cursor c,long shiftId)throws Exception{
         JSONObject j=new JSONObject();
         j.put("secret",BuildConfig.SYNC_SECRET);
         j.put("shiftId",shiftId);j.put("worker",c.getString(1));j.put("openedAt",c.getString(2));
+        j.put("device",db.deviceId());j.put("shiftDate",db.shiftDate(shiftId));
         j.put("closedAt",c.isNull(3)?"":c.getString(3));j.put("status",c.getString(4));
         j.put("sales",c.getDouble(5));j.put("collections",c.getDouble(6));j.put("cashDelivered",c.getDouble(7));
         j.put("debts",c.getDouble(8));j.put("expenses",c.getDouble(9));j.put("balance",c.getDouble(10));
