@@ -160,9 +160,17 @@ public class ControlPanelActivity extends Activity {
         box.addView(diff, gapParams);
 
         if (lockedPeriods > 0) {
-            TextView locks = text("🔒 " + lockedPeriods + " فترة مقفلة — لا تقبل قيودًا جديدة", 11, 0xffCFE2FA, false);
-            locks.setPadding(0, dp(9), 0, 0);
-            box.addView(locks);
+            // سطر الفترات المقفلة قابل للضغط حتى يمكن فتحها من مكانها.
+            TextView locks = text("🔒 " + lockedPeriods + " فترة مقفلة — اضغط لفتحها أو إدارتها", 11, 0xffFFD79A, true);
+            locks.setPadding(dp(10), dp(8), dp(10), dp(8));
+            locks.setBackground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                    Util.round(0x22FFFFFF, dp(10)), null));
+            locks.setClickable(true);
+            locks.setOnClickListener(v -> managePeriods());
+            LinearLayout.LayoutParams lockParams = new LinearLayout.LayoutParams(-1, -2);
+            lockParams.setMargins(0, dp(9), 0, 0);
+            box.addView(locks, lockParams);
         }
         return box;
     }
@@ -259,10 +267,15 @@ public class ControlPanelActivity extends Activity {
 
         int unexplained = 0;
         try (Cursor c = db.unexplainedShifts()) { unexplained = c.getCount(); }
+        // الفترة المقفلة أشيع سبب للرفض، فتُعرض معالجتها مباشرة.
+        final String blocked = db.blockingPeriod();
         android.app.AlertDialog.Builder done = new android.app.AlertDialog.Builder(this)
                 .setTitle("ترحيل الورديات")
                 .setMessage(report);
-        if (unexplained > 0) done.setPositiveButton("تعليل الفروقات", (d, w) -> settleDialog());
+        if (!blocked.isEmpty())
+            done.setPositiveButton("فتح الفترة " + blocked, (d, w) -> unlockDialog(blocked));
+        else if (unexplained > 0)
+            done.setPositiveButton("تعليل الفروقات", (d, w) -> settleDialog());
         done.setNegativeButton("حسنًا", null);
         done.show();
     }
@@ -299,6 +312,50 @@ public class ControlPanelActivity extends Activity {
                     }
                 })
                 .setNegativeButton("لاحقًا", null)
+                .show();
+    }
+
+    /** قائمة الفترات المقفلة: اختر واحدة لفتحها بسبب مكتوب. */
+    private void managePeriods() {
+        final java.util.List<String> periods = new java.util.ArrayList<>();
+        final java.util.List<String> labels = new java.util.ArrayList<>();
+        try (Cursor c = db.periodLocks()) {
+            while (c.moveToNext()) {
+                periods.add(c.getString(0));
+                labels.add(c.getString(0) + "   (أقفلها " + c.getString(2) + ")");
+            }
+        }
+        if (periods.isEmpty()) { lockPeriodDialog(); return; }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("الفترات المقفلة")
+                .setItems(labels.toArray(new String[0]), (d, which) -> unlockDialog(periods.get(which)))
+                .setPositiveButton("إقفال فترة جديدة", (d, w) -> lockPeriodDialog())
+                .setNegativeButton("إغلاق", null)
+                .show();
+    }
+
+    /** فتح فترة مقفلة بسبب مكتوب يُحفظ في سجل التدقيق. */
+    private void unlockDialog(final String period) {
+        final EditText reason = new EditText(this);
+        reason.setHint("سبب فتح الفترة");
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(10), dp(24), 0);
+        wrap.addView(reason);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("فتح الفترة " + period)
+                .setMessage("الفترة المقفلة ترفض أي قيد جديد، ومنها ترحيل الورديات المُغلقة فيها.")
+                .setView(wrap)
+                .setPositiveButton("فتح", (d, w) -> {
+                    try {
+                        db.unlockPeriod(period, reason.getText().toString());
+                        Toast.makeText(this, "فُتحت الفترة " + period, Toast.LENGTH_SHORT).show();
+                        build();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null)
                 .show();
     }
 

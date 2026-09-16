@@ -652,6 +652,17 @@ public class Db extends SQLiteOpenHelper {
     }
     /** يقفل فترة: لا قيد جديد فيها بعد الإقفال. */
     public void lockPeriod(String period,String note){
+        if(period==null||period.trim().length()<7)throw new IllegalArgumentException("اكتب الفترة بصيغة 2026-09");
+        period=period.trim();
+        // لا تُقفل فترة فيها ورديات مُغلقة لم تُرحّل بعد، وإلا تعذّر ترحيلها.
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM shifts s WHERE s.status<>'OPEN' "+
+                "AND substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7)=? "+
+                "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id)",
+                new String[]{period})){
+            if(c.moveToFirst()&&c.getInt(0)>0)
+                throw new IllegalStateException("لا يمكن إقفال "+period+": فيها "+c.getInt(0)+" وردية لم تُرحّل بعد. رحّلها أولًا.");
+        }
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
         try{
@@ -860,6 +871,17 @@ public class Db extends SQLiteOpenHelper {
             "WHERE s.status<>'OPEN' AND ABS(s.balance)>=0.01 AND TRIM(COALESCE(s.difference_reason,''))='' "+
             "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
             "ORDER BY s.id",null);
+    }
+
+    /** أول فترة مقفلة تمنع ترحيل وردية مُغلقة، أو نص فارغ إذا لا مانع. */
+    public String blockingPeriod(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT DISTINCT p.period FROM period_locks p JOIN shifts s "+
+                "ON p.period=substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7) "+
+                "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+                "ORDER BY p.period LIMIT 1",null)){
+            return c.moveToFirst()?c.getString(0):"";
+        }
     }
 
     /**
