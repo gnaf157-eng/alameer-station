@@ -115,11 +115,9 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row3, rowWeight(true));
 
-        LinearLayout row4 = new LinearLayout(this);
-        row4.setGravity(Gravity.CENTER);
-        row4.addView(tile("الدفاتر الرسمية", "تقارير الورديات المرحّلة", 8,
-                v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
-        shell.addView(row4, rowWeight(true));
+        // الأرشيف يُفتح أحيانًا فقط، فيكفيه شريط نحيل لا بطاقة كاملة.
+        shell.addView(strip("الأرشيف", "تقارير الورديات المرحّلة", 8,
+                v -> startActivity(new Intent(this, ArchiveActivity.class))));
 
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
@@ -292,6 +290,39 @@ public class HomeActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 0, 1);
         p.setMargins(0, gap ? dp(10) : 0, 0, 0);
         return p;
+    }
+
+    /** شريط نحيل لمدخل ثانوي: أيقونة صغيرة وسطران بلا ارتفاع بطاقة. */
+    private View strip(String title, String note, int icon, View.OnClickListener action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        row.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x18000000),
+                Util.round(Color.WHITE, dp(14)), null));
+        row.setElevation(dp(1));
+        row.setClickable(true);
+        row.setOnClickListener(action);
+
+        ImageView art = new ImageView(this);
+        HomeIcon drawable = new HomeIcon(icon);
+        drawable.setBounds(0, 0, dp(22), dp(22));
+        art.setImageDrawable(drawable);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(22), dp(22));
+        ip.setMargins(0, 0, dp(12), 0);
+        row.addView(art, ip);
+
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.addView(text(title, 15, Util.NAVY, true));
+        words.addView(text(note, 11, 0xff8b9097, false));
+        row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text("‹", 18, 0xffb0b6bd, true));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(5), dp(12), dp(5), 0);
+        row.setLayoutParams(lp);
+        return row;
     }
 
     private LinearLayout tile(String title, String note, int icon, View.OnClickListener action) {

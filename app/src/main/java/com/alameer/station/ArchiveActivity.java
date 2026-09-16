@@ -37,7 +37,7 @@ public class ArchiveActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("الدفاتر الرسمية", 19, Color.WHITE, true));
+        words.addView(text("الأرشيف", 19, Color.WHITE, true));
         words.addView(text("الورديات المرحّلة — تقارير PDF غير قابلة للتعديل", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
