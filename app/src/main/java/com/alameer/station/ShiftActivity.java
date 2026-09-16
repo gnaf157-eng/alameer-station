@@ -256,6 +256,7 @@ public class ShiftActivity extends Activity {
         addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
         pages[4].addView(addPump,space());
 
+        buildLinkSettings();
         buildTankSettings();
         buildThresholdSettings();
 
@@ -273,6 +274,59 @@ public class ShiftActivity extends Activity {
         Button call=action("تواصل مع المطوّر",false);
         call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
         about.addView(call,space());pages[4].addView(about,space());
+    }
+
+    /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
+    private void buildLinkSettings(){
+        pages[4].addView(sectionTitle("الربط بين الجهازين"));
+        LinearLayout box=panel(Color.WHITE);
+        String code=db.linkCode();
+        boolean linked=Link.valid(code);
+        box.addView(text(linked?Link.pretty(code):"غير مربوط",linked?20:17,linked?Util.NAVY:Util.RED,true));
+        box.addView(text(linked
+                ? "الجهازان مربوطان. إرسال الوردية واستلامها يتم تلقائيًا."
+                : "أنشئ رمزًا في جهاز المدير، واكتب نفس الرمز في جهاز العامل مرة واحدة.",
+                13,0xff7c8186,false));
+
+        Button create=action("إنشاء رمز ربط جديد",true);
+        create.setOnClickListener(v->new AlertDialog.Builder(this)
+                .setTitle("إنشاء رمز ربط")
+                .setMessage("سيُنشأ رمز جديد لهذا الجهاز.\nاكتبه في جهاز العامل مرة واحدة.\n\n"
+                        +"تنبيه: الرمز القديم يتوقف عن العمل.")
+                .setPositiveButton("إنشاء",(d,w)->{
+                    String fresh=db.createLinkCode();
+                    buildSettingsPage();
+                    new AlertDialog.Builder(this).setTitle("رمز الربط")
+                        .setMessage(Link.pretty(fresh)+"\n\nاكتب هذا الرمز في جهاز العامل:\nالإعدادات ← الربط بين الجهازين ← إدخال رمز الربط.")
+                        .setPositiveButton("نسخ",(a,b)->{
+                            android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                            cb.setPrimaryClip(android.content.ClipData.newPlainText("رمز الربط",Link.pretty(fresh)));
+                            Toast.makeText(this,"نُسخ الرمز",Toast.LENGTH_SHORT).show();
+                        })
+                        .setNegativeButton("حسنًا",null).show();
+                })
+                .setNegativeButton("إلغاء",null).show());
+        box.addView(create,space());
+
+        Button enter=action("إدخال رمز الربط",false);
+        enter.setOnClickListener(v->{
+            EditText input=new EditText(this);styleInput(input);
+            input.setHint("مثال: ABCD-2345-KLMN");
+            input.setText(linked?Link.pretty(code):"");
+            LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);form.addView(input);
+            new AlertDialog.Builder(this).setTitle("رمز الربط")
+                .setMessage("اكتب الرمز الذي أنشأه جهاز المدير. مرة واحدة فقط.")
+                .setView(form)
+                .setPositiveButton("حفظ",(d,w)->{
+                    try{ db.setLinkCode(input.getText().toString());
+                        Toast.makeText(this,"تم الربط",Toast.LENGTH_LONG).show();
+                        buildSettingsPage();
+                    }catch(Exception e){Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();}
+                })
+                .setNegativeButton("إلغاء",null).show();
+        });
+        box.addView(enter,space());
+        pages[4].addView(box,space());
     }
 
     /** سعات الخزانات ومطابقة العجز بالمقياس اليدوي. */
@@ -1304,9 +1358,17 @@ public class ShiftActivity extends Activity {
         }
         done.show();
     }
-    /** يرفع الوردية إلى المدير عبر المزامنة، بلا ملفات ولا واتساب. */
+    /** يرفع الوردية إلى المدير عبر قناة الربط، بلا ملفات ولا واتساب. */
     void sendShift(long id){
-        new Sync(this).run(true);
+        Relay relay=new Relay(this);
+        if(!relay.linked()){
+            new AlertDialog.Builder(this).setTitle("الجهاز غير مربوط")
+                .setMessage("اطلب رمز الربط من المدير، ثم أدخله مرة واحدة من الإعدادات.")
+                .setPositiveButton("فتح الإعدادات",(d,w)->{settingsReturnPage=page;showPage(4);})
+                .setNegativeButton("لاحقًا",null).show();
+            return;
+        }
+        relay.send(id,true);
     }
 
     /** نسخة الملف محفوظة للطوارئ حين لا يتوفر إنترنت. */

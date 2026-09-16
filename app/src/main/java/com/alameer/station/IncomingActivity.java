@@ -47,7 +47,16 @@ public class IncomingActivity extends Activity {
         pick.setTextColor(Color.WHITE);
         pick.setBackground(Util.round(Util.NAVY, dp(14)));
         pick.setPadding(dp(16), dp(14), dp(16), dp(14));
-        pick.setOnClickListener(v -> new Sync(this).pullShifts(true));
+        pick.setOnClickListener(v -> {
+            Relay relay = new Relay(this);
+            if (!relay.linked()) {
+                new AlertDialog.Builder(this).setTitle("الجهاز غير مربوط")
+                        .setMessage("أنشئ رمز الربط من الإعدادات، واكتبه في جهاز العامل مرة واحدة.")
+                        .setPositiveButton("حسنًا", null).show();
+                return;
+            }
+            relay.receive(true, this::refresh);
+        });
         content.addView(pick, new LinearLayout.LayoutParams(-1, -2));
 
         listBox = new LinearLayout(this);
@@ -62,7 +71,13 @@ public class IncomingActivity extends Activity {
         setContentView(shell);
     }
 
-    @Override protected void onResume() { super.onResume(); refresh(); }
+    @Override protected void onResume() {
+        super.onResume();
+        refresh();
+        // جلب صامت عند الفتح، فلا ينتظر المدير ضغط زر.
+        Relay relay = new Relay(this);
+        if (relay.linked()) relay.receive(false, this::refresh);
+    }
 
     private void refresh() {
         listBox.removeAllViews();

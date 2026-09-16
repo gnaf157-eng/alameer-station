@@ -963,6 +963,36 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    // ==================== رمز الربط بين الجهازين ====================
+
+    /** رمز الربط المحفوظ، أو نص فارغ إن لم يُضبط بعد. */
+    public String linkCode(){ return setting("link_code",""); }
+
+    /** يحفظ رمز الربط بعد توحيد شكله، ويُكتب في سجل التدقيق. */
+    public void setLinkCode(String code){
+        String clean=Link.normalize(code);
+        if(clean.length()!=12)throw new IllegalArgumentException("رمز الربط يجب أن يكون 12 حرفًا");
+        String before=linkCode();
+        setSetting("link_code",clean);
+        setSetting("link_since","all");
+        audit("link",0,"SET_LINK",before.isEmpty()?"غير مربوط":"مربوط سابقًا",Link.pretty(clean),"ربط الجهازين");
+    }
+
+    /** ينشئ رمز ربط جديدًا لجهاز المدير. */
+    public String createLinkCode(){
+        String code=Link.generate(new java.util.Random());
+        setLinkCode(code);
+        return code;
+    }
+
+    /** يعلّم الوردية بأنها أُرسلت إلى المدير. */
+    public void markSent(long shiftId){
+        ContentValues v=new ContentValues();
+        v.put("sync_state","SYNCED");
+        getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
+        audit("shift",shiftId,"SEND_SHIFT","","أُرسلت إلى المدير","");
+    }
+
     /** معرّف ثابت لهذا الجهاز، يميّز ورديات كل جهاز عن غيره. */
     public String deviceId(){
         String id=setting("device_id","");
