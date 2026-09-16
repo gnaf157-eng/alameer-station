@@ -84,6 +84,11 @@ jobs:
           "$AAPT2" dump badging "$APK" | grep -q "uses-permission: name='android.permission.CAMERA'"
           echo "OK: لا يوجد إذن إنترنت، وإذن الكاميرا موجود"
 
+          echo "--- اسم الحزمة والتطبيق ---"
+          "$AAPT2" dump badging "$APK" | grep -q "package: name='com.abognaf.carcounter'"
+          "$AAPT2" dump badging "$APK" | grep -E "^package:|^application-label" || true
+          echo "OK: اسم الحزمة com.abognaf.carcounter"
+
           echo "--- أسماء الأصناف داخل النموذج ---"
           python3 - <<'PY'
           data = open('carcounter/src/main/assets/model.tflite', 'rb').read()
