@@ -95,8 +95,9 @@ public class ControlPanelActivity extends Activity {
 
         int unbalanced = 0;
         try (Cursor c = db.unbalancedEntries()) { unbalanced = c.getCount(); }
-        int unposted = 0;
-        try (Cursor c = db.unpostedShifts()) { unposted = c.getCount(); }
+        int unpostedCount = 0;
+        try (Cursor c = db.unpostedShifts()) { unpostedCount = c.getCount(); }
+        final int unposted = unpostedCount;
         int lockedPeriods = 0;
         try (Cursor c = db.periodLocks()) { lockedPeriods = c.getCount(); }
 
@@ -144,9 +145,12 @@ public class ControlPanelActivity extends Activity {
         line.addView(value);
         diff.addView(line);
 
-        String why = Journal.explain(gap)
-                + (flagged == 0 ? "" : "  •  " + flagged + " بند يحتاج مراجعة")
-                + "  •  اضغط للتفصيل";
+        // الفرق صفر مع وجود ورديات بلا قيد يعني دفترًا ناقصًا لا دفترًا سليمًا.
+        String why;
+        if (flagged == 0) why = Journal.explain(gap) + "  •  اضغط للتفصيل";
+        else if (unposted > 0 && Journal.balanced(gap))
+            why = unposted + " وردية مُغلقة لم تُرحّل إلى الدفتر  •  اضغط للترحيل";
+        else why = Journal.explain(gap) + "  •  " + flagged + " بند يحتاج مراجعة  •  اضغط للتفصيل";
         TextView note = text(why, 11, 0xffCFE2FA, false);
         note.setPadding(0, dp(4), 0, 0);
         diff.addView(note);
@@ -230,12 +234,71 @@ public class ControlPanelActivity extends Activity {
             }
         }
 
-        new android.app.AlertDialog.Builder(this)
+        int waiting = 0;
+        try (Cursor c = db.unpostedShifts()) { waiting = c.getCount(); }
+        android.app.AlertDialog.Builder ask = new android.app.AlertDialog.Builder(this)
                 .setTitle("تفصيل حالة التوازن")
                 .setMessage(sb.toString())
-                .setPositiveButton("حسنًا", null)
-                .setNeutralButton("سجل التدقيق", (d, w) -> showAuditLog())
-                .setNegativeButton("إقفال فترة", (d, w) -> lockPeriodDialog())
+                .setNeutralButton("سجل التدقيق", (d, w) -> showAuditLog());
+        if (waiting > 0) {
+            ask.setPositiveButton("ترحيل " + waiting + " وردية", (d, w) -> runBacklog());
+            ask.setNegativeButton("إغلاق", null);
+        } else {
+            ask.setPositiveButton("حسنًا", null);
+            ask.setNegativeButton("إقفال فترة", (d, w) -> lockPeriodDialog());
+        }
+        ask.show();
+    }
+
+    /** يرحّل الورديات القديمة إلى الدفتر، ويعرض ما رُفض منها ولماذا. */
+    private void runBacklog() {
+        String report;
+        try { report = db.journalBacklog(); }
+        catch (Exception e) { report = "تعذّر الترحيل: " + e.getMessage(); }
+        build();
+
+        int unexplained = 0;
+        try (Cursor c = db.unexplainedShifts()) { unexplained = c.getCount(); }
+        android.app.AlertDialog.Builder done = new android.app.AlertDialog.Builder(this)
+                .setTitle("ترحيل الورديات")
+                .setMessage(report);
+        if (unexplained > 0) done.setPositiveButton("تعليل الفروقات", (d, w) -> settleDialog());
+        done.setNegativeButton("حسنًا", null);
+        done.show();
+    }
+
+    /** يطلب سبب الفرق لكل وردية مُغلقة بفرق بلا تعليل، واحدة تلو الأخرى. */
+    private void settleDialog() {
+        long id = 0; String who = ""; String date = ""; double gap = 0;
+        try (Cursor c = db.unexplainedShifts()) {
+            if (!c.moveToFirst()) { build(); return; }
+            id = c.getLong(0); who = c.getString(1); date = c.getString(2); gap = c.getDouble(3);
+        }
+        final long shiftId = id;
+        final EditText input = new EditText(this);
+        input.setHint("سبب الفرق");
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(10), dp(24), 0);
+        wrap.addView(input);
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("وردية #" + shiftId + " — " + who)
+                .setMessage(date + "\nالفرق " + money(Math.abs(gap)) + " ر.ي "
+                        + (gap > 0 ? "(عجز)" : "(زيادة)")
+                        + "\n\nاكتب سبب الفرق حتى تُرحّل الوردية إلى الدفتر.")
+                .setView(wrap)
+                .setPositiveButton("حفظ وترحيل", (d, w) -> {
+                    try {
+                        db.settleShift(shiftId, input.getText().toString());
+                        db.journalShift(shiftId);
+                        build();
+                        settleDialog();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("لاحقًا", null)
                 .show();
     }
 

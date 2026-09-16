@@ -832,6 +832,61 @@ public class Db extends SQLiteOpenHelper {
         return postEntry(e);
     }
 
+    /** يسجّل سبب فرق وردية مُغلقة حتى يجوز ترحيلها، ويحفظ الأثر في سجل التدقيق. */
+    public void settleShift(long shiftId,String reason){
+        if(reason==null||reason.trim().isEmpty())throw new IllegalArgumentException("اكتب سبب الفرق");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            String before="";
+            try(Cursor c=db.rawQuery("SELECT COALESCE(difference_reason,'') FROM shifts WHERE id=?",
+                    new String[]{String.valueOf(shiftId)})){
+                if(!c.moveToFirst())throw new IllegalStateException("الوردية غير موجودة");
+                before=c.getString(0);
+            }
+            ContentValues v=new ContentValues();
+            v.put("difference_reason",reason.trim());
+            db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
+            audit(db,"shift",shiftId,"SETTLE_DIFFERENCE",before.isEmpty()?"بلا سبب":before,reason.trim(),reason.trim());
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+
+    /** الورديات المُغلقة بفرق بلا سبب: 0=id,1=عامل,2=تاريخ,3=الفرق. */
+    public Cursor unexplainedShifts(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE s.status<>'OPEN' AND ABS(s.balance)>=0.01 AND TRIM(COALESCE(s.difference_reason,''))='' "+
+            "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+            "ORDER BY s.id",null);
+    }
+
+    /**
+     * يرحّل كل وردية مُغلقة بلا قيد دفعةً واحدة.
+     * يعيد سطرًا يلخّص كم نجح وكم رُفض ولماذا. كل وردية في معاملتها المستقلة،
+     * فالوردية المرفوضة لا تمنع ترحيل البقية.
+     */
+    public String journalBacklog(){
+        java.util.List<Long> ids=new java.util.ArrayList<>();
+        try(Cursor c=unpostedShifts()){
+            while(c.moveToNext())ids.add(c.getLong(0));
+        }
+        if(ids.isEmpty())return "لا توجد ورديات بانتظار الترحيل.";
+        int done=0;
+        StringBuilder failed=new StringBuilder();
+        // الأقدم أولًا حتى تتسلسل القيود بترتيبها الزمني.
+        java.util.Collections.sort(ids);
+        for(long id:ids){
+            try{ if(journalShift(id)>0)done++; }
+            catch(Exception e){ failed.append("\n• وردية #").append(id).append(": ").append(e.getMessage()); }
+        }
+        StringBuilder out=new StringBuilder();
+        out.append("رُحّلت ").append(done).append(" وردية إلى الدفتر.");
+        if(failed.length()>0)out.append("\n\nلم تُرحّل:").append(failed);
+        return out.toString();
+    }
+
     static String normalizeFuel(String fuel){
         String f=fuel==null?"":fuel.trim();
         if(f.equals("البترول")||f.equals("بنزين")||f.equals("البنزين"))return "بترول";
