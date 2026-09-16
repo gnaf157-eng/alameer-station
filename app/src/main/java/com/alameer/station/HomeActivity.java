@@ -1,7 +1,6 @@
 package com.alameer.station.shifts;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -9,14 +8,12 @@ import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
 
 /** شاشة البداية: مطابقة العامل أو مطابقة الصناديق المحمية بكلمة سر. */
 public class HomeActivity extends Activity {
-    static final String MANAGER_PIN = "2216";
     private Db db;
 
     @Override protected void onCreate(Bundle state) {
@@ -62,41 +59,57 @@ public class HomeActivity extends Activity {
 
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
         welcome.setGravity(Gravity.CENTER);
-        welcome.setPadding(0, dp(30), 0, dp(18));
+        welcome.setPadding(0, dp(24), 0, dp(16));
         shell.addView(welcome);
 
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
-        row.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0, false,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
-        row.addView(tile("واجهة المدير", "الصناديق والمواد", 1, true,
-                v -> askPin(ManagerActivity.class)), cell());
-        shell.addView(row);
+        // مطابقة العامل أولًا وبعرض الواجهة لأنها المدخل اليومي.
+        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(168));
+        wide.setMargins(dp(6), 0, dp(6), 0);
+        shell.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0,
+                v -> startActivity(new Intent(this, ShiftActivity.class))), wide);
 
-        // لوحة التحكم مفتوحة مؤقتًا بلا كلمة سر بطلب المدير.
-        LinearLayout second = new LinearLayout(this);
-        second.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(150));
-        wide.setMargins(dp(6), dp(12), dp(6), 0);
-        second.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون بالألوان", 2, false,
-                v -> startActivity(new Intent(this, ControlPanelActivity.class))), wide);
-        shell.addView(second);
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setGravity(Gravity.CENTER);
+        row1.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
+                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
+        row1.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
+                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
+        shell.addView(row1, rowGap());
 
-        TextView hint = text("الترس في الأعلى يفتح الإعدادات • لوحة التحكم بلا كلمة سر", 13, 0xff7c8186, false);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, dp(24), 0, 0);
-        shell.addView(hint);
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setGravity(Gravity.CENTER);
+        row2.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
+                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
+        row2.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
+                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+        shell.addView(row2, rowGap());
 
-        View filler = new View(this);
-        shell.addView(filler, new LinearLayout.LayoutParams(-1, 0, 1));
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
+        credit.setPadding(0, dp(22), 0, dp(6));
         shell.addView(credit);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(shell);
-        setContentView(scroll);
+
+        // لوحة التحكم شريط ثابت أسفل الشاشة بعرضها كاملًا وبلون العنوان نفسه.
+        TextView panel = text("لوحة التحكم", 18, Color.WHITE, true);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(dp(16), dp(18), dp(16), dp(18));
+        panel.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                new android.graphics.drawable.ColorDrawable(Util.NAVY), null));
+        panel.setClickable(true);
+        panel.setOnClickListener(v -> startActivity(new Intent(this, ControlPanelActivity.class)));
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        page.setBackgroundColor(Util.BG);
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        page.addView(panel, new LinearLayout.LayoutParams(-1, -2));
+        setContentView(page);
         new AppUpdater(this).check(false);
     }
 
@@ -114,12 +127,18 @@ public class HomeActivity extends Activity {
 
     /** بطاقة كبيرة قابلة للنقر تمثّل أحد المدخلين. */
     private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(200), 1);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(150), 1);
         p.setMargins(dp(6), 0, dp(6), 0);
         return p;
     }
 
-    private LinearLayout tile(String title, String note, int icon, boolean locked, View.OnClickListener action) {
+    private LinearLayout.LayoutParams rowGap() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
+        p.setMargins(0, dp(12), 0, 0);
+        return p;
+    }
+
+    private LinearLayout tile(String title, String note, int icon, View.OnClickListener action) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
@@ -152,44 +171,7 @@ public class HomeActivity extends Activity {
         caption.setMaxLines(2);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView badge = text(locked ? "🔒 بكلمة سر" : "مفتوح", 10, locked ? Util.NAVY : 0xff8b9097, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(8), dp(4), dp(8), dp(4));
-        if (locked) badge.setBackground(Util.round(Util.ACCENT_SOFT, dp(9)));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.setMargins(0, dp(9), 0, 0);
-        box.addView(badge, lp);
         return box;
-    }
-
-    /** لا تُفتح الصناديق إلا بكلمة السر الثابتة. */
-    private void askPin(final Class<?> target) {
-        EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        input.setTextSize(22);
-        input.setGravity(Gravity.CENTER);
-        input.setHint("••••");
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(28), dp(12), dp(28), 0);
-        box.addView(input);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("دخول المدير")
-                .setMessage("اكتب كلمة سر المدير للدخول.")
-                .setView(box)
-                .setPositiveButton("دخول", null)
-                .setNegativeButton("إلغاء", null)
-                .create();
-        dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (!MANAGER_PIN.equals(input.getText().toString().trim())) {
-                input.setError("كلمة السر غير صحيحة");
-                input.setText("");
-                return;
-            }
-            dialog.dismiss();
-            startActivity(new Intent(this, target));
-        }));
-        dialog.show();
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
@@ -263,6 +245,58 @@ public class HomeActivity extends Activity {
                 c.drawRoundRect(6, 13.5f, 8.4f, 17.8f, 0.8f, 0.8f, paint);
                 c.drawRoundRect(10.8f, 10.5f, 13.2f, 17.8f, 0.8f, 0.8f, paint);
                 c.drawRoundRect(15.6f, 12f, 18, 17.8f, 0.8f, 0.8f, paint);
+            } else if (kind == 3) {
+                // صندوق نقدي.
+                c.drawRoundRect(2.5f, 7, 21.5f, 20, 2, 2, paint);
+                c.drawLine(2.5f, 11, 21.5f, 11, paint);
+                c.drawLine(7, 7, 7, 4.5f, paint);
+                c.drawLine(17, 7, 17, 4.5f, paint);
+                c.drawLine(7, 4.5f, 17, 4.5f, paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawCircle(12, 15.5f, 3, paint);
+            } else if (kind == 4) {
+                // ورقة نقدية للديون.
+                c.drawRoundRect(2.5f, 6, 21.5f, 18, 1.8f, 1.8f, paint);
+                c.drawLine(5.6f, 6, 5.6f, 18, paint);
+                c.drawLine(18.4f, 6, 18.4f, 18, paint);
+                c.drawCircle(12, 12, 3.1f, paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawCircle(12, 12, 1.5f, paint);
+            } else if (kind == 5) {
+                // فاتورة المخاريج.
+                android.graphics.Path receipt = new android.graphics.Path();
+                receipt.moveTo(4.5f, 2.5f);
+                receipt.lineTo(19.5f, 2.5f);
+                receipt.lineTo(19.5f, 21.5f);
+                receipt.lineTo(17, 19.6f);
+                receipt.lineTo(14.5f, 21.5f);
+                receipt.lineTo(12, 19.6f);
+                receipt.lineTo(9.5f, 21.5f);
+                receipt.lineTo(7, 19.6f);
+                receipt.lineTo(4.5f, 21.5f);
+                receipt.close();
+                c.drawPath(receipt, paint);
+                paint.setColor(Util.ACCENT);
+                c.drawLine(8, 8, 16, 8, paint);
+                c.drawLine(8, 12, 16, 12, paint);
+                c.drawLine(8, 15.6f, 13, 15.6f, paint);
+            } else if (kind == 6) {
+                // خرطوم وقود للمواد.
+                c.drawRoundRect(5, 4, 14.5f, 21, 1.6f, 1.6f, paint);
+                c.drawLine(3, 21, 16.5f, 21, paint);
+                c.drawLine(14.5f, 9.5f, 17, 9.5f, paint);
+                c.drawLine(17, 9.5f, 17, 16.5f, paint);
+                android.graphics.Path hose = new android.graphics.Path();
+                hose.moveTo(17, 16.5f);
+                hose.cubicTo(17, 19.4f, 21, 19.4f, 21, 16.5f);
+                hose.lineTo(21, 6.5f);
+                hose.lineTo(18.4f, 3.6f);
+                c.drawPath(hose, paint);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Util.ACCENT);
+                c.drawRoundRect(7, 6.5f, 12.5f, 11.5f, 0.8f, 0.8f, paint);
             } else if (kind == 9) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);
