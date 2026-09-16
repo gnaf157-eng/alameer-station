@@ -963,67 +963,55 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
-    // ==================== دور الجهاز وكلمات المرور ====================
+    // ==================== كلمات السر والدخول ====================
 
-    /** هل ضُبطت كلمات المرور لهذا الجهاز بعد؟ */
-    public boolean passwordsSet(){ return !setting("pw_manager","").isEmpty(); }
+    /** الرمز الافتراضي للمدير والعامل قبل أي تغيير. */
+    public static final String DEFAULT_MANAGER_PIN = "2216";
+    public static final String DEFAULT_WORKER_PIN = "6114";
 
-    /** يضبط كلمتي المرور مرة واحدة عند أول تشغيل. */
-    public void setPasswords(String manager,String worker){
-        String m=manager==null?"":manager.trim();
-        String w=worker==null?"":worker.trim();
-        if(m.length()<4)throw new IllegalArgumentException("كلمة مرور المدير: 4 أحرف على الأقل");
-        if(w.length()<4)throw new IllegalArgumentException("كلمة مرور العامل: 4 أحرف على الأقل");
-        if(m.equals(w))throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا المرور");
-        setSetting("pw_manager",Calc.hash(m));
-        setSetting("pw_worker",Calc.hash(w));
-        audit("device",0,"SET_PASSWORDS","","ضُبطت كلمتا المرور","أول تشغيل");
-    }
+    /** الجلسة الحالية في الذاكرة فقط: تُنسى بإغلاق التطبيق فتُطلب كلمة السر من جديد. */
+    private static String session = "";
+    public static boolean signedIn(){ return !session.isEmpty(); }
+    public static boolean workerDevice(){ return "WORKER".equals(session); }
+    public static boolean managerMode(){ return "MANAGER".equals(session); }
+    public static void endSession(){ session = ""; }
 
-    /** يغيّر كلمة مرور دور واحد، بعد التحقّق من الحالية. */
-    public void changePassword(String role,String current,String fresh){
-        String key="MANAGER".equals(role)?"pw_manager":"pw_worker";
-        if(!Calc.hash(current==null?"":current.trim()).equals(setting(key,"")))
-            throw new IllegalArgumentException("كلمة المرور الحالية غير صحيحة");
-        String clean=fresh==null?"":fresh.trim();
-        if(clean.length()<4)throw new IllegalArgumentException("كلمة المرور الجديدة: 4 أحرف على الأقل");
-        String other="MANAGER".equals(role)?"pw_worker":"pw_manager";
-        if(Calc.hash(clean).equals(setting(other,"")))
-            throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا المرور");
-        setSetting(key,Calc.hash(clean));
-        audit("device",0,"CHANGE_PASSWORD",role,"غُيّرت كلمة المرور","");
-    }
+    private String managerHash(){ return setting("pw_manager", Calc.hash(DEFAULT_MANAGER_PIN)); }
+    private String workerHash(){ return setting("pw_worker", Calc.hash(DEFAULT_WORKER_PIN)); }
 
     /**
-     * يتحقّق من كلمة المرور ويعيد الدور الذي تفتحه:
-     * MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
+     * يتحقّق من كلمة السر ويفتح الجلسة بالدور الذي تخصّها.
+     * يعيد MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
      */
-    public String roleForPassword(String password){
-        String hash=Calc.hash(password==null?"":password.trim());
-        if(hash.equals(setting("pw_manager","")))return "MANAGER";
-        if(hash.equals(setting("pw_worker","")))return "WORKER";
-        return "";
+    public String login(String password){
+        String hash = Calc.hash(password == null ? "" : password.trim());
+        String role = hash.equals(managerHash()) ? "MANAGER"
+                    : hash.equals(workerHash()) ? "WORKER" : "";
+        if(!role.isEmpty()){
+            session = role;
+            audit("device", 0, "LOGIN", "", role.equals("MANAGER") ? "دخول المدير" : "دخول العامل", "");
+        }
+        return role;
     }
 
-    // ==================== دور الجهاز ====================
-
-    /** هل اختير دور هذا الجهاز بعد؟ */
-    public boolean roleChosen(){ return !setting("device_role","").isEmpty(); }
-
-    /** جهاز العامل يرى شاشة الوردية وحدها. */
-    public boolean workerDevice(){ return "WORKER".equals(setting("device_role","")); }
-
-    /** خروج: يُنسى الدور فتُطلب كلمة المرور من جديد. */
-    public void signOut(){
-        String before=setting("device_role","");
-        setSetting("device_role","");
-        audit("device",0,"SIGN_OUT",before,"خروج","تبديل المستخدم");
+    /** يغيّر كلمة سر أحد الدورين. متاح للمدير وحده من الضبط. */
+    public void setPin(String role, String fresh){
+        if(!managerMode())throw new IllegalStateException("تغيير كلمات السر للمدير وحده");
+        String clean = fresh == null ? "" : fresh.trim();
+        if(clean.length() < 4)throw new IllegalArgumentException("كلمة السر: 4 أرقام أو أحرف على الأقل");
+        boolean manager = "MANAGER".equals(role);
+        String other = manager ? workerHash() : managerHash();
+        if(Calc.hash(clean).equals(other))
+            throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا السر");
+        setSetting(manager ? "pw_manager" : "pw_worker", Calc.hash(clean));
+        audit("device", 0, "CHANGE_PIN", manager ? "المدير" : "العامل", "غُيّرت كلمة السر", "");
     }
 
-    public void setRole(String role){
-        String before=setting("device_role","");
-        setSetting("device_role",role);
-        audit("device",0,"SET_ROLE",before.isEmpty()?"غير محدّد":before,role,"اختيار دور الجهاز");
+    /** هل ما زالت كلمة السر هي الافتراضية؟ يُنبَّه المدير لتغييرها. */
+    public boolean defaultPin(String role){
+        return "MANAGER".equals(role)
+            ? managerHash().equals(Calc.hash(DEFAULT_MANAGER_PIN))
+            : workerHash().equals(Calc.hash(DEFAULT_WORKER_PIN));
     }
 
     // ==================== رمز الربط بين الجهازين ====================

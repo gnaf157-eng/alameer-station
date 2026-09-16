@@ -295,21 +295,40 @@ public class ShiftActivity extends Activity {
         about.addView(call,space());pages[4].addView(about,space());
     }
 
-    /** تغيير كلمة مرور المستخدم الحالي بعد التحقّق من الحالية. */
-    private void changePasswordDialog(final String role){
-        final EditText current=new EditText(this);styleInput(current);
-        current.setHint("كلمة المرور الحالية");
-        current.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    /** سطر كلمة سر واحد مع زرّ تغييرها. */
+    private View pinRow(String title,String note,final String role){
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0,dp(10),0,dp(10));
+        LinearLayout words=column();
+        words.addView(text(title,17,Util.NAVY,true));
+        words.addView(text(note,12,0xff7c8186,false));
+        if(db.defaultPin(role))
+            words.addView(text("ما زالت الافتراضية — يُستحسن تغييرها",12,Util.RED,true));
+        row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        Button edit=action("تغيير",false);edit.setTextSize(14);
+        edit.setOnClickListener(v->pinDialog(title,role));
+        row.addView(edit);
+        return row;
+    }
+
+    /** يغيّر كلمة سر أحد الدورين. المدير وحده يصل إلى هنا. */
+    private void pinDialog(String title,final String role){
         final EditText fresh=new EditText(this);styleInput(fresh);
-        fresh.setHint("كلمة المرور الجديدة");
+        fresh.setHint("كلمة السر الجديدة");
         fresh.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        final EditText again=new EditText(this);styleInput(again);
+        again.setHint("أعد كتابتها");
+        again.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);
-        form.addView(current);form.addView(fresh);
-        new AlertDialog.Builder(this).setTitle("تغيير كلمة المرور").setView(form)
+        form.addView(fresh);form.addView(again);
+        new AlertDialog.Builder(this).setTitle(title).setView(form)
             .setPositiveButton("حفظ",(d,w)->{
+                String a=fresh.getText().toString().trim(),b=again.getText().toString().trim();
+                if(!a.equals(b)){Toast.makeText(this,"الكلمتان غير متطابقتين",Toast.LENGTH_LONG).show();return;}
                 try{
-                    db.changePassword(role,current.getText().toString(),fresh.getText().toString());
-                    Toast.makeText(this,"غُيّرت كلمة المرور",Toast.LENGTH_LONG).show();
+                    db.setPin(role,a);
+                    Toast.makeText(this,"غُيّرت كلمة السر",Toast.LENGTH_LONG).show();
+                    buildSettingsPage();
                 }catch(Exception e){Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();}
             })
             .setNegativeButton("إلغاء",null).show();
@@ -317,28 +336,16 @@ public class ShiftActivity extends Activity {
 
     /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
     private void buildLinkSettings(){
-        pages[4].addView(sectionTitle("المستخدم الحالي"));
-        LinearLayout roleBox=panel(Color.WHITE);
-        final boolean worker=db.workerDevice();
-        roleBox.addView(text(worker?"العامل":"المدير",19,Util.NAVY,true));
-        roleBox.addView(text(worker?"شاشة الوردية وحدها. للدخول كمدير اخرج ثم أدخل كلمة مروره."
-                                   :"الواجهة كاملة: مراجعة واعتماد وتقارير.",13,0xff7c8186,false));
-        Button out=action("خروج وتبديل المستخدم",false);
-        out.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("خروج")
-            .setMessage("ستُطلب كلمة المرور عند الفتح القادم.")
-            .setPositiveButton("خروج",(d,w)->{
-                db.signOut();
-                Intent home=new Intent(this,HomeActivity.class);
-                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(home);finish();
-            })
-            .setNegativeButton("إلغاء",null).show());
-        roleBox.addView(out,space());
-        Button pw=action("تغيير كلمة مروري",false);
-        pw.setOnClickListener(v->changePasswordDialog(worker?"WORKER":"MANAGER"));
-        roleBox.addView(pw,space());
-        pages[4].addView(roleBox,space());
+        // كلمات السر: للمدير وحده، ولا تظهر في واجهة العامل.
+        if(Db.managerMode()){
+            pages[4].addView(sectionTitle("كلمات السر"));
+            LinearLayout pinBox=panel(Color.WHITE);
+            pinBox.addView(pinRow("كلمة سر المدير","تفتح الواجهة كاملة","MANAGER"));
+            View split=new View(this);split.setBackgroundColor(0xffeceef0);
+            pinBox.addView(split,new LinearLayout.LayoutParams(-1,dp(1)));
+            pinBox.addView(pinRow("كلمة سر العامل","تفتح شاشة الوردية وحدها","WORKER"));
+            pages[4].addView(pinBox,space());
+        }
 
         pages[4].addView(sectionTitle("الربط بين الجهازين"));
         LinearLayout box=panel(Color.WHITE);
@@ -747,7 +754,7 @@ public class ShiftActivity extends Activity {
         // مغادرة الإعدادات تُنزل الأسعار والطرمبات على الوردية المفتوحة.
         if(page==4){db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();}
         // جهاز العامل بلا واجهة رئيسية: الرجوع من الإعدادات يعود للوردية دائمًا.
-        if(page==4&&(!settingsOnly||db.workerDevice())){
+        if(page==4&&(!settingsOnly||Db.workerDevice())){
             showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
         }else super.onBackPressed();

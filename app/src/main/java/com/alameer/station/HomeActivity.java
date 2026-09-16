@@ -21,12 +21,10 @@ public class HomeActivity extends Activity {
         db = new Db(this);
         Db.signIn(Branding.stationName(db));
 
-        // أول تشغيل: تُضبط كلمتا المرور مرة واحدة.
-        if (!db.passwordsSet()) { setupPasswords(); return; }
-        // كل تشغيل: كلمة المرور هي التي تحدّد الواجهة.
-        if (!db.roleChosen()) { askPassword(); return; }
-        // جهاز العامل لا يرى إلا شاشة الوردية.
-        if (db.workerDevice()) {
+        // كل فتح: كلمة السر وحدها تحدّد الواجهة، ولا يُحفظ دور.
+        if (!Db.signedIn()) { askPassword(); return; }
+        // العامل لا يرى إلا شاشة الوردية.
+        if (Db.workerDevice()) {
             Intent shift = new Intent(this, ShiftActivity.class);
             shift.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(shift);
@@ -179,59 +177,35 @@ public class HomeActivity extends Activity {
         return b;
     }
 
-    /** أول تشغيل: يضبط المدير كلمتي المرور — واحدة له وواحدة للعامل. */
-    private void setupPasswords() {
-        LinearLayout shell = loginShell("ضبط كلمتي المرور",
-                "تُضبط مرة واحدة على هذا الجهاز.\nكلمة المدير تفتح الواجهة كاملة، وكلمة العامل تفتح شاشة الوردية وحدها.");
-        final EditText manager = passwordField("كلمة مرور المدير");
-        final EditText worker = passwordField("كلمة مرور العامل");
-        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
-        fp.bottomMargin = dp(12);
-        shell.addView(manager, fp);
-        shell.addView(worker, fp);
-
-        Button save = bigButton("حفظ وبدء الاستخدام");
-        save.setOnClickListener(v -> {
-            try {
-                db.setPasswords(manager.getText().toString(), worker.getText().toString());
-                Toast.makeText(this, "حُفظت كلمتا المرور", Toast.LENGTH_LONG).show();
-                recreate();
-            } catch (Exception e) {
-                Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
-            }
-        });
-        shell.addView(save, new LinearLayout.LayoutParams(-1, -2));
-        setContentView(shell);
-    }
-
-    /** كلمة المرور تحدّد الواجهة: المدير أو العامل. */
+    /** شاشة الدخول: كلمة السر هي التي تفتح واجهة المدير أو واجهة العامل. */
     private void askPassword() {
-        LinearLayout shell = loginShell("أدخل كلمة المرور",
-                "كلمة المدير تفتح الواجهة كاملة، وكلمة العامل تفتح شاشة الوردية.");
-        final EditText field = passwordField("كلمة المرور");
+        LinearLayout shell = loginShell("أدخل كلمة السر",
+                "كلمة سر المدير تفتح الواجهة كاملة،\nوكلمة سر العامل تفتح شاشة الوردية.");
+        final EditText field = passwordField("كلمة السر");
         LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
         fp.bottomMargin = dp(14);
         shell.addView(field, fp);
 
         Button enter = bigButton("دخول");
         enter.setOnClickListener(v -> {
-            String role = db.roleForPassword(field.getText().toString());
+            String role = db.login(field.getText().toString());
             if (role.isEmpty()) {
                 field.setText("");
-                field.setError("كلمة المرور غير صحيحة");
-                Toast.makeText(this, "كلمة المرور غير صحيحة", Toast.LENGTH_SHORT).show();
+                field.setError("كلمة السر غير صحيحة");
+                Toast.makeText(this, "كلمة السر غير صحيحة", Toast.LENGTH_SHORT).show();
                 return;
             }
-            db.setRole(role);
             recreate();
         });
         shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
+
+        field.setOnEditorActionListener((v, id, event) -> { enter.performClick(); return true; });
         setContentView(shell);
     }
 
     @Override public void onBackPressed() {
         // من شاشة الدخول: الخروج من التطبيق لا الدوران فيه.
-        if (!db.passwordsSet() || !db.roleChosen()) { finishAffinity(); return; }
+        if (!Db.signedIn()) { finishAffinity(); return; }
         super.onBackPressed();
     }
 
