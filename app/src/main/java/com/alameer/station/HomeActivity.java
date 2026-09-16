@@ -90,7 +90,7 @@ public class HomeActivity extends Activity {
 
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("مطابقة العامل", "الورديات والحركات والتقارير", 0,
+        row1.addView(tile("فحص الوردية", "مراجعة القراءات والحركات", 0,
                 v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
         row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
@@ -112,13 +112,15 @@ public class HomeActivity extends Activity {
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row3, rowWeight(true));
 
-        // ورديات العامل الواردة، بعرض الشاشة مع عدد المنتظر منها.
+        // سجل الانتظار والدفاتر: مرحلتا الرحلة الأخيرتان.
         int waiting = db.pendingCount();
         LinearLayout row4 = new LinearLayout(this);
         row4.setGravity(Gravity.CENTER);
-        row4.addView(tile("ورديات العامل", waiting == 0 ? "استيراد واعتماد ورديات العامل"
+        row4.addView(tile("سجل الورديات المنتظرة", waiting == 0 ? "لا ورديات منتظرة"
                         : waiting + " وردية بانتظار اعتمادك", 7,
                 v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
+        row4.addView(tile("الدفاتر الرسمية", "تقارير الورديات المرحّلة", 8,
+                v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
         shell.addView(row4, rowWeight(true));
 
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
@@ -462,6 +464,26 @@ public class HomeActivity extends Activity {
                 c.drawLine(12, 15, 9, 12, paint);
                 c.drawLine(12, 15, 15, 12, paint);
                 c.drawLine(8, 18, 16, 18, paint);
+            } else if (kind == 8) {
+                // دفتر مفتوح: الدفاتر الرسمية.
+                c.drawLine(12, 6.5f, 12, 20, paint);
+                android.graphics.Path left = new android.graphics.Path();
+                left.moveTo(12, 6.5f);
+                left.cubicTo(9.5f, 4.2f, 6, 4.2f, 3, 5.5f);
+                left.lineTo(3, 18.5f);
+                left.cubicTo(6, 17.2f, 9.5f, 17.2f, 12, 20);
+                c.drawPath(left, paint);
+                android.graphics.Path right = new android.graphics.Path();
+                right.moveTo(12, 6.5f);
+                right.cubicTo(14.5f, 4.2f, 18, 4.2f, 21, 5.5f);
+                right.lineTo(21, 18.5f);
+                right.cubicTo(18, 17.2f, 14.5f, 17.2f, 12, 20);
+                c.drawPath(right, paint);
+                paint.setColor(Util.ACCENT);
+                c.drawLine(5.5f, 9, 9.5f, 9, paint);
+                c.drawLine(14.5f, 9, 18.5f, 9, paint);
+                c.drawLine(5.5f, 12.5f, 9.5f, 12.5f, paint);
+                c.drawLine(14.5f, 12.5f, 18.5f, 12.5f, paint);
             } else if (kind == 9) {
                 android.graphics.Path drop = new android.graphics.Path();
                 drop.moveTo(12, 2.5f);

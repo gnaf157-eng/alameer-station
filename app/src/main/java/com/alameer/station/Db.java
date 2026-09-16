@@ -1036,6 +1036,16 @@ public class Db extends SQLiteOpenHelper {
         return code;
     }
 
+    /** الورديات المرحّلة إلى الدفاتر: 0=id,1=عامل,2=تاريخ,3=مبيعات,4=الباقي,5=طرمبات */
+    public Cursor postedShifts(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.sales,s.balance,"+
+            "(SELECT COUNT(*) FROM readings r WHERE r.shift_id=s.id AND r.current IS NOT NULL) "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE s.status='APPROVED' "+
+            "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null);
+    }
+
     /** عدد ورديات العامل المرسلة وما زالت تنتظر اعتماد المدير. */
     public int awaitingManager(int workerId){
         try(Cursor c=getReadableDatabase().rawQuery(

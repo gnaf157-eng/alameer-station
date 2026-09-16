@@ -175,8 +175,9 @@ public class ShiftActivity extends Activity {
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
-        String[] names={"ورديتي","الحركات","الأرشيف"};
-        int[] destinations={0,1,3};
+        // الأرشيف صار أيقونة مستقلة في واجهة المدير، ويبقى تبويبًا عند العامل ليتابع حالة ورديّاته.
+        String[] names={"ورديتي","الحركات",Db.managerMode()?"المطابقة":"الأرشيف"};
+        int[] destinations={0,1,Db.managerMode()?2:3};
         for(int i=0;i<tabs.length;i++){
             final int n=destinations[i];
             Button tab=new Button(this);tabs[i]=tab;
@@ -711,7 +712,8 @@ public class ShiftActivity extends Activity {
         for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         // شاشة الإعدادات لا تحتاج شريط التنقّل السفلي.
         if(navBar!=null)navBar.setVisibility(selected==4?View.GONE:View.VISIBLE);
-        int active=selected==2?0:selected==3?2:selected==4?-1:selected;
+        int active=Db.managerMode()?(selected==2?2:selected==3?-1:selected==4?-1:selected)
+                : (selected==2?0:selected==3?2:selected==4?-1:selected);
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
             tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.ACCENT:Color.WHITE,dp(17)),null));

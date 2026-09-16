@@ -1,99 +1,186 @@
 package com.alameer.station.shifts;
 
-import android.app.*;import android.content.*;import android.database.Cursor;import android.net.Uri;import android.os.*;import android.widget.*;import androidx.core.content.FileProvider;import java.io.*;import java.nio.charset.StandardCharsets;import java.util.*;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.database.Cursor;
+import android.graphics.Color;
+import android.os.Bundle;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.*;
 
+import java.util.Locale;
+
+/**
+ * أرشيف الدفاتر: الورديات التي رُحّلت واعتُمدت.
+ * تُعرض كتقارير PDF للقراءة والمشاركة فقط، بلا تعديل.
+ */
 public class ArchiveActivity extends Activity {
-    private Db db;private int workerId;private boolean admin;
-    @Override public void onCreate(Bundle b){
-        super.onCreate(b);db=new Db(this);
-        workerId=getIntent().getIntExtra("workerId",0);admin=getIntent().getBooleanExtra("admin",false);
-        ScrollView scroll=new ScrollView(this);LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
-        root.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_RTL);
-        root.setPadding(18,24,18,40);root.setBackgroundColor(Util.BG);
-        root.addView(Util.title(this,admin?"أرشيف جميع الورديات":"أرشيف وردياتي"),Util.spaced());
-        Button export=Util.goldButton(this,"تصدير الأرشيف (Excel / CSV)");
-        export.setOnClickListener(v->export());
-        root.addView(export,Util.spaced());
-        try(Cursor c=db.archive(workerId,admin)){
-            if(c.getCount()==0)root.addView(Util.card(this,"لا توجد ورديات محفوظة بعد."),Util.spaced());
-            while(c.moveToNext()){
-                double bal=c.getDouble(5);String note=c.getString(7);
-                boolean ok=Math.abs(bal)<0.01;
-                TextView card=Util.card(this,"وردية #"+c.getLong(0)+" — "+c.getString(1)+"\n"+c.getString(2)
-                    +"\nالحالة: "+status(c.getString(3))+" | المبيعات: "+fmt(c.getDouble(4))
-                    +"\nالباقي: "+fmt(bal)+" | المزامنة: "+sync(c.getString(6))
-                    +(ok?"":"\n⚠ غير مطابقة — "+(bal>0?"عجز ":"زيادة ")+fmt(Math.abs(bal))+" ريال")
-                    +(note==null||note.isEmpty()?"":"\nملاحظة المدير: "+note));
-                card.setTextColor(ok?Util.GREEN:Util.RED);
-                final long shiftId=c.getLong(0);
+    private Db db;
+    private LinearLayout listBox;
+
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        db = new Db(this);
+        // شاشة المدير وحده.
+        if (!Db.managerMode()) { finish(); return; }
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        shell.setBackgroundColor(Util.BG);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(15), dp(16), dp(15));
+        header.setBackgroundColor(Util.NAVY);
+        LinearLayout words = new LinearLayout(this);
+        words.setOrientation(LinearLayout.VERTICAL);
+        words.addView(text("الدفاتر الرسمية", 19, Color.WHITE, true));
+        words.addView(text("الورديات المرحّلة — تقارير PDF غير قابلة للتعديل", 11, 0xffCFE2FA, false));
+        header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        shell.addView(header);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(14), dp(12), dp(14), dp(24));
+        listBox = new LinearLayout(this);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        content.addView(listBox);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(content);
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        setContentView(shell);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (!Db.managerMode()) { finish(); return; }
+        if (listBox != null) refresh();
+    }
+
+    private void refresh() {
+        listBox.removeAllViews();
+        int count = 0;
+        double totalSales = 0;
+        try (Cursor c = db.postedShifts()) {
+            while (c.moveToNext()) {
+                count++;
+                final long id = c.getLong(0);
+                String who = c.getString(1);
+                String date = c.getString(2);
+                double sales = c.getDouble(3);
+                totalSales += sales;
+                int pumps = c.getInt(5);
+
+                LinearLayout card = new LinearLayout(this);
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setPadding(dp(16), dp(14), dp(16), dp(14));
+                card.setBackground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x18000000),
+                        Util.round(Color.WHITE, dp(16)), null));
+                card.setElevation(dp(2));
                 card.setClickable(true);
-                final boolean matched=ok;
-                card.setOnClickListener(v->{
-                    AlertDialog.Builder ask=new AlertDialog.Builder(this).setTitle("وردية #"+shiftId);
-                    if(matched){
-                        ask.setMessage("أخرج تقرير الوردية بصيغة PDF جاهزة للطباعة أو المشاركة.")
-                           .setPositiveButton("تقرير PDF",(d,w)->exportPdf(shiftId))
-                           .setNegativeButton("إغلاق",null);
-                    }else{
-                        ask.setMessage("هذه الوردية غير مطابقة، ولا يمكن إخراج تقرير لها حتى يُصحَّح الفرق.")
-                           .setPositiveButton("حسنًا",null);
+                card.setOnClickListener(v -> openReport(id));
+
+                LinearLayout top = new LinearLayout(this);
+                top.setGravity(Gravity.CENTER_VERTICAL);
+                LinearLayout lines = new LinearLayout(this);
+                lines.setOrientation(LinearLayout.VERTICAL);
+                lines.addView(text(who, 18, Util.NAVY, true));
+                lines.addView(text(pumps + " طرمبة  •  " + date, 13, 0xff667078, false));
+                top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
+                TextView badge = text("PDF", 12, Color.WHITE, true);
+                badge.setPadding(dp(10), dp(5), dp(10), dp(5));
+                badge.setBackground(Util.round(Util.RED, dp(9)));
+                top.addView(badge);
+                card.addView(top);
+
+                TextView money = text("المبيعات " + money(sales) + " ر.ي", 15, Util.GREEN, true);
+                money.setPadding(0, dp(6), 0, 0);
+                card.addView(money);
+                card.addView(text("مُعتمدة ومُرحّلة  •  اضغط لعرض التقرير", 12, 0xff8b9097, false));
+
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+                cp.setMargins(0, dp(6), 0, dp(6));
+                listBox.addView(card, cp);
+            }
+        }
+        if (count == 0) {
+            listBox.addView(text("لا توجد ورديات مرحّلة بعد.\nالورديات المعتمدة تظهر هنا كتقارير.",
+                    14, 0xff777d84, false));
+            return;
+        }
+        TextView sum = text(count + " وردية  •  إجمالي المبيعات " + money(totalSales) + " ر.ي",
+                14, Util.NAVY, true);
+        sum.setGravity(Gravity.CENTER);
+        sum.setPadding(dp(12), dp(14), dp(12), dp(14));
+        sum.setBackground(Util.round(Util.ACCENT_SOFT, dp(14)));
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
+        sp.setMargins(0, dp(10), 0, 0);
+        listBox.addView(sum, sp);
+    }
+
+    /** يبني تقرير الوردية PDF ويعرضه للقراءة أو المشاركة. */
+    private void openReport(final long id) {
+        new AlertDialog.Builder(this).setTitle("تقرير الوردية #" + id)
+                .setMessage("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.")
+                .setPositiveButton("فتح PDF", (d, w) -> share(id, true))
+                .setNeutralButton("مشاركة", (d, w) -> share(id, false))
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    private void share(final long id, final boolean view) {
+        Toast.makeText(this, "جارٍ تجهيز التقرير...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                final java.io.File file = new PdfReport(this, db).build(id);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    try {
+                        android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                                this, getPackageName() + ".files", file);
+                        Intent intent = view ? new Intent(Intent.ACTION_VIEW) : new Intent(Intent.ACTION_SEND);
+                        if (view) {
+                            intent.setDataAndType(uri, "application/pdf");
+                        } else {
+                            intent.setType("application/pdf");
+                            intent.putExtra(Intent.EXTRA_STREAM, uri);
+                            intent.putExtra(Intent.EXTRA_SUBJECT, "وردية #" + id);
+                        }
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(view ? intent : Intent.createChooser(intent, "مشاركة التقرير"));
+                    } catch (Exception e) {
+                        Toast.makeText(this, "لا يوجد تطبيق لفتح PDF", Toast.LENGTH_LONG).show();
                     }
-                    ask.show();
                 });
-                root.addView(card,Util.spaced());
+            } catch (Exception e) {
+                final String why = String.valueOf(e.getMessage());
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed())
+                        Toast.makeText(this, "تعذر إنشاء التقرير: " + why, Toast.LENGTH_LONG).show();
+                });
             }
-        }
-        scroll.addView(root);setContentView(scroll);
+        }).start();
     }
-    private void export(){
-        try{
-            StringBuilder sb=new StringBuilder("\ufeff");
-            sb.append("رقم الوردية,العامل,وقت الفتح,وقت الإغلاق,الحالة,المبيعات,المقبوضات,النقد المسلّم,الديون,المخاريج,الباقي,سبب الفرق,ملاحظة المدير,المزامنة\n");
-            int rows=0;
-            try(Cursor c=db.exportShifts(workerId,admin)){
-                while(c.moveToNext()){
-                    if(!Calc.matched(c.getDouble(10))||!db.validateShift(c.getLong(0)).isEmpty()){
-                        Toast.makeText(this,"لا يمكن تصدير الأرشيف: توجد وردية غير مكتملة أو غير مطابقة.",Toast.LENGTH_LONG).show();return;
-                    }
-                    rows++;
-                    sb.append(cell(String.valueOf(c.getLong(0)))).append(',').append(cell(c.getString(1))).append(',')
-                      .append(cell(c.getString(2))).append(',').append(cell(c.getString(3))).append(',')
-                      .append(cell(status(c.getString(4)))).append(',');
-                    for(int i=5;i<=10;i++)sb.append(cell(fmt(c.getDouble(i)))).append(',');
-                    sb.append(cell(c.getString(11))).append(',').append(cell(c.getString(12))).append(',').append(cell(sync(c.getString(13)))).append('\n');
-                }
-            }
-            if(rows==0){Toast.makeText(this,"لا توجد ورديات لتصديرها.",Toast.LENGTH_LONG).show();return;}
-            File dir=new File(getCacheDir(),"exports");dir.mkdirs();
-            File file=new File(dir,"alameer-shifts-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmm",Locale.US).format(new Date())+".csv");
-            try(OutputStream out=new FileOutputStream(file)){out.write(sb.toString().getBytes(StandardCharsets.UTF_8));}
-            share(file,"text/csv","أرشيف ورديات محطة الأمير","تصدير الأرشيف");
-        }catch(Exception e){Toast.makeText(this,"تعذر تصدير الأرشيف",Toast.LENGTH_LONG).show();}
+
+    private TextView text(String value, int size, int color, boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(value);
+        t.setTextSize(size);
+        t.setTextColor(color);
+        t.setTextDirection(View.TEXT_DIRECTION_RTL);
+        t.setPadding(0, dp(2), 0, dp(2));
+        if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
+        return t;
     }
-    private void exportPdf(long shiftId){
-        if(!Calc.matched(db.balance(shiftId))||!db.validateShift(shiftId).isEmpty()){
-            new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير").setMessage("أكمل الوردية واجعل الباقي صفرًا قبل مشاركة التقرير.").setPositiveButton("حسنًا",null).show();return;
-        }
-        try{
-            File file=new PdfReport(this,db).build(shiftId);
-            share(file,"application/pdf","تقرير وردية #"+shiftId,"مشاركة تقرير الوردية");
-        }catch(Throwable e){
-            // اعرض سبب الفشل الحقيقي بدل رسالة عامة لا تدل على شيء.
-            String reason=e.getMessage();
-            if(reason==null||reason.trim().isEmpty())reason=e.getClass().getSimpleName();
-            new AlertDialog.Builder(this).setTitle("تعذر إنشاء تقرير PDF")
-                .setMessage(reason).setPositiveButton("حسنًا",null).show();
-        }
+
+    private String money(double value) {
+        return String.format(Locale.US, value == Math.rint(value) ? "%,.0f" : "%,.2f", value);
     }
-    private void share(File file,String mime,String subject,String chooser){
-        Uri uri=FileProvider.getUriForFile(this,getPackageName()+".files",file);
-        Intent intent=new Intent(Intent.ACTION_SEND);intent.setType(mime);
-        intent.putExtra(Intent.EXTRA_STREAM,uri);intent.putExtra(Intent.EXTRA_SUBJECT,subject);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivity(Intent.createChooser(intent,chooser));
-    }
-    private String cell(String value){if(value==null)value="";return "\""+value.replace("\"","\"\"").replace("\n"," ")+"\"";}
-    private String status(String s){return PdfReport.arabicStatus(s);}
-    private String sync(String s){return "LOCAL".equals(s)?"محلي":"PENDING".equals(s)?"بانتظار الإنترنت":"تمت";}
-    private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
+
+    private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 }
