@@ -278,6 +278,27 @@ public class ShiftActivity extends Activity {
 
     /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
     private void buildLinkSettings(){
+        pages[4].addView(sectionTitle("دور هذا الجهاز"));
+        LinearLayout roleBox=panel(Color.WHITE);
+        final boolean worker=db.workerDevice();
+        roleBox.addView(text(worker?"جهاز العامل":"جهاز المدير",19,Util.NAVY,true));
+        roleBox.addView(text(worker?"يفتح على شاشة الوردية مباشرة، ويرسلها للمدير."
+                                   :"يفتح الواجهة كاملة لمراجعة الورديات واعتمادها.",13,0xff7c8186,false));
+        Button swap=action(worker?"تحويله إلى جهاز المدير":"تحويله إلى جهاز العامل",false);
+        swap.setOnClickListener(v->new AlertDialog.Builder(this)
+            .setTitle("تغيير دور الجهاز")
+            .setMessage(worker?"ستظهر الواجهة كاملة بكل الأيقونات."
+                              :"سيفتح التطبيق على شاشة الوردية وحدها، وتختفي بقية الأيقونات.")
+            .setPositiveButton("تغيير",(d,w)->{
+                db.setRole(worker?"MANAGER":"WORKER");
+                Intent home=new Intent(this,HomeActivity.class);
+                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(home);finish();
+            })
+            .setNegativeButton("إلغاء",null).show());
+        roleBox.addView(swap,space());
+        pages[4].addView(roleBox,space());
+
         pages[4].addView(sectionTitle("الربط بين الجهازين"));
         LinearLayout box=panel(Color.WHITE);
         String code=db.linkCode();

@@ -963,6 +963,20 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    // ==================== دور الجهاز ====================
+
+    /** هل اختير دور هذا الجهاز بعد؟ */
+    public boolean roleChosen(){ return !setting("device_role","").isEmpty(); }
+
+    /** جهاز العامل يرى شاشة الوردية وحدها. */
+    public boolean workerDevice(){ return "WORKER".equals(setting("device_role","")); }
+
+    public void setRole(String role){
+        String before=setting("device_role","");
+        setSetting("device_role",role);
+        audit("device",0,"SET_ROLE",before.isEmpty()?"غير محدّد":before,role,"اختيار دور الجهاز");
+    }
+
     // ==================== رمز الربط بين الجهازين ====================
 
     /** رمز الربط المحفوظ، أو نص فارغ إن لم يُضبط بعد. */

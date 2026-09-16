@@ -20,6 +20,17 @@ public class HomeActivity extends Activity {
         super.onCreate(state);
         db = new Db(this);
         Db.signIn(Branding.stationName(db));
+
+        // أول تشغيل: يختار الجهاز دوره مرة واحدة.
+        if (!db.roleChosen()) { chooseRole(); return; }
+        // جهاز العامل لا يرى إلا شاشة الوردية.
+        if (db.workerDevice()) {
+            Intent shift = new Intent(this, ShiftActivity.class);
+            shift.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(shift);
+            finish();
+            return;
+        }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -103,6 +114,36 @@ public class HomeActivity extends Activity {
 
         setContentView(shell);
         new AppUpdater(this).check(false);
+    }
+
+    /** يُسأل مرة واحدة عند أول تشغيل: أهذا جهاز العامل أم المدير؟ */
+    private void chooseRole() {
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        shell.setBackgroundColor(Util.BG);
+        shell.setGravity(Gravity.CENTER);
+        shell.setPadding(dp(24), dp(24), dp(24), dp(24));
+
+        TextView title = text("لمن هذا الجهاز؟", 24, Util.NAVY, true);
+        title.setGravity(Gravity.CENTER);
+        shell.addView(title);
+        TextView note = text("يُسأل مرة واحدة فقط، ويمكن تغييره لاحقًا من الإعدادات.", 13, 0xff7c8186, false);
+        note.setGravity(Gravity.CENTER);
+        note.setPadding(0, dp(8), 0, dp(28));
+        shell.addView(note);
+
+        LinearLayout worker = tile("جهاز العامل", "شاشة الوردية وحدها — يسجّل ويرسل للمدير", 0,
+                v -> { db.setRole("WORKER"); recreate(); });
+        LinearLayout.LayoutParams wide = new LinearLayout.LayoutParams(-1, dp(150));
+        wide.setMargins(0, 0, 0, dp(14));
+        shell.addView(worker, wide);
+
+        LinearLayout manager = tile("جهاز المدير", "الواجهة كاملة — مراجعة واعتماد وتقارير", 2,
+                v -> { db.setRole("MANAGER"); recreate(); });
+        shell.addView(manager, new LinearLayout.LayoutParams(-1, dp(150)));
+
+        setContentView(shell);
     }
 
     @Override protected void onResume() {
