@@ -34,9 +34,10 @@ public class MisbahaActivityTest {
         return Robolectric.buildActivity(MisbahaActivity.class).setup();
     }
 
-    /** جذر التخطيط الرئيسي (الـ LinearLayout مباشرة داخل حاوية المحتوى). */
-    private ViewGroup rootLayout(Activity activity) {
-        return (ViewGroup) activity.findViewById(android.R.id.content);
+    /** التخطيط الرئيسي: أول (ووحيد) عنصر داخل حاوية المحتوى. */
+    private ViewGroup mainLayout(Activity activity) {
+        ViewGroup content = (ViewGroup) activity.findViewById(android.R.id.content);
+        return (ViewGroup) content.getChildAt(0);
     }
 
     @Test
@@ -48,8 +49,8 @@ public class MisbahaActivityTest {
         assertEquals("شريط المطور ظاهر دائمًا (VISIBLE)", View.VISIBLE, bar.getVisibility());
         assertEquals("نص الشريط مطابق حرفيًا", BAR_TEXT, bar.getText().toString());
 
-        // الشريط يجب أن يكون العنصر الأخير في جذر التخطيط (مؤشّرًا إلى أسفل الشاشة)
-        ViewGroup root = rootLayout(activity);
+        // الشريط يجب أن يكون العنصر الأخير في التخطيط الرئيسي (أسفل الشاشة)
+        ViewGroup root = mainLayout(activity);
         assertSame("الشريط مثبت أسفل الشاشة (آخر عنصر في التخطيط)", bar,
                 root.getChildAt(root.getChildCount() - 1));
     }
@@ -62,9 +63,8 @@ public class MisbahaActivityTest {
         assertNotNull("عنوان التطبيق موجود", title);
         assertEquals("المسبحة الإلكترونية", title.getText().toString());
 
-        // العنوان هو أول عنصر في التخطيط (أعلى الشاشة)
-        ViewGroup root = rootLayout(activity);
-        assertSame("العنوان أعلى الشاشة", title, root.getChildAt(0));
+        // العنوان هو أول عنصر في التخطيط الرئيسي (أعلى الشاشة)
+        assertSame("العنوان أعلى الشاشة", title, mainLayout(activity).getChildAt(0));
     }
 
     @Test
