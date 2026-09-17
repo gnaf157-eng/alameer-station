@@ -173,74 +173,93 @@ jobs:
       - name: Run app on emulator and capture screenshots
         run: |
           cat > /tmp/emu-script.sh <<'SCRIPT'
-          set -euo pipefail
+          set -uo pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
-          sudo chmod 666 /dev/kvm 2>/dev/null || true
-          if [ ! -e /dev/kvm ]; then
-            echo "ERROR: /dev/kvm is not available on this runner (KVM is required for the emulator)"
+          fail() {
+            echo "ERROR: $1"
+            echo "----- emulator boot log (tail) -----"
+            tail -n 120 /tmp/emulator-boot.log 2>/dev/null || true
+            echo "----- adb devices -----"
+            timeout 15 adb devices 2>/dev/null || true
             exit 1
-          fi
+          }
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          [ -e /dev/kvm ] || fail "/dev/kvm is not available on this runner (KVM is required)"
           echo "KVM available"
 
           AVD_NAME=misbaha
           if ! avdmanager list avd 2>/dev/null | grep -q "Avd name: ${AVD_NAME}$"; then
+            echo "Creating AVD..."
             echo no | avdmanager create avd -n "$AVD_NAME" -k "system-images;android-34;google_apis;x86_64"
           fi
+          avdmanager list avd
 
           "$ANDROID_HOME/emulator/emulator" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim \
             -gpu swiftshader_indirect -camera-back none -camera-front none -skin 1080x2340 \
             > /tmp/emulator-boot.log 2>&1 &
           EMU_PID=$!
+          echo "Emulator process started (pid $EMU_PID)"
 
-          adb wait-for-device
+          timeout 240 adb wait-for-device || fail "adb wait-for-device timed out after 4 minutes"
+          echo "Device seen by adb"
+
           boot=""
           for i in $(seq 1 100); do
-            boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
-            if [ "$boot" = "1" ]; then break; fi
+            if ! kill -0 $EMU_PID 2>/dev/null; then
+              fail "emulator process died during boot"
+            fi
+            boot=$(timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+            if [ $(( i % 5 )) -eq 0 ]; then
+              echo "boot wait: attempt $i, boot_completed=$boot"
+            fi
+            [ "$boot" = "1" ] && break
             sleep 4
           done
-          if [ "$boot" != "1" ]; then
-            echo "ERROR: emulator did not finish booting within ~7 minutes"
-            tail -n 120 /tmp/emulator-boot.log || true
-            exit 1
-          fi
+          [ "$boot" = "1" ] || fail "emulator did not finish booting within ~8 minutes"
           echo "Emulator booted"
 
           cd misbaha
-          adb install -r app/build/outputs/apk/debug/app-debug.apk
-          adb shell am start -n com.abognaf.misbaha/.MisbahaActivity
+          timeout 180 adb install -r app/build/outputs/apk/debug/app-debug.apk || fail "adb install failed"
+          echo "APK installed"
+          timeout 60 adb shell am start -n com.abognaf.misbaha/.MisbahaActivity || fail "am start failed"
           sleep 6
           mkdir -p screenshots
-          adb exec-out screencap -p > screenshots/1-home.png
+          timeout 120 adb exec-out screencap -p > screenshots/1-home.png || fail "screencap 1 failed"
+          echo "screenshot 1 (home) captured"
 
           # يضغط على العنصر صاحب الـ resource-id المحدد (الزر الدائري أو الشريط السفلي)
           tap_id() {
-            adb shell uiautomator dump /sdcard/ui.xml > /dev/null
-            adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
+            timeout 60 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
+            timeout 60 adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
             local bounds
             # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
             bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
+            [ -n "$bounds" ] || { echo "ERROR: element $1 not found in uiautomator dump"; exit 1; }
             local x1 y1 x2 y2
             x1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f1)
             y1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f2 | tr -d ']')
             x2=$(echo "$bounds" | cut -d'[' -f3 | cut -d',' -f1)
             y2=$(echo "$bounds" | cut -d'[' -f3 | cut -d',' -f2 | tr -d ']')
-            adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 ))
+            timeout 30 adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 ))
           }
 
           # 5 ضغطات على الزر الدائري: يجب أن يظهر العدد 5 ويطر الذكر
           for i in 1 2 3 4 5; do
-            tap_id tasbih_button
+            tap_id tasbih_button || fail "tap on tasbih button failed"
             sleep 0.5
           done
           sleep 1
-          adb exec-out screencap -p > screenshots/2-count5.png
+          timeout 120 adb exec-out screencap -p > screenshots/2-count5.png || fail "screencap 2 failed"
+          echo "screenshot 2 (count=5) captured"
 
           # الضغط على الشريط السفلي يفتح نافذة "حول التطبيق"
-          tap_id developer_bar
+          tap_id developer_bar || fail "tap on developer bar failed"
           sleep 2
-          adb exec-out screencap -p > screenshots/3-about-dialog.png
+          timeout 120 adb exec-out screencap -p > screenshots/3-about-dialog.png || fail "screencap 3 failed"
+          echo "screenshot 3 (about dialog) captured"
 
           kill $EMU_PID 2>/dev/null || true
           echo "Screenshots captured:"
@@ -251,7 +270,7 @@ jobs:
           status=$?
           set -e
           echo "----- emulator job exit code: $status -----"
-          tail -n 80 /tmp/emu-job.log
+          tail -n 100 /tmp/emu-job.log
           if [ $status -ne 0 ]; then
             cp /tmp/emu-job.log "$GITHUB_WORKSPACE/misbaha/CI_FAILURE_LOG.txt"
             git -C "$GITHUB_WORKSPACE" config user.name "ci-logger"
