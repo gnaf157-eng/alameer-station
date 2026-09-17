@@ -175,6 +175,9 @@ jobs:
           cat > /tmp/emu-script.sh <<'SCRIPT'
           set -uo pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          # توحيد مكان AVDs بين avdmanager والإيموليتور
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
 
           fail() {
             echo "ERROR: $1"
