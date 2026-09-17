@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- التخطيط الرئيسي: عمودي واحد. المنطقة الوسطى تأخذ المتبقي (weight=1)
+     فلا يخرج أي عنصر عن الشاشة ولا يُغطّى الشريط السفلي الثابت أبدًا. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:layoutDirection="rtl"
+    android:background="@drawable/bg_main"
+    android:fitsSystemWindows="true">
+
+    <!-- العنوان: مرة واحدة فقط أعلى الشاشة -->
+    <TextView
+        android:id="@+id/app_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="18dp"
+        android:paddingBottom="10dp"
+        android:shadowColor="#6600FF88"
+        android:shadowDx="0"
+        android:shadowDy="0"
+        android:shadowRadius="14"
+        android:text="@string/app_name"
+        android:textColor="@color/green_primary"
+        android:textSize="25sp"
+        android:textStyle="bold" />
+
+    <!-- المنطقة الوسطى: الذكر + شاشة العداد + الزر الدائري + زر التصفير -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp">
+
+        <!-- الذكر الحالي: خط عربي كبير في منتصف الشاشة -->
+        <TextView
+            android:id="@+id/dhikr_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autoSizeMaxTextSize="44sp"
+            android:autoSizeMinTextSize="24sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center"
+            android:maxLines="2"
+            android:paddingTop="6dp"
+            android:paddingBottom="20dp"
+            android:shadowColor="#44000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="8"
+            android:text="@string/dhikr_1"
+            android:textColor="@color/white"
+            android:textSize="42sp"
+            android:textStyle="bold" />
+
+        <!-- شاشة العداد: شكل شاشة المسبحة الإلكترونية (رقم LED أخضر على شاشة داكنة) -->
+        <TextView
+            android:id="@+id/counter_display"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autoSizeMaxTextSize="72sp"
+            android:autoSizeMinTextSize="30sp"
+            android:autoSizeStepGranularity="2sp"
+            android:autoSizeTextType="uniform"
+            android:background="@drawable/counter_screen_bg"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.05"
+            android:maxLines="1"
+            android:shadowColor="#802BFF88"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="18"
+            android:text="0"
+            android:textColor="@color/led_green"
+            android:textSize="68sp"
+            android:textStyle="bold" />
+
+        <!-- الزر الدائري الكبير جدًا للعد -->
+        <FrameLayout
+            android:id="@+id/tasbih_button"
+            android:layout_width="172dp"
+            android:layout_height="172dp"
+            android:layout_marginTop="26dp"
+            android:background="@drawable/circle_tasbih_bg"
+            android:clickable="true"
+            android:contentDescription="@string/tasbih_button_content_desc"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="@string/tasbih_button_label"
+                android:textColor="@color/green_soft"
+                android:textSize="29sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <!-- زر صغير لإعادة التصفير -->
+        <TextView
+            android:id="@+id/reset_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/reset_button_bg"
+            android:clickable="true"
+            android:contentDescription="@string/reset_button_content_desc"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingLeft="34dp"
+            android:paddingTop="11dp"
+            android:paddingRight="34dp"
+            android:paddingBottom="11dp"
+            android:text="@string/reset_button_label"
+            android:textColor="@color/muted"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- الشريط الثابت أسفل الشاشة: ظاهر دائمًا، لا يحتاج تمرير، لا يُغطى -->
+    <TextView
+        android:id="@+id/developer_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/developer_bar_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:minHeight="48dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp"
+        android:text="@string/developer_bar"
+        android:textColor="@color/green_primary"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

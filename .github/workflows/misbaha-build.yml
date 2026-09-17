@@ -1,0 +1,191 @@
+name: Build Misbaha APK
+
+on:
+  push:
+    paths:
+      - 'misbaha/**'
+      - '.github/workflows/misbaha-build.yml'
+  pull_request:
+    paths:
+      - 'misbaha/**'
+      - '.github/workflows/misbaha-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: misbaha-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build APK + upload artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: |
+          cd misbaha
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Verify APK content (package + fixed bottom bar string)
+        run: |
+          set -euo pipefail
+          APK=misbaha/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | head -n 1)"
+          "$AAPT2" dump badging "$APK" | grep -F 'package: name=com.abognaf.misbaha'
+          "$AAPT2" dump resources "$APK" | grep -F 'أبوقناف للأتمتة • 777808020'
+          echo "OK: APK contains the correct package and the fixed bottom bar string."
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Misbaha-APK
+          path: misbaha/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  tests:
+    name: Unit tests (Robolectric)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run Robolectric unit tests
+        run: |
+          cd misbaha
+          gradle --no-daemon :app:testDebugUnitTest
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Misbaha-TestReport
+          path: misbaha/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  screenshots:
+    name: Emulator visual check (bottom bar proof)
+    runs-on: ubuntu-latest
+    needs: apk
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android packages
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" \
+            "emulator" "system-images;android-34;google_apis;x86_64"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: |
+          cd misbaha
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Run app on emulator and capture screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            cd misbaha
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.abognaf.misbaha/.MisbahaActivity
+            sleep 6
+            mkdir -p screenshots
+            adb exec-out screencap -p > screenshots/1-home.png
+
+            # يضغط على العنصر صاحب الـ resource-id المحدد (الزر الدائري أو الشريط السفلي)
+            tap_id() {
+              adb shell uiautomator dump /sdcard/ui.xml > /dev/null
+              adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
+              local bounds
+              # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
+              bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
+              local x1 y1 x2 y2
+              x1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f1)
+              y1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f2 | tr -d ']')
+              x2=$(echo "$bounds" | cut -d'[' -f3 | cut -d',' -f1)
+              y2=$(echo "$bounds" | cut -d'[' -f3 | cut -d',' -f2 | tr -d ']')
+              adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 ))
+            }
+
+            # 5 ضغطات على الزر الدائري: يجب أن يظهر العدد 5 ويطر الذكر
+            for i in 1 2 3 4 5; do
+              tap_id tasbih_button
+              sleep 0.5
+            done
+            sleep 1
+            adb exec-out screencap -p > screenshots/2-count5.png
+
+            # الضغط على الشريط السفلي يفتح نافذة "حول التطبيق"
+            tap_id developer_bar
+            sleep 2
+            adb exec-out screencap -p > screenshots/3-about-dialog.png
+
+            echo "Screenshots captured:"
+            ls -la screenshots
+
+      - name: Upload screenshots artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Misbaha-Screenshots
+          path: misbaha/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30

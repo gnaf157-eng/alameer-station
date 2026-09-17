@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">المسبحة الإلكترونية</string>
+
+    <string name="dhikr_1">أستغفر الله</string>
+    <string name="dhikr_2">سبحان الله</string>
+    <string name="dhikr_3">الحمد لله</string>
+    <string name="dhikr_4">والله أكبر</string>
+
+    <string name="tasbih_button_label">سَبِّح</string>
+    <string name="tasbih_button_content_desc">زر التسبيح</string>
+    <string name="reset_button_label">إعادة التصفير</string>
+    <string name="reset_button_content_desc">زر إعادة التصفير</string>
+
+    <!-- نص الشريط الثابت — لا يُغيَّر -->
+    <string name="developer_bar">أبوقناف للأتمتة • 777808020</string>
+
+    <string name="about_title">حول التطبيق</string>
+    <string name="about_app_name">المسبحة الإلكترونية</string>
+    <string name="about_developed_by_label">تطوير:</string>
+    <string name="about_developer">أبوقناف للأتمتة</string>
+    <string name="about_contact_label">للتواصل:</string>
+    <string name="about_contact">777808020</string>
+    <string name="about_close">إغلاق</string>
+</resources>

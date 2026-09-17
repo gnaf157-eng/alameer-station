@@ -1,0 +1,19 @@
+<resources>
+    <!-- ألوان التصميم: أسود داكن فخما مع أخضر أنيق -->
+    <color name="bg_top">#111A14</color>
+    <color name="bg_bottom">#040705</color>
+    <color name="solid_bg">#050805</color>
+
+    <color name="green_primary">#4ADE80</color>
+    <color name="green_soft">#86EFAC</color>
+    <color name="led_green">#2BFF88</color>
+
+    <color name="screen_bg">#03110A</color>
+    <color name="screen_stroke">#173B2A</color>
+
+    <color name="bar_bg">#071009</color>
+    <color name="bar_stroke">#1C4530</color>
+
+    <color name="white">#F5F7F5</color>
+    <color name="muted">#9DB4A6</color>
+</resources>

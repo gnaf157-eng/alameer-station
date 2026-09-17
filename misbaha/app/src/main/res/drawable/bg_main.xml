@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية الشاشة الرئيسية: تدرج شعاعي داكن فاخر -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="640"
+        android:centerX="0.5"
+        android:centerY="0.22"
+        android:startColor="@color/bg_top"
+        android:endColor="@color/bg_bottom" />
+</shape>

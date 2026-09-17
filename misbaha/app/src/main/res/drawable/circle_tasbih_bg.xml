@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الزر الدائري الكبير: تدرج أخضر داكن مع إطار وموجة ضغط -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#40FFFFFF">
+    <item android:id="@android:id/background">
+        <shape android:shape="oval">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#1C4A33"
+                android:centerColor="#123524"
+                android:endColor="#0B2418" />
+            <stroke
+                android:width="2dp"
+                android:color="@color/green_primary" />
+        </shape>
+    </item>
+</ripple>
