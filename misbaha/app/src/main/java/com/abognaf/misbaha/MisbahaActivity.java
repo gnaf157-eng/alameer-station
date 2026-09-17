@@ -4,11 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.os.VibratorManager;
 import android.view.View;
 import android.widget.TextView;
 
@@ -43,7 +39,6 @@ public class MisbahaActivity extends Activity {
     private View resetButton;
 
     private SharedPreferences prefs;
-    private Vibrator vibrator;
 
     private int count;
     private int dhikrIndex;
@@ -66,8 +61,6 @@ public class MisbahaActivity extends Activity {
         if (dhikrIndex < 0 || dhikrIndex >= DHIKR.length) {
             dhikrIndex = 0;
         }
-
-        vibrator = getVibrator();
 
         // زر التسبيح: يزيد العداد بمقدار 1 وينقل الذكر إلى التالي (بدون تصفير العدد)
         tasbihButton.setOnClickListener(new View.OnClickListener() {
@@ -101,7 +94,6 @@ public class MisbahaActivity extends Activity {
         dhikrIndex = (dhikrIndex + 1) % DHIKR.length;
         save();
         updateUi();
-        vibrate();
     }
 
     private void onResetPressed() {
@@ -121,26 +113,6 @@ public class MisbahaActivity extends Activity {
     private void updateUi() {
         dhikrText.setText(DHIKR[dhikrIndex]);
         counterDisplay.setText(String.valueOf(count));
-    }
-
-    /** اهتزاز خفيف قصير جدًا عند كل ضغطة. */
-    private void vibrate() {
-        if (vibrator == null) {
-            return;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !vibrator.hasVibrator()) {
-            return;
-        }
-        vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE));
-    }
-
-    private Vibrator getVibrator() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            VibratorManager manager =
-                    (VibratorManager) getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-            return manager == null ? null : manager.getDefaultVibrator();
-        }
-        return (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
     }
 
     private void showAboutDialog() {
