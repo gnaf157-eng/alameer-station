@@ -216,6 +216,14 @@ jobs:
             echo "Screenshots captured:"
             ls -la screenshots
 
+      - name: Push screenshots to refs/notes (for inspection)
+        run: |
+          git -C "$GITHUB_WORKSPACE" config user.name "ci-screenshots"
+          git -C "$GITHUB_WORKSPACE" config user.email "ci-screenshots@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE" add misbaha/screenshots/
+          git -C "$GITHUB_WORKSPACE" commit -m "ci: emulator screenshots"
+          git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-screenshots
+
       - name: Upload screenshots artifact
         uses: actions/upload-artifact@v4
         with:

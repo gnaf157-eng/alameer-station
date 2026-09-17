@@ -14,6 +14,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 
 /**
@@ -29,41 +30,46 @@ public class MisbahaActivityTest {
 
     private static final String BAR_TEXT = "أبوقناف للأتمتة • 777808020";
 
-    private Activity launch() {
-        return Robolectric.buildActivity(MisbahaActivity.class).setup().get();
+    private ActivityController<MisbahaActivity> launch() {
+        return Robolectric.buildActivity(MisbahaActivity.class).setup();
+    }
+
+    /** جذر التخطيط الرئيسي (الـ LinearLayout مباشرة داخل حاوية المحتوى). */
+    private ViewGroup rootLayout(Activity activity) {
+        return (ViewGroup) activity.findViewById(android.R.id.content);
     }
 
     @Test
     public void bottomBarIsVisibleWithExactTextAndPinnedToBottom() {
-        Activity activity = launch();
+        Activity activity = launch().get();
 
-        View bar = activity.findViewById(R.id.developer_bar);
+        TextView bar = (TextView) activity.findViewById(R.id.developer_bar);
         assertNotNull("شريط المطور موجود في التخطيط", bar);
         assertEquals("شريط المطور ظاهر دائمًا (VISIBLE)", View.VISIBLE, bar.getVisibility());
         assertEquals("نص الشريط مطابق حرفيًا", BAR_TEXT, bar.getText().toString());
 
         // الشريط يجب أن يكون العنصر الأخير في جذر التخطيط (مؤشّرًا إلى أسفل الشاشة)
-        ViewGroup root = (ViewGroup) activity.findViewById(android.R.id.content).getChildAt(0);
+        ViewGroup root = rootLayout(activity);
         assertSame("الشريط مثبت أسفل الشاشة (آخر عنصر في التخطيط)", bar,
                 root.getChildAt(root.getChildCount() - 1));
     }
 
     @Test
     public void titleAppearsOnceAtTop() {
-        Activity activity = launch();
+        Activity activity = launch().get();
 
         TextView title = (TextView) activity.findViewById(R.id.app_title);
         assertNotNull("عنوان التطبيق موجود", title);
         assertEquals("المسبحة الإلكترونية", title.getText().toString());
 
-        ViewGroup root = (ViewGroup) activity.findViewById(android.R.id.content).getChildAt(0);
-        // العنوان هو أول عنصر في التخطيط (أعلى الشاشة) ولا يوجد عنوان آخر.
+        // العنوان هو أول عنصر في التخطيط (أعلى الشاشة)
+        ViewGroup root = rootLayout(activity);
         assertSame("العنوان أعلى الشاشة", title, root.getChildAt(0));
     }
 
     @Test
     public void tapIncrementsAndRotatesDhikrWithoutResetting() {
-        Activity activity = launch();
+        Activity activity = launch().get();
         View button = activity.findViewById(R.id.tasbih_button);
         TextView dhikr = (TextView) activity.findViewById(R.id.dhikr_text);
         TextView counter = (TextView) activity.findViewById(R.id.counter_display);
@@ -88,32 +94,35 @@ public class MisbahaActivityTest {
 
     @Test
     public void countSurvivesRestartAndOnlyResetClearsIt() {
-        Activity first = launch();
-        View button = first.findViewById(R.id.tasbih_button);
+        ActivityController<MisbahaActivity> first = launch();
+        View button = first.get().findViewById(R.id.tasbih_button);
         for (int i = 0; i < 7; i++) {
             button.performClick();
         }
         first.destroy();
 
         // إعادة فتح التطبيق: العدد مستمر من نفس القيمة
-        Activity second = Robolectric.buildActivity(MisbahaActivity.class).setup().get();
-        TextView counter = (TextView) second.findViewById(R.id.counter_display);
+        ActivityController<MisbahaActivity> second =
+                Robolectric.buildActivity(MisbahaActivity.class).setup();
+        TextView counter = (TextView) second.get().findViewById(R.id.counter_display);
         assertEquals("العدد محفوظ محليًا ويستمر", "7", counter.getText().toString());
 
-        second.findViewById(R.id.reset_button).performClick();
+        second.get().findViewById(R.id.reset_button).performClick();
         assertEquals("زر التصفير يعيد العدد إلى صفر", "0", counter.getText().toString());
         second.destroy();
 
-        Activity third = Robolectric.buildActivity(MisbahaActivity.class).setup().get();
+        ActivityController<MisbahaActivity> third =
+                Robolectric.buildActivity(MisbahaActivity.class).setup();
         assertEquals("التصفير محفوظ بشكل دائم", "0",
-                ((TextView) third.findViewById(R.id.counter_display)).getText().toString());
+                ((TextView) third.get().findViewById(R.id.counter_display)).getText().toString());
+        third.destroy();
     }
 
     @Test
     public void tappingBottomBarShowsAboutDialogContent() {
-        Activity activity = launch();
+        Activity activity = launch().get();
 
-        // الضغط على الشريط يفتح نافذة "حول التطبيق" (لا يجب أن يسبب خطأ)
+        // الضغط على الشريط يفتح نافذة "حول التطبيق" (يجب ألا يسبب أي خطأ)
         activity.findViewById(R.id.developer_bar).performClick();
 
         // محتوى نافذة "حول التطبيق"
