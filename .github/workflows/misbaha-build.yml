@@ -57,7 +57,7 @@ jobs:
             git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
             git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
             git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle build failure log"
-            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-apk
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-apk --force
           fi
           exit $status
 
@@ -120,7 +120,7 @@ jobs:
             git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
             git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
             git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle test failure log"
-            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure --force
           fi
           exit $status
 
@@ -166,7 +166,7 @@ jobs:
             git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
             git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
             git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle build failure log"
-            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-shots
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-shots --force
           fi
           exit $status
 
@@ -222,7 +222,7 @@ jobs:
           git -C "$GITHUB_WORKSPACE" config user.email "ci-screenshots@users.noreply.github.com"
           git -C "$GITHUB_WORKSPACE" add misbaha/screenshots/
           git -C "$GITHUB_WORKSPACE" commit -m "ci: emulator screenshots"
-          git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-screenshots
+          git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-screenshots --force
 
       - name: Upload screenshots artifact
         uses: actions/upload-artifact@v4
