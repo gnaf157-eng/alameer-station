@@ -224,6 +224,12 @@ jobs:
           [ "$boot" = "1" ] || fail "emulator did not finish booting within ~8 minutes"
           echo "Emulator booted"
 
+          # تعطيل الرسوم المتحركة حتى تستقر النوافذ ويستطيع uiautomator التقاط التسلسل
+          timeout 30 adb shell settings put global window_animation_scale 0
+          timeout 30 adb shell settings put global transition_animation_scale 0
+          timeout 30 adb shell settings put global animator_duration_scale 0
+          sleep 2
+
           cd misbaha
           timeout 180 adb install -r app/build/outputs/apk/debug/app-debug.apk || fail "adb install failed"
           echo "APK installed"
@@ -247,11 +253,16 @@ jobs:
 
           # يضغط على العنصر صاحب الـ resource-id المحدد (الزر الدائري أو الشريط السفلي)
           tap_id() {
-            timeout 60 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
-            timeout 60 adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
-            local bounds
-            # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
-            bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
+            local bounds="" attempt
+            for attempt in 1 2 3; do
+              timeout 60 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
+              timeout 60 adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
+              # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
+              bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
+              [ -n "$bounds" ] && break
+              echo "dump attempt $attempt: element $1 not found, retrying..."
+              sleep 3
+            done
             [ -n "$bounds" ] || {
               echo "ERROR: element $1 not found in uiautomator dump"
               echo "--- window focus:"
