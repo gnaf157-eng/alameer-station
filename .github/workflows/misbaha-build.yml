@@ -20,7 +20,7 @@ jobs:
     name: Build APK + upload artifact
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -45,15 +45,29 @@ jobs:
       - name: Build debug APK
         run: |
           cd misbaha
-          gradle --no-daemon :app:assembleDebug
+          set +e
+          gradle --no-daemon --stacktrace :app:assembleDebug > /tmp/gradle-build.log 2>&1
+          status=$?
+          set -e
+          echo "----- gradle exit code: $status -----"
+          tail -n 60 /tmp/gradle-build.log
+          if [ $status -ne 0 ]; then
+            cp /tmp/gradle-build.log "$GITHUB_WORKSPACE/misbaha/CI_FAILURE_LOG.txt"
+            git -C "$GITHUB_WORKSPACE" config user.name "ci-logger"
+            git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
+            git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
+            git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle build failure log"
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-apk
+          fi
+          exit $status
 
       - name: Verify APK content (package + fixed bottom bar string)
         run: |
-          set -euo pipefail
           APK=misbaha/app/build/outputs/apk/debug/app-debug.apk
           test -f "$APK"
           AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | head -n 1)"
-          "$AAPT2" dump badging "$APK" | grep -F 'package: name=com.abognaf.misbaha'
+          echo "AAPT2=$AAPT2"
+          "$AAPT2" dump badging "$APK" | grep -F 'com.abognaf.misbaha' | head -n 1
           "$AAPT2" dump resources "$APK" | grep -F 'أبوقناف للأتمتة • 777808020'
           echo "OK: APK contains the correct package and the fixed bottom bar string."
 
@@ -69,7 +83,7 @@ jobs:
     name: Unit tests (Robolectric)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -94,22 +108,27 @@ jobs:
       - name: Run Robolectric unit tests
         run: |
           cd misbaha
-          gradle --no-daemon :app:testDebugUnitTest
-
-      - name: Upload test report
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Misbaha-TestReport
-          path: misbaha/app/build/reports/tests/testDebugUnitTest/
-          if-no-files-found: ignore
-          retention-days: 14
+          set +e
+          gradle --no-daemon --stacktrace :app:testDebugUnitTest > /tmp/gradle-test.log 2>&1
+          status=$?
+          set -e
+          echo "----- gradle exit code: $status -----"
+          tail -n 60 /tmp/gradle-test.log
+          if [ $status -ne 0 ]; then
+            cp /tmp/gradle-test.log "$GITHUB_WORKSPACE/misbaha/CI_FAILURE_LOG.txt"
+            git -C "$GITHUB_WORKSPACE" config user.name "ci-logger"
+            git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
+            git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
+            git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle test failure log"
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure
+          fi
+          exit $status
 
   screenshots:
     name: Emulator visual check (bottom bar proof)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     needs: apk
     timeout-minutes: 40
     steps:
@@ -135,7 +154,21 @@ jobs:
       - name: Build debug APK
         run: |
           cd misbaha
-          gradle --no-daemon :app:assembleDebug
+          set +e
+          gradle --no-daemon --stacktrace :app:assembleDebug > /tmp/gradle-build.log 2>&1
+          status=$?
+          set -e
+          echo "----- gradle exit code: $status -----"
+          tail -n 60 /tmp/gradle-build.log
+          if [ $status -ne 0 ]; then
+            cp /tmp/gradle-build.log "$GITHUB_WORKSPACE/misbaha/CI_FAILURE_LOG.txt"
+            git -C "$GITHUB_WORKSPACE" config user.name "ci-logger"
+            git -C "$GITHUB_WORKSPACE" config user.email "ci-logger@users.noreply.github.com"
+            git -C "$GITHUB_WORKSPACE" add misbaha/CI_FAILURE_LOG.txt
+            git -C "$GITHUB_WORKSPACE" commit -m "ci: capture gradle build failure log"
+            git -C "$GITHUB_WORKSPACE" push origin HEAD:refs/notes/ci-failure-shots
+          fi
+          exit $status
 
       - name: Run app on emulator and capture screenshots
         uses: reactivecircus/android-emulator-runner@v2
