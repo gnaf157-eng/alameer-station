@@ -257,8 +257,9 @@ jobs:
             for attempt in 1 2 3; do
               timeout 60 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
               timeout 60 adb pull /sdcard/ui.xml /tmp/ui.xml > /dev/null
-              # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
-              bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
+              # توحيد علامات الاقتباس ثم البحث (يعمل مع أي صيغة إخراج)
+              tr '"' "'" < /tmp/ui.xml > /tmp/ui_norm.xml
+              bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui_norm.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
               [ -n "$bounds" ] && break
               echo "dump attempt $attempt: element $1 not found, retrying..."
               sleep 3
@@ -267,8 +268,11 @@ jobs:
               echo "ERROR: element $1 not found in uiautomator dump"
               echo "--- window focus:"
               timeout 15 adb shell dumpsys window 2>/dev/null | grep -m2 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r' || true
-              echo "--- resource-ids present in dump:"
-              grep -o "resource-id='[^']*'" /tmp/ui.xml | sort -u || true
+              echo "--- resource-ids present in dump (any quoting):"
+              tr '"' "'" < /tmp/ui.xml | grep -o "resource-id='[^']*'" | sort -u | head -n 30 || true
+              echo "--- raw head of ui.xml (first 900 bytes):"
+              head -c 900 /tmp/ui.xml || true
+              echo
               echo "--- crash log:"
               timeout 30 adb logcat -d -b crash -t 100 2>/dev/null || true
               exit 1
