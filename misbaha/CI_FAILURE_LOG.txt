@@ -1,0 +1,35 @@
+ANDROID_HOME=/usr/local/lib/android/sdk
+KVM available
+Creating AVD...
+Loading local repository...                                                     [=========                              ] 25% Loading local repository...       [=========                              ] 25% Fetch remote repository...        [=======================================] 100% Fetch remote repository...       
+Auto-selecting single ABI x86_64
+Do you wish to create a custom hardware profile? [no] Available Android Virtual Devices:
+    Name: misbaha
+    Path: /home/runner/.android/avd/misbaha.avd
+  Target: Google APIs (Google Inc.)
+          Based on: Android 14.0 ("UpsideDownCake") Tag/ABI: google_apis/x86_64
+  Sdcard: 512 MB
+Emulator process started (pid 2674)
+* daemon not running; starting now at tcp:5037
+* daemon started successfully
+Device seen by adb
+boot wait: attempt 5, boot_completed=
+Emulator booted
+Performing Streamed Install
+Success
+APK installed
+Starting: Intent { cmp=com.abognaf.misbaha/.MisbahaActivity }
+app is in the foreground
+screenshot 1 (home) captured
+/sdcard/ui.xml: 1 file pulled, 0 skipped. 0.1 MB/s (5138 bytes in 0.042s)
+dump attempt 1: element tasbih_button not found, retrying...
+/sdcard/ui.xml: 1 file pulled, 0 skipped. 6.0 MB/s (5138 bytes in 0.001s)
+dump attempt 2: element tasbih_button not found, retrying...
+/sdcard/ui.xml: 1 file pulled, 0 skipped. 2.8 MB/s (5138 bytes in 0.002s)
+dump attempt 3: element tasbih_button not found, retrying...
+ERROR: element tasbih_button not found in uiautomator dump
+--- window focus:
+  mCurrentFocus=Window{c03fbcf u0 com.abognaf.misbaha/com.abognaf.misbaha.MisbahaActivity}
+  mFocusedApp=ActivityRecord{8da66b3 u0 com.abognaf.misbaha/.MisbahaActivity t8}
+--- resource-ids present in dump:
+--- crash log:
