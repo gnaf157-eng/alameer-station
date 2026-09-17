@@ -227,8 +227,20 @@ jobs:
           cd misbaha
           timeout 180 adb install -r app/build/outputs/apk/debug/app-debug.apk || fail "adb install failed"
           echo "APK installed"
+          timeout 30 adb logcat -c 2>/dev/null || true
           timeout 60 adb shell am start -n com.abognaf.misbaha/.MisbahaActivity || fail "am start failed"
-          sleep 6
+          # انتظار حتى تظهر نافذة التطبيق في المقدمة (حتى 60 ثانية)
+          app_focus=""
+          for i in $(seq 1 60); do
+            app_focus=$(timeout 15 adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' | tr -d '\r' || true)
+            case "$app_focus" in *com.abognaf.misbaha*) break;; esac
+            sleep 1
+          done
+          case "$app_focus" in
+            *com.abognaf.misbaha*) echo "app is in the foreground";;
+            *) echo "WARNING: app not in foreground after 60s (focus=$app_focus)";;
+          esac
+          sleep 3
           mkdir -p screenshots
           timeout 120 adb exec-out screencap -p > screenshots/1-home.png || fail "screencap 1 failed"
           echo "screenshot 1 (home) captured"
@@ -240,7 +252,16 @@ jobs:
             local bounds
             # ملاحظة: uiautomator dump يستخدم علامات اقتباس مفردة
             bounds=$(grep -o "resource-id='com.abognaf.misbaha:id/$1'[^>]*bounds='[^']*'" /tmp/ui.xml | head -n 1 | grep -o "bounds='[^']*'" | cut -d"'" -f2)
-            [ -n "$bounds" ] || { echo "ERROR: element $1 not found in uiautomator dump"; exit 1; }
+            [ -n "$bounds" ] || {
+              echo "ERROR: element $1 not found in uiautomator dump"
+              echo "--- window focus:"
+              timeout 15 adb shell dumpsys window 2>/dev/null | grep -m2 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r' || true
+              echo "--- resource-ids present in dump:"
+              grep -o "resource-id='[^']*'" /tmp/ui.xml | sort -u || true
+              echo "--- crash log:"
+              timeout 30 adb logcat -d -b crash -t 100 2>/dev/null || true
+              exit 1
+            }
             local x1 y1 x2 y2
             x1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f1)
             y1=$(echo "$bounds" | cut -d'[' -f2 | cut -d',' -f2 | tr -d ']')
