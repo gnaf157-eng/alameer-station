@@ -126,12 +126,53 @@ public class ArchiveActivity extends Activity {
     private void openReport(final long id) {
         new AlertDialog.Builder(this).setTitle("تقرير الوردية " + db.shiftCode(id))
                 .setMessage("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.")
-                .setItems(new String[]{"فتح PDF", "مشاركة PDF", "تصدير Excel"}, (d, which) -> {
+                .setItems(new String[]{"فتح PDF", "مشاركة PDF",
+                        "مشاركة Excel", "حفظ Excel في التنزيلات"}, (d, which) -> {
                     if (which == 0) share(id, true, false);
                     else if (which == 1) share(id, false, false);
-                    else share(id, false, true);
+                    else if (which == 2) share(id, false, true);
+                    else saveToDownloads(id);
                 })
                 .setNegativeButton("إلغاء", null).show();
+    }
+
+    /**
+     * يحفظ ملف الإكسل في مجلد التنزيلات مباشرة.
+     * لا يعتمد على قبول التطبيقات الأخرى للملف، فيعمل دائمًا.
+     */
+    private void saveToDownloads(final long id) {
+        Toast.makeText(this, "جارٍ تجهيز الملف...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String message;
+            try {
+                java.io.File file = new ExcelReport(this, db).build(id);
+                String name = file.getName();
+
+                android.content.ContentValues values = new android.content.ContentValues();
+                values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name);
+                values.put(android.provider.MediaStore.Downloads.MIME_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                android.net.Uri target = getContentResolver().insert(
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (target == null) throw new java.io.IOException("تعذر إنشاء الملف في التنزيلات");
+
+                try (java.io.InputStream in = new java.io.FileInputStream(file);
+                     java.io.OutputStream out = getContentResolver().openOutputStream(target)) {
+                    byte[] buffer = new byte[8192];
+                    int n;
+                    while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+                }
+                message = "حُفظ الملف في التنزيلات باسم:\n" + name;
+            } catch (Exception e) {
+                message = "تعذر الحفظ: " + e.getMessage();
+            }
+            final String shown = message;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                new AlertDialog.Builder(this).setTitle("حفظ Excel")
+                        .setMessage(shown).setPositiveButton("حسنًا", null).show();
+            });
+        }).start();
     }
 
     /**
@@ -148,7 +189,7 @@ public class ArchiveActivity extends Activity {
                 // نوع عام عند المشاركة حتى تقبله واتساب وبقية التطبيقات،
                 // والنوع الدقيق عند الفتح ليختار برنامج الجداول.
                 final String mime = excel
-                        ? (view ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "*/*")
+                        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         : "application/pdf";
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
@@ -164,7 +205,14 @@ public class ArchiveActivity extends Activity {
                             intent.putExtra(Intent.EXTRA_SUBJECT, "وردية " + db.shiftCode(id));
                             intent.setClipData(android.content.ClipData.newRawUri("تقرير الوردية", uri));
                         }
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        // بعض الأجهزة لا تمنح الإذن تلقائيًا، فيُمنح لكل تطبيق مرشَّح.
+                        for (android.content.pm.ResolveInfo r :
+                                getPackageManager().queryIntentActivities(intent, 0)) {
+                            grantUriPermission(r.activityInfo.packageName, uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        }
                         if (view) {
                             // إن لم يوجد تطبيق للفتح، تُعرض قائمة المشاركة بدل الفشل.
                             if (intent.resolveActivity(getPackageManager()) != null) startActivity(intent);
