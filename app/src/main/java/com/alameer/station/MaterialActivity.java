@@ -299,32 +299,33 @@ public class MaterialActivity extends Activity {
     /** بطاقة الإجمالي: مجموع المخزون والوارد والمبيعات. */
     private void refreshSummary() {
         summaryBox.removeAllViews();
-        double stock = 0, in = 0, sold = 0;
-        for (String material : Db.MATERIALS) {
-            double[] s = db.materialSummary(material);
-            in += s[0];
-            sold += s[2];
-            stock += s[3];
-        }
+        double stock = 0;
+        for (String material : Db.MATERIALS) stock += db.materialSummary(material)[3];
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(Util.round(Util.NAVY, dp(18)));
-        card.addView(text("إجمالي المخزون المتاح", 13, 0xffCFE2FA, false));
-        TextView grand = text(money(stock) + "  لتر", 30, Color.WHITE, true);
-        grand.setTextDirection(View.TEXT_DIRECTION_LTR);
-        grand.setPadding(0, dp(4), 0, dp(12));
-        card.addView(grand);
-        LinearLayout stats = new LinearLayout(this);
-        stats.addView(stat("إجمالي الوارد", money(in)), cell());
-        stats.addView(stat("المباع", money(sold)), cell());
-        // قيمة المخزون بسعر التكلفة: الشراء زائد التوصيل.
+        // الرأس: قيمة كل المواد بسعر التكلفة بدل عدد اللترات.
         double value = db.stockValueTotal();
-        stats.addView(stat("قيمة المخزون", value > 0 ? money(value) : "—"), cell());
+        card.addView(text("إجمالي قيمة المواد بسعر التكلفة", 13, 0xffCFE2FA, false));
+        TextView grand = text((value > 0 ? money(value) : "—") + "  ر.ي", 30, Color.WHITE, true);
+        grand.setTextDirection(View.TEXT_DIRECTION_LTR);
+        grand.setPadding(0, dp(4), 0, dp(4));
+        card.addView(grand);
+        card.addView(text(money(stock) + " لتر  •  الشراء زائد أجرة التوصيل", 11, 0xffCFE2FA, false));
+
+        // الخانات الثلاث: قيمة كل مادة بسعر التكلفة.
+        LinearLayout stats = new LinearLayout(this);
+        stats.setPadding(0, dp(12), 0, 0);
+        for (String material : Db.MATERIALS) {
+            double each = db.stockValue(material);
+            stats.addView(stat(material, each > 0 ? money(each) : "—"), cell());
+        }
         card.addView(stats);
-        if (value > 0) {
-            TextView hint = text("محسوبة بسعر الشراء وأجرة التوصيل", 11, 0xff8b9097, false);
+        if (value <= 0) {
+            TextView hint = text("اضبط سعر الشراء وأجرة التوصيل من الترس", 11, 0xffFFD79A, true);
             hint.setGravity(Gravity.CENTER);
+            hint.setPadding(0, dp(8), 0, 0);
             card.addView(hint);
         }
         summaryBox.addView(card);
