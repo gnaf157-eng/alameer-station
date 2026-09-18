@@ -57,6 +57,29 @@ public class SuspenseActivity extends Activity {
         card.addView(stateText);
         content.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
+        Button clean = new Button(this);
+        clean.setText("تنظيف التصريفات المكرّرة");
+        clean.setAllCaps(false);
+        clean.setTextSize(14);
+        clean.setTextColor(Util.NAVY);
+        clean.setBackground(Util.round(Util.ACCENT_SOFT, dp(12)));
+        clean.setPadding(dp(14), dp(11), dp(14), dp(11));
+        clean.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("تنظيف التصريفات المكرّرة")
+                .setMessage("يُلغى أثر التصريفات التي تكرّرت بالخطأ، وتُحذف قيود الديون المكرّرة الناتجة عنها.\n\n"
+                        + "القيود الأصلية تبقى، والأثر محفوظ في سجل التدقيق.")
+                .setPositiveButton("تنظيف", (d, w) -> {
+                    int n = 0;
+                    try { n = db.cleanSuspenseMess(); }
+                    catch (Exception e) { Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show(); }
+                    Toast.makeText(this, "نُظّف " + n + " سطرًا", Toast.LENGTH_LONG).show();
+                    refresh();
+                })
+                .setNegativeButton("إلغاء", null).show());
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.setMargins(0, dp(10), 0, 0);
+        content.addView(clean, cp);
+
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
         listBox.setPadding(0, dp(14), 0, 0);

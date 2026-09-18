@@ -943,9 +943,20 @@ public class Db extends SQLiteOpenHelper {
     /** رصيد الحساب الوسيط: موجب مدين وسالب دائن. */
     public double suspenseBalance(){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END),0) "+
-                "FROM journal_lines WHERE account=?",new String[]{Journal.SUSPENSE})){
+                "SELECT COALESCE(SUM(CASE WHEN l.side='DEBIT' THEN l.amount ELSE -l.amount END),0) "+
+                "FROM journal_lines l JOIN journal j ON j.id=l.entry_id "+
+                "WHERE l.account=?",new String[]{Journal.SUSPENSE})){
             return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    /** عدد الحركات المعلّقة فعلًا في الوسيط. */
+    public int suspenseCount(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
+                "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0",
+                new String[]{Journal.SUSPENSE})){
+            return c.moveToFirst()?c.getInt(0):0;
         }
     }
 
@@ -959,7 +970,8 @@ public class Db extends SQLiteOpenHelper {
             "COALESCE((SELECT o.account FROM journal_lines o WHERE o.entry_id=j.id AND o.account<>? LIMIT 1),''),"+
             "j.source "+
             "FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
-            "WHERE l.account=? AND j.reversed_by=0 "+
+            // القيد العكسي يلغي أصله، فلا يُعرض ولا يُصرَّف من جديد.
+            "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0 "+
             "ORDER BY j.entry_date DESC,j.id DESC",
             new String[]{Journal.SUSPENSE,Journal.SUSPENSE});
     }
@@ -980,11 +992,14 @@ public class Db extends SQLiteOpenHelper {
         String memo="",date="",source="";long sourceId=0;
         double amount=0;boolean suspenseIsDebit=false;
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT j.memo,j.entry_date,j.source,j.source_id,l.side,l.amount "+
+                "SELECT j.memo,j.entry_date,j.source,j.source_id,l.side,l.amount,j.reverses,j.reversed_by "+
                 "FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
                 "WHERE j.id=? AND l.account=?",
                 new String[]{String.valueOf(entryId),Journal.SUSPENSE})){
             if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة في الحساب الوسيط");
+            // القيد العكسي لا يُصرَّف: هو إلغاء لأصله وقد سُوّي معه.
+            if(c.getLong(6)>0)throw new IllegalStateException("هذا قيد عكسي ولا يحتاج تصريفًا");
+            if(c.getLong(7)>0)throw new IllegalStateException("سبق تصريف هذه الحركة");
             memo=c.getString(0);date=c.getString(1);source=c.getString(2);sourceId=c.getLong(3);
             suspenseIsDebit="DEBIT".equals(c.getString(4));
             amount=c.getDouble(5);
@@ -1000,6 +1015,7 @@ public class Db extends SQLiteOpenHelper {
 
         String why=reason==null||reason.trim().isEmpty()?"تصريف الحساب الوسيط":reason.trim();
         reverseEntry(entryId,why);
+        if(memo.length()>60)memo=memo.substring(0,60);
         Journal.Entry fresh=suspenseIsDebit
             ? Journal.simple(memo,date,source,sourceId,targetAccount,other,amount,party)
             : Journal.simple(memo,date,source,sourceId,other,targetAccount,amount,party);
@@ -1017,6 +1033,37 @@ public class Db extends SQLiteOpenHelper {
                 }finally{suppressJournal=false;}
             }
         }
+    }
+
+    /**
+     * ينظّف فوضى التصريف المتكرّر: يعكس كل قيد وسيط بقي معلّقًا ومعه قيد مقابل
+     * لنفس المصدر والمبلغ، ويحذف قيود الديون المكرّرة الناتجة عن التصريف المتكرّر.
+     * يعيد عدد ما نُظّف.
+     */
+    public int cleanSuspenseMess(){
+        int cleaned=0;
+        // 1) قيود ديون كرّرها التصريف المتكرّر: يُبقى الأقدم ويُحذف ما بعده.
+        try{
+            int removed=getWritableDatabase().delete("debt_entries",
+                "note LIKE '%تصريف حركة #%' AND id NOT IN ("+
+                "SELECT MIN(id) FROM debt_entries WHERE note LIKE '%تصريف حركة #%' "+
+                "GROUP BY debtor_id,direction,amount,entry_date,note)",null);
+            cleaned+=removed;
+        }catch(Exception ignored){}
+
+        // 2) قيود وسيطة ناتجة عن تصريف سابق: بيانها يحمل «تصريف إلى» وما زالت معلّقة.
+        java.util.List<Long> stale=new java.util.ArrayList<>();
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT DISTINCT j.id FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
+                "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0 "+
+                "AND (j.memo LIKE '%تصريف إلى%' OR j.memo LIKE '%عكس القيد%')",
+                new String[]{Journal.SUSPENSE})){
+            while(c.moveToNext())stale.add(c.getLong(0));
+        }
+        for(long id:stale){
+            try{ reverseEntry(id,"تنظيف تصريف مكرّر"); cleaned++; }catch(Exception ignored){}
+        }
+        return cleaned;
     }
 
     /** يبحث عن مدين بالاسم، ويعيد صفرًا إن لم يوجد. */
