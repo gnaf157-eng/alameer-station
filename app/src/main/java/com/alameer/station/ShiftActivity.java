@@ -1392,13 +1392,15 @@ public class ShiftActivity extends Activity {
         final boolean historical=db.isHistorical(closed);
         final boolean matched=reason.isEmpty();
         db.submit(closed,workerId,reason);
-        // الإغلاق لا يرحّل: الوردية تذهب إلى «مطابقة الوردية» لتُراجَع ثم تُرحّل.
+        // الإغلاق يعتمد ويرحّل مباشرة: لا مرحلة انتظار في الواجهة الواحدة.
         String posted="",journalNote="";
-        db.closeUnmatched(closed);
+        if(matched)db.approve(closed);else db.closeUnmatched(closed);
+        posted=db.postShift(closed,db.defaultCashbox());
+        try{ db.journalShift(closed); }
+        catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
         String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
-        base=base+"\n\nالوردية في «مطابقة الوردية» — راجعها ثم رحّلها إلى الأرشيف.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
         base=base+journalNote;
         final String code=db.shiftCode(closed);

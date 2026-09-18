@@ -64,39 +64,42 @@ public class HomeActivity extends Activity {
         welcome.setPadding(0, dp(14), 0, dp(10));
         shell.addView(welcome);
 
-        // إدخال الوردية أولًا: العدادات والحركات والمطابقة.
+        // الوردية: إدخال ومطابقة وترحيل في دورة واحدة.
         int waiting = db.pendingCount();
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
         row1.addView(tile("الوردية", "العدادات والحركات والمطابقة", 0,
                 v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
-        row1.addView(tile("مطابقة الوردية", waiting == 0 ? "لا ورديات منتظرة"
-                        : waiting + " وردية بانتظار المراجعة", 7,
-                v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
+        row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
+                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
         shell.addView(row1, rowWeight(false));
 
         LinearLayout row0 = new LinearLayout(this);
         row0.setGravity(Gravity.CENTER);
-        row0.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
-                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
         row0.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
                 v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
+        row0.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
+                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
         shell.addView(row0, rowWeight(true));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
-        row2.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
-                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
+        row2.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
+                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
         row2.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row2, rowWeight(true));
 
         LinearLayout row3 = new LinearLayout(this);
         row3.setGravity(Gravity.CENTER);
-        row3.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
-                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
         row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
                 v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
+        // تظهر فقط حين تصل ورديات من جهاز عامل خارجي.
+        if (waiting > 0)
+            row3.addView(tile("ورديات واردة", waiting + " بانتظار المراجعة", 7,
+                    v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
+        else
+            row3.addView(new View(this), cell()); // يبقي الأرشيف بنصف العرض
         shell.addView(row3, rowWeight(true));
 
 
