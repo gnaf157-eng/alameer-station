@@ -21,22 +21,10 @@ public class CashboxActivity extends Activity {
     private TextView totalText, entriesTitle;
     private long filterBox = 0;
 
-    @Override protected void onResume() {
-
-        super.onResume();
-
-        // الجلسة انتهت: لا تبقى شاشة مدير مفتوحة.
-
-        if (!Db.managerMode()) finish();
-
-    }
-
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
-        // شاشات المدير وحده: لا تُفتح في جلسة العامل.
-        if (!Db.managerMode()) { finish(); return; }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);

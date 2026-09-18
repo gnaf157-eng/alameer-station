@@ -20,8 +20,6 @@ public class IncomingActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
-        // شاشات المدير وحده: لا تُفتح في جلسة العامل.
-        if (!Db.managerMode()) { finish(); return; }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -33,8 +31,8 @@ public class IncomingActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("سجل الورديات المنتظرة", 19, Color.WHITE, true));
-        words.addView(text("اضغط الوردية لمراجعتها ثم ترحيلها إلى الدفاتر", 11, 0xffCFE2FA, false));
+        words.addView(text("مطابقة الوردية", 19, Color.WHITE, true));
+        words.addView(text("اضغط الوردية لمراجعتها ثم ترحيلها إلى الأرشيف", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -75,7 +73,6 @@ public class IncomingActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (!Db.managerMode()) { finish(); return; }
         if (isFinishing() || listBox == null) return;
         refresh();
         // جلب صامت عند الفتح، فلا ينتظر المدير ضغط زر.

@@ -20,17 +20,6 @@ public class HomeActivity extends Activity {
         super.onCreate(state);
         db = new Db(this);
         Db.signIn(Branding.stationName(db));
-
-        // كل فتح: كلمة السر وحدها تحدّد الواجهة، ولا يُحفظ دور.
-        if (!Db.signedIn()) { askPassword(); return; }
-        // العامل لا يرى إلا شاشة الوردية.
-        if (Db.workerDevice()) {
-            Intent shift = new Intent(this, ShiftActivity.class);
-            shift.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            startActivity(shift);
-            finish();
-            return;
-        }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -68,19 +57,6 @@ public class HomeActivity extends Activity {
         });
         brand.addView(gear, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
-        // تسجيل خروج: يُنهي الجلسة فتعود شاشة كلمة السر ليدخل العامل برمزه.
-        ImageButton exit = new ImageButton(this);
-        exit.setContentDescription("تسجيل خروج");
-        exit.setTooltipText("تسجيل خروج");
-        exit.setPadding(dp(11), dp(11), dp(11), dp(11));
-        exit.setImageDrawable(new LockIcon());
-        exit.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
-                Util.round(0x22FFFFFF, dp(23)), Util.round(Color.WHITE, dp(23))));
-        exit.setOnClickListener(v -> logout());
-        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(dp(46), dp(46));
-        ep.setMargins(dp(8), 0, 0, 0);
-        brand.addView(exit, ep);
         shell.addView(brand);
 
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
@@ -92,8 +68,8 @@ public class HomeActivity extends Activity {
         int waiting = db.pendingCount();
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("سجل الورديات المنتظرة", waiting == 0 ? "لا ورديات منتظرة"
-                        : waiting + " وردية بانتظار اعتمادك", 7,
+        row1.addView(tile("مطابقة الوردية", waiting == 0 ? "لا ورديات منتظرة"
+                        : waiting + " وردية بانتظار المراجعة", 7,
                 v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
         row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
@@ -129,142 +105,6 @@ public class HomeActivity extends Activity {
     }
 
     /** غلاف موحّد لشاشات الدخول. */
-    private LinearLayout loginShell(String title, String note) {
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        shell.setBackgroundColor(Util.BG);
-        shell.setGravity(Gravity.CENTER);
-        shell.setPadding(dp(28), dp(24), dp(28), dp(24));
-
-        ImageView mark = new ImageView(this);
-        android.graphics.Bitmap logo = Branding.logo(this);
-        if (logo != null) mark.setImageBitmap(logo); else mark.setImageResource(R.drawable.ic_wardiya_mark);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(74), dp(74));
-        lp.gravity = Gravity.CENTER;
-        lp.bottomMargin = dp(16);
-        shell.addView(mark, lp);
-
-        TextView name = text(Branding.stationName(db), 22, Util.NAVY, true);
-        name.setGravity(Gravity.CENTER);
-        shell.addView(name);
-
-        TextView head = text(title, 17, Util.NAVY, true);
-        head.setGravity(Gravity.CENTER);
-        head.setPadding(0, dp(18), 0, dp(4));
-        shell.addView(head);
-
-        TextView hint = text(note, 13, 0xff7c8186, false);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, 0, 0, dp(18));
-        shell.addView(hint);
-        return shell;
-    }
-
-    private EditText passwordField(String hint) {
-        EditText field = new EditText(this);
-        field.setHint(hint);
-        field.setTextSize(18);
-        field.setTextColor(Util.NAVY);
-        field.setSingleLine(true);
-        field.setGravity(Gravity.CENTER);
-        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        field.setPadding(dp(14), dp(13), dp(14), dp(13));
-        android.graphics.drawable.GradientDrawable bg = Util.round(Color.WHITE, dp(12));
-        bg.setStroke(dp(1), 0xffdedfe2);
-        field.setBackground(bg);
-        return field;
-    }
-
-    private Button bigButton(String label) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setTextSize(17);
-        b.setTextColor(Color.WHITE);
-        b.setBackground(Util.round(Util.NAVY, dp(14)));
-        b.setPadding(dp(16), dp(14), dp(16), dp(14));
-        b.setStateListAnimator(null);
-        return b;
-    }
-
-    /** ينهي الجلسة ويعود إلى شاشة كلمة السر. */
-    private void logout() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("تسجيل خروج")
-                .setMessage("ستعود شاشة كلمة السر.\nأدخل 6114 لواجهة العامل، أو كلمة سر المدير للعودة إلى هنا.")
-                .setPositiveButton("خروج", (d, w) -> {
-                    Db.endSession();
-                    Intent home = new Intent(this, HomeActivity.class);
-                    home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(home);
-                    finish();
-                })
-                .setNegativeButton("إلغاء", null)
-                .show();
-    }
-
-    /** قفل مرسوم: جسم القفل وقوسه. */
-    private class LockIcon extends android.graphics.drawable.Drawable {
-        final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        public void draw(android.graphics.Canvas c) {
-            c.save();
-            c.translate(getBounds().left, getBounds().top);
-            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
-            ink.setColor(Color.WHITE);
-            ink.setStyle(android.graphics.Paint.Style.STROKE);
-            ink.setStrokeWidth(2.2f);
-            ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
-            // القوس مفتوح جهة اليمين ليدل على الخروج.
-            android.graphics.RectF arc = new android.graphics.RectF(7.5f, 3.5f, 16.5f, 12.5f);
-            c.drawArc(arc, 180, 150, false, ink);
-            ink.setStyle(android.graphics.Paint.Style.FILL);
-            c.drawRoundRect(5.5f, 10.5f, 18.5f, 20.5f, 2.4f, 2.4f, ink);
-            ink.setColor(Util.NAVY);
-            c.drawCircle(12, 15.5f, 1.7f, ink);
-            ink.setStyle(android.graphics.Paint.Style.STROKE);
-            ink.setStrokeWidth(2f);
-            c.drawLine(12, 15.5f, 12, 18, ink);
-            c.restore();
-        }
-        public void setAlpha(int a) {}
-        public void setColorFilter(android.graphics.ColorFilter f) {}
-        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
-    }
-
-    /** شاشة الدخول: كلمة السر هي التي تفتح واجهة المدير أو واجهة العامل. */
-    private void askPassword() {
-        LinearLayout shell = loginShell("أدخل كلمة السر",
-                "كلمة سر المدير تفتح الواجهة كاملة،\nوكلمة سر العامل تفتح شاشة الوردية.");
-        final EditText field = passwordField("كلمة السر");
-        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
-        fp.bottomMargin = dp(14);
-        shell.addView(field, fp);
-
-        Button enter = bigButton("دخول");
-        enter.setOnClickListener(v -> {
-            String role = db.openSession(field.getText().toString());
-            if (role.isEmpty()) {
-                field.setText("");
-                field.setError("كلمة السر غير صحيحة");
-                Toast.makeText(this, "كلمة السر غير صحيحة", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            recreate();
-        });
-        shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
-
-        field.setOnEditorActionListener((v, id, event) -> { enter.performClick(); return true; });
-        setContentView(shell);
-    }
-
-    @Override public void onBackPressed() {
-        // من شاشة الدخول: الخروج من التطبيق لا الدوران فيه.
-        if (!Db.signedIn()) { finishAffinity(); return; }
-        super.onBackPressed();
-    }
-
     @Override protected void onResume() {
         super.onResume();
         recreateIfBrandChanged();

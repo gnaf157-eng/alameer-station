@@ -967,73 +967,6 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
-    // ==================== كلمات السر والدخول ====================
-
-    /** الرمز الافتراضي للمدير والعامل قبل أي تغيير. */
-    public static final String DEFAULT_MANAGER_PIN = "2216";
-    public static final String DEFAULT_WORKER_PIN = "6114";
-
-    /** الجلسة الحالية في الذاكرة فقط: تُنسى بإغلاق التطبيق فتُطلب كلمة السر من جديد. */
-    private static String session = "";
-    public static boolean signedIn(){ return !session.isEmpty(); }
-    public static boolean workerDevice(){ return "WORKER".equals(session); }
-    public static boolean managerMode(){ return "MANAGER".equals(session); }
-    public static void endSession(){ session = ""; }
-
-    private String managerHash(){ return setting("pw_manager", Calc.hash(DEFAULT_MANAGER_PIN)); }
-    private String workerHash(){ return setting("pw_worker", Calc.hash(DEFAULT_WORKER_PIN)); }
-
-    /**
-     * يتحقّق من كلمة السر ويفتح الجلسة بالدور الذي تخصّها.
-     * يعيد MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
-     */
-    public String openSession(String password){
-        String clean = password == null ? "" : password.trim();
-        String hash = Calc.hash(clean);
-        String role = hash.equals(managerHash()) ? "MANAGER"
-                    : hash.equals(workerHash()) ? "WORKER" : "";
-        // من ثبّت 2.29 مؤقتًا: كلمته محفوظة بالصيغة البطيئة، تُقبل مرة ثم تُعاد للصيغة السريعة.
-        if(role.isEmpty()){
-            String salt = setting("pw_salt","");
-            if(!salt.isEmpty()){
-                String slow = "tabiq::" + salt + "::" + clean;
-                for(int i=0;i<12000;i++) slow = Calc.hash(slow);
-                if(slow.equals(setting("pw_manager",""))){
-                    role = "MANAGER"; setSetting("pw_manager", hash);
-                }else if(slow.equals(setting("pw_worker",""))){
-                    role = "WORKER"; setSetting("pw_worker", hash);
-                }
-            }
-        }
-        if(!role.isEmpty()){
-            setSetting("pw_failures","0");
-            setSetting("pw_locked_at","0");
-            session = role;
-            audit("device", 0, "LOGIN", "", role.equals("MANAGER") ? "دخول المدير" : "دخول العامل", "");
-        }
-        return role;
-    }
-
-    /** يغيّر كلمة سر أحد الدورين. متاح للمدير وحده من الضبط. */
-    public void setPin(String role, String fresh){
-        if(!managerMode())throw new IllegalStateException("تغيير كلمات السر للمدير وحده");
-        String clean = fresh == null ? "" : fresh.trim();
-        if(clean.length() < 4)throw new IllegalArgumentException("كلمة السر: 4 أرقام أو أحرف على الأقل");
-        boolean manager = "MANAGER".equals(role);
-        String other = manager ? workerHash() : managerHash();
-        if(Calc.hash(clean).equals(other))
-            throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا السر");
-        setSetting(manager ? "pw_manager" : "pw_worker", Calc.hash(clean));
-        audit("device", 0, "CHANGE_PIN", manager ? "المدير" : "العامل", "غُيّرت كلمة السر", "");
-    }
-
-    /** هل ما زالت كلمة السر هي الافتراضية؟ يُنبَّه المدير لتغييرها. */
-    public boolean defaultPin(String role){
-        return "MANAGER".equals(role)
-            ? managerHash().equals(Calc.hash(DEFAULT_MANAGER_PIN))
-            : workerHash().equals(Calc.hash(DEFAULT_WORKER_PIN));
-    }
-
     // ==================== رمز الربط بين الجهازين ====================
 
     /** رمز الربط المحفوظ، أو نص فارغ إن لم يُضبط بعد. */
@@ -1078,15 +1011,6 @@ public class Db extends SQLiteOpenHelper {
             v.put("shift_code",code);
             getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
             return code;
-        }
-    }
-
-    /** عدد ورديات العامل المرسلة وما زالت تنتظر اعتماد المدير. */
-    public int awaitingManager(int workerId){
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COUNT(*) FROM shifts WHERE worker_id=? AND status='SUBMITTED' AND sync_state='SYNCED'",
-                new String[]{String.valueOf(workerId)})){
-            return c.moveToFirst()?c.getInt(0):0;
         }
     }
 

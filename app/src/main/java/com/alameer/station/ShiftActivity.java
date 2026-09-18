@@ -29,8 +29,6 @@ public class ShiftActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
-        // بعد تسجيل الخروج لا تبقى أي شاشة مفتوحة خلف شاشة كلمة السر.
-        if(!Db.signedIn()){ finish(); return; }
         if(readingsBox!=null){ // قد تكون الأسعار أو العدّادات تغيّرت من الإعدادات
             if(db.isOpen(shiftId))db.syncShiftWithSettings(shiftId);
             loadReadings();loadMovements();refreshTotals();
@@ -43,7 +41,6 @@ public class ShiftActivity extends Activity {
     boolean settingsOnly=false;
     boolean reviewing=false;
     Button postButton;
-    TextView pendingBanner;
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance,stationTitle;
@@ -75,7 +72,7 @@ public class ShiftActivity extends Activity {
         stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
         refreshStationBrand();
-        brandWords.addView(text(Db.managerMode()?"واجهة المدير":"واجهة فريق العمل",12,0xffCFE2FA,true));
+        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffCFE2FA,false));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
         headerBalance=text("",15,0xffCFE2FA,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
@@ -176,8 +173,8 @@ public class ShiftActivity extends Activity {
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
         // الأرشيف صار أيقونة مستقلة في واجهة المدير، ويبقى تبويبًا عند العامل ليتابع حالة ورديّاته.
-        String[] names={"ورديتي","الحركات",Db.managerMode()?"المطابقة":"الأرشيف"};
-        int[] destinations={0,1,Db.managerMode()?2:3};
+        String[] names={"ورديتي","الحركات","المطابقة"};
+        int[] destinations={0,1,2};
         for(int i=0;i<tabs.length;i++){
             final int n=destinations[i];
             Button tab=new Button(this);tabs[i]=tab;
@@ -209,24 +206,11 @@ public class ShiftActivity extends Activity {
         TextView version=text("النسخة الحالية "+BuildConfig.VERSION_NAME,12,0xff7c8186,false);
         version.setGravity(Gravity.CENTER);
         pages[4].addView(version,space());
-        Button logout=action("تسجيل خروج",false);
-        logout.setOnClickListener(v->new AlertDialog.Builder(this)
-            .setTitle("تسجيل خروج")
-            .setMessage("ستعود شاشة كلمة السر.")
-            .setPositiveButton("خروج",(d,w)->{
-                Db.endSession();
-                Intent home=new Intent(this,HomeActivity.class);
-                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(home);finish();
-            })
-            .setNegativeButton("إلغاء",null).show());
-        pages[4].addView(logout,space());
-
         Button back=action("رجوع إلى الوردية",false);
         back.setOnClickListener(v->{showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
         pages[4].addView(back,space());
-        final boolean boss=Db.managerMode();
+        final boolean boss=true;
         if(boss)buildStationSettings();
 
         pages[4].addView(sectionTitle("اسم العامل"));
@@ -328,58 +312,8 @@ public class ShiftActivity extends Activity {
         about.addView(call,space());pages[4].addView(about,space());
     }
 
-    /** سطر كلمة سر واحد مع زرّ تغييرها. */
-    private View pinRow(String title,String note,final String role){
-        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0,dp(10),0,dp(10));
-        LinearLayout words=column();
-        words.addView(text(title,17,Util.NAVY,true));
-        words.addView(text(note,12,0xff7c8186,false));
-        if(db.defaultPin(role))
-            words.addView(text("ما زالت الافتراضية — يُستحسن تغييرها",12,Util.RED,true));
-        row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
-        Button edit=action("تغيير",false);edit.setTextSize(14);
-        edit.setOnClickListener(v->pinDialog(title,role));
-        row.addView(edit);
-        return row;
-    }
-
-    /** يغيّر كلمة سر أحد الدورين. المدير وحده يصل إلى هنا. */
-    private void pinDialog(String title,final String role){
-        final EditText fresh=new EditText(this);styleInput(fresh);
-        fresh.setHint("كلمة السر الجديدة");
-        fresh.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        final EditText again=new EditText(this);styleInput(again);
-        again.setHint("أعد كتابتها");
-        again.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);
-        form.addView(fresh);form.addView(again);
-        new AlertDialog.Builder(this).setTitle(title).setView(form)
-            .setPositiveButton("حفظ",(d,w)->{
-                String a=fresh.getText().toString().trim(),b=again.getText().toString().trim();
-                if(!a.equals(b)){Toast.makeText(this,"الكلمتان غير متطابقتين",Toast.LENGTH_LONG).show();return;}
-                try{
-                    db.setPin(role,a);
-                    Toast.makeText(this,"غُيّرت كلمة السر",Toast.LENGTH_LONG).show();
-                    buildSettingsPage();
-                }catch(Exception e){Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();}
-            })
-            .setNegativeButton("إلغاء",null).show();
-    }
-
     /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
     private void buildLinkSettings(){
-        // كلمات السر: للمدير وحده، ولا تظهر في واجهة العامل.
-        if(Db.managerMode()){
-            pages[4].addView(sectionTitle("كلمات السر"));
-            LinearLayout pinBox=panel(Color.WHITE);
-            pinBox.addView(pinRow("كلمة سر المدير","تفتح الواجهة كاملة","MANAGER"));
-            View split=new View(this);split.setBackgroundColor(0xffeceef0);
-            pinBox.addView(split,new LinearLayout.LayoutParams(-1,dp(1)));
-            pinBox.addView(pinRow("كلمة سر العامل","تفتح شاشة الوردية وحدها","WORKER"));
-            pages[4].addView(pinBox,space());
-        }
-
         pages[4].addView(sectionTitle("الربط بين الجهازين"));
         LinearLayout box=panel(Color.WHITE);
         String code=db.linkCode();
@@ -651,7 +585,6 @@ public class ShiftActivity extends Activity {
     private TextView sectionTitle(String name){TextView t=text(name,19,Util.NAVY,true);t.setPadding(dp(4),dp(14),dp(4),dp(6));return t;}
     private void refreshAll(){db.syncShiftWithSettings(shiftId);buildSettingsPage();loadReadings();refreshTotals();}
     private void fuelPriceDialog(String fuel,double current){
-        if(!Db.managerMode())return; // إعداد إداري لا يفتحه العامل
         EditText price=new EditText(this);styleInput(price);
         price.setHint("سعر اللتر بالريال");
         price.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -670,7 +603,6 @@ public class ShiftActivity extends Activity {
         d.show();
     }
     private void pumpDialog(long id,String oldName,String oldFuel,double oldPrice,double oldReading){
-        if(!Db.managerMode())return; // إعداد إداري لا يفتحه العامل
         boolean creating=id==0;
         LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);
         EditText name=dialogInput("اسم الطرمبة",oldName,false);
@@ -712,8 +644,7 @@ public class ShiftActivity extends Activity {
         for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         // شاشة الإعدادات لا تحتاج شريط التنقّل السفلي.
         if(navBar!=null)navBar.setVisibility(selected==4?View.GONE:View.VISIBLE);
-        int active=Db.managerMode()?(selected==2?2:selected==3?-1:selected==4?-1:selected)
-                : (selected==2?0:selected==3?2:selected==4?-1:selected);
+        int active=selected==2?2:selected>=3?-1:selected;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
             tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.ACCENT:Color.WHITE,dp(17)),null));
@@ -763,22 +694,6 @@ public class ShiftActivity extends Activity {
         }));
         dialog.show();
     }
-    /** شريط تنبيه في شاشة العامل حين تكون له وردية معلّقة عند المدير. */
-    private void showPendingBanner(){
-        if(pinnedSummaries==null)return;
-        if(pendingBanner!=null){pinnedSummaries.removeView(pendingBanner);pendingBanner=null;}
-        if(Db.managerMode())return;
-        int waiting=db.awaitingManager(workerId);
-        if(waiting==0)return;
-        TextView bar=text(waiting==1?"◷ وردية عند المدير قيد المراجعة — لا يمكن إغلاق وردية جديدة حتى تُعتمد"
-                                    :"◷ "+waiting+" ورديات عند المدير قيد المراجعة",13,Color.WHITE,true);
-        bar.setGravity(Gravity.CENTER);
-        bar.setPadding(dp(12),dp(10),dp(12),dp(10));
-        bar.setBackground(Util.round(0xffB86A00,dp(12)));
-        pendingBanner=bar;
-        pinnedSummaries.addView(bar,0);
-    }
-
     private void loadArchive(){
         pages[3].removeAllViews();pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         try(Cursor c=db.archive(workerId,false)){
@@ -804,7 +719,7 @@ public class ShiftActivity extends Activity {
                 card.addView(text("المبيعات: "+money(c.getDouble(4))+" ريال  •  الباقي: "+money(c.getDouble(5)),14,Util.NAVY,false),space());
                 final boolean live="OPEN".equals(state)||"RETURNED".equals(state);
                 // بعد الإغلاق تُقفل الوردية على العامل نهائيًا.
-                final boolean locked=!live&&!Db.managerMode();
+                final boolean locked=false;
                 card.addView(text(locked?"عند المدير — لا يمكن تعديلها":"اضغط لفتحها ومراجعتها",
                         12,locked?0xff8b9097:0xff667078,false));
                 card.setClickable(true);
@@ -830,7 +745,7 @@ public class ShiftActivity extends Activity {
         // مغادرة الإعدادات تُنزل الأسعار والطرمبات على الوردية المفتوحة.
         if(page==4){db.syncShiftWithSettings(shiftId);loadReadings();refreshTotals();}
         // جهاز العامل بلا واجهة رئيسية: الرجوع من الإعدادات يعود للوردية دائمًا.
-        if(page==4&&(!settingsOnly||Db.workerDevice())){
+        if(page==4&&!settingsOnly){
             showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
         }else super.onBackPressed();
@@ -923,7 +838,6 @@ public class ShiftActivity extends Activity {
     }
     private void loadReadings(){
         refreshShiftDate();
-        showPendingBanner();
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
         readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){
@@ -1374,11 +1288,6 @@ public class ShiftActivity extends Activity {
      */
     private void openArchived(final long id,boolean live){
         if(live){ switchTo(id); return; }
-        // الوردية المُغلقة لا يفتحها إلا المدير.
-        if(!Db.managerMode()){
-            Toast.makeText(this,"لا يمكن تعديل وردية مُغلقة",Toast.LENGTH_LONG).show();
-            return;
-        }
         new AlertDialog.Builder(this).setTitle("وردية #"+id)
             .setMessage("تفتح الوردية بقراءاتها وحركاتها كما سُجّلت، وتصير قابلة للتعديل.\n\n"
                 + "سيُعكس قيدها المحاسبي ويُلغى ترحيلها حتى تعتمدها من جديد، ويُحفظ ذلك في سجل التدقيق.")
@@ -1453,17 +1362,6 @@ public class ShiftActivity extends Activity {
     }
     /** يقفل الوردية الحالية بعد حفظها ويبدأ وردية جديدة بعدادات الإغلاق. */
     private void closeShift(){
-        // العامل لا يفتح وردية جديدة وله وردية ما زالت عند المدير.
-        if(!Db.managerMode()){
-            int waiting=db.awaitingManager(workerId);
-            if(waiting>0){
-                new AlertDialog.Builder(this).setTitle("لديك وردية عند المدير")
-                    .setMessage("وردية سابقة ما زالت في قائمة الانتظار ولم تُعتمد بعد.\n\n"
-                        +"انتظر اعتمادها قبل إغلاق وردية جديدة.")
-                    .setPositiveButton("حسنًا",null).show();
-                return;
-            }
-        }
         if(!saveReadings())return;
         String issue=db.validateShift(shiftId);
         if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إغلاق الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}
@@ -1494,37 +1392,21 @@ public class ShiftActivity extends Activity {
         final boolean historical=db.isHistorical(closed);
         final boolean matched=reason.isEmpty();
         db.submit(closed,workerId,reason);
-        // في جهاز العامل: لا اعتماد ولا ترحيل: الوردية تنتظر المدير.
+        // الإغلاق لا يرحّل: الوردية تذهب إلى «مطابقة الوردية» لتُراجَع ثم تُرحّل.
         String posted="",journalNote="";
-        if(Db.managerMode()){
-            if(matched)db.approve(closed);else db.closeUnmatched(closed);
-            posted=db.postShift(closed,db.defaultCashbox());
-            try{ db.journalShift(closed); }
-            catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
-        }else{
-            db.closeUnmatched(closed);
-        }
+        db.closeUnmatched(closed);
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
-        String base=Db.managerMode()
-            ?(historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.")
-            :"أرسل الوردية للمدير حتى تستطيع بدء وردية جديدة.";
+        String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
+        base=base+"\n\nالوردية في «مطابقة الوردية» — راجعها ثم رحّلها إلى الأرشيف.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
         base=base+journalNote;
         final String code=db.shiftCode(closed);
-        AlertDialog.Builder done=new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code);
-        if(Db.managerMode()){
-            done.setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")
-                .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
-                .setNegativeButton("لاحقًا",null);
-        }else{
-            // الإغلاق يرسل الوردية فورًا؛ لا خيار بعده ولا تعديل.
-            new Relay(this).send(closed,false);
-            done.setMessage(base+"\n\nكود الوردية: "+code
-                    +"\nأُرسلت إلى المدير ودخلت أرشيفك، ولا يمكن تعديلها بعد الآن.")
-                .setPositiveButton("حسنًا",null);
-        }
-        done.show();
+        new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code)
+            .setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")
+            .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
+            .setNegativeButton("لاحقًا",null)
+            .show();
     }
     /** يرفع الوردية إلى المدير عبر قناة الربط، بلا ملفات ولا واتساب. */
     void sendShift(long id){

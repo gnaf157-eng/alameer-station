@@ -23,8 +23,6 @@ public class ArchiveActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
-        // شاشة المدير وحده.
-        if (!Db.managerMode()) { finish(); return; }
 
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -58,7 +56,6 @@ public class ArchiveActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (!Db.managerMode()) { finish(); return; }
         if (listBox != null) refresh();
     }
 

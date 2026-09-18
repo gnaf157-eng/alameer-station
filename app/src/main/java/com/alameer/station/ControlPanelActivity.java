@@ -30,8 +30,6 @@ public class ControlPanelActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         db = new Db(this);
-        // شاشات المدير وحده: لا تُفتح في جلسة العامل.
-        if (!Db.managerMode()) { finish(); return; }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -63,7 +61,6 @@ public class ControlPanelActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (!Db.managerMode()) { finish(); return; }
         if (isFinishing() || content == null) return;
         LOW_CASH = db.lowCash();
         STALE_DAYS = db.staleDays();
