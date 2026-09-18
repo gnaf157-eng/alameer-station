@@ -27,7 +27,6 @@
         <activity android:name=".DebtActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ExpenseActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ControlPanelActivity" android:exported="false" android:screenOrientation="portrait" />
-        <activity android:name=".IncomingActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ArchiveActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".DashboardActivity" android:screenOrientation="portrait" />
         <activity android:name=".AdminActivity" android:screenOrientation="portrait" />

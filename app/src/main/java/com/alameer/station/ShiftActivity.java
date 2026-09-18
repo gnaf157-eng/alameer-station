@@ -324,7 +324,6 @@ public class ShiftActivity extends Activity {
             addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
             pages[4].addView(addPump,space());
 
-            buildLinkSettings();
             buildTankSettings();
             buildThresholdSettings();
 
@@ -340,59 +339,6 @@ public class ShiftActivity extends Activity {
         Button call=action("تواصل مع المطوّر",false);
         call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
         about.addView(call,space());pages[4].addView(about,space());
-    }
-
-    /** ربط جهاز العامل بجهاز المدير برمز واحد يُكتب مرة واحدة. */
-    private void buildLinkSettings(){
-        pages[4].addView(sectionTitle("الربط بين الجهازين"));
-        LinearLayout box=panel(Color.WHITE);
-        String code=db.linkCode();
-        boolean linked=Link.valid(code);
-        box.addView(text(linked?Link.pretty(code):"غير مربوط",linked?20:17,linked?Util.NAVY:Util.RED,true));
-        box.addView(text(linked
-                ? "الجهازان مربوطان. إرسال الوردية واستلامها يتم تلقائيًا."
-                : "أنشئ رمزًا في جهاز المدير، واكتب نفس الرمز في جهاز العامل مرة واحدة.",
-                13,0xff7c8186,false));
-
-        Button create=action("إنشاء رمز ربط جديد",true);
-        create.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setTitle("إنشاء رمز ربط")
-                .setMessage("سيُنشأ رمز جديد لهذا الجهاز.\nاكتبه في جهاز العامل مرة واحدة.\n\n"
-                        +"تنبيه: الرمز القديم يتوقف عن العمل.")
-                .setPositiveButton("إنشاء",(d,w)->{
-                    String fresh=db.createLinkCode();
-                    buildSettingsPage();
-                    new AlertDialog.Builder(this).setTitle("رمز الربط")
-                        .setMessage(Link.pretty(fresh)+"\n\nاكتب هذا الرمز في جهاز العامل:\nالإعدادات ← الربط بين الجهازين ← إدخال رمز الربط.")
-                        .setPositiveButton("نسخ",(a,b)->{
-                            android.content.ClipboardManager cb=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
-                            cb.setPrimaryClip(android.content.ClipData.newPlainText("رمز الربط",Link.pretty(fresh)));
-                            Toast.makeText(this,"نُسخ الرمز",Toast.LENGTH_SHORT).show();
-                        })
-                        .setNegativeButton("حسنًا",null).show();
-                })
-                .setNegativeButton("إلغاء",null).show());
-        box.addView(create,space());
-
-        Button enter=action("إدخال رمز الربط",false);
-        enter.setOnClickListener(v->{
-            EditText input=new EditText(this);styleInput(input);
-            input.setHint("مثال: ABCD-2345-KLMN");
-            input.setText(linked?Link.pretty(code):"");
-            LinearLayout form=column();form.setPadding(dp(24),dp(8),dp(24),0);form.addView(input);
-            new AlertDialog.Builder(this).setTitle("رمز الربط")
-                .setMessage("اكتب الرمز الذي أنشأه جهاز المدير. مرة واحدة فقط.")
-                .setView(form)
-                .setPositiveButton("حفظ",(d,w)->{
-                    try{ db.setLinkCode(input.getText().toString());
-                        Toast.makeText(this,"تم الربط",Toast.LENGTH_LONG).show();
-                        buildSettingsPage();
-                    }catch(Exception e){Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();}
-                })
-                .setNegativeButton("إلغاء",null).show();
-        });
-        box.addView(enter,space());
-        pages[4].addView(box,space());
     }
 
     /** سعات الخزانات ومطابقة العجز بالمقياس اليدوي. */
@@ -1448,69 +1394,6 @@ public class ShiftActivity extends Activity {
             .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
             .setNegativeButton("لاحقًا",null)
             .show();
-    }
-    /** يرفع الوردية إلى المدير عبر قناة الربط، بلا ملفات ولا واتساب. */
-    void sendShift(long id){
-        Relay relay=new Relay(this);
-        if(!relay.linked()){
-            new AlertDialog.Builder(this).setTitle("الجهاز غير مربوط")
-                .setMessage("اطلب رمز الربط من المدير، ثم أدخله مرة واحدة من الإعدادات.")
-                .setPositiveButton("فتح الإعدادات",(d,w)->{settingsReturnPage=page;showPage(4);})
-                .setNegativeButton("لاحقًا",null).show();
-            return;
-        }
-        relay.send(id,true);
-    }
-
-    /** نسخة الملف محفوظة للطوارئ حين لا يتوفر إنترنت. */
-    void sendShiftAsFile(long id){
-        try{
-            ShiftFile.Shift data=db.exportShift(id);
-            String text=ShiftFile.write(data);
-            java.io.File dir=new java.io.File(getCacheDir(),"exports");
-            if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("تعذر إنشاء مجلد التصدير");
-            java.io.File file=new java.io.File(dir,ShiftFile.fileName(data));
-            try(java.io.OutputStream out=new java.io.FileOutputStream(file)){
-                out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            }
-            android.net.Uri uri=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".files",file);
-            Intent intent=new Intent(Intent.ACTION_SEND);
-            intent.setType("text/plain");
-            intent.putExtra(Intent.EXTRA_STREAM,uri);
-            intent.putExtra(Intent.EXTRA_SUBJECT,"وردية "+data.worker+" — "+data.date);
-            intent.setClipData(android.content.ClipData.newRawUri("وردية",uri));
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(intent,"إرسال الوردية للمدير"));
-        }catch(Exception e){
-            Toast.makeText(this,"تعذر تجهيز ملف الوردية: "+e.getMessage(),Toast.LENGTH_LONG).show();
-        }
-    }
-    /** يرحّل الوردية المراجَعة إلى الدفاتر: اعتماد وترحيل وقيد مزدوج. */
-    private void postToBooks(){
-        if(!saveReadings())return;
-        String issue=db.validateShift(shiftId);
-        if(!issue.isEmpty()){Toast.makeText(this,issue,Toast.LENGTH_LONG).show();return;}
-        final long id=shiftId;
-        double balance=db.balance(id);
-        final boolean matched=Math.abs(balance)<0.01;
-        String message=matched
-            ? "ستُرحَّل الوردية إلى الصناديق والديون والمخزون، ويُسجَّل قيدها المحاسبي."
-            : "الفرق "+money(Math.abs(balance))+" ر.ي سيُقيَّد على عهدة العامل ويظهر في حسابه، ثم تُرحَّل الوردية.";
-        new AlertDialog.Builder(this).setTitle("ترحيل الوردية #"+id+" إلى الدفاتر")
-            .setMessage(message)
-            .setPositiveButton("ترحيل",(d,w)->{
-                try{
-                    db.submit(id,workerId,matched?"":"فرق محسوب على العامل");
-                    if(!matched)db.settleShift(id,"فرق محسوب على العامل");
-                    String posted=db.approveIncoming(id,db.defaultCashbox());
-                    new AlertDialog.Builder(this).setTitle("رُحّلت الوردية #"+id)
-                        .setMessage(posted.isEmpty()?"تمّ الترحيل والتقييد في الدفاتر.":"رُحّلت:\n"+posted)
-                        .setPositiveButton("حسنًا",(a,b)->finish()).show();
-                }catch(Exception e){
-                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
-                }
-            })
-            .setNegativeButton("إلغاء",null).show();
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}

@@ -63,6 +63,26 @@ public final class Calc {
         if ("APPROVED".equals(s)) return "مُغلقة";
         return s;
     }
+    /**
+     * كود الوردية الفريد: يجمع الجهاز والتاريخ ورقم الوردية في بصمة قصيرة.
+     * نفس الوردية تعطي نفس الكود دائمًا، فيُمنع تكرار الترحيل ويُتتبَّع كل رصيد.
+     */
+    public static String shiftCode(String device, String date, long number) {
+        String clean = date == null ? "" : date.trim();
+        String seed = "shift::" + (device == null ? "" : device.trim()) + "::" + clean + "::" + number;
+        String hash = hash(seed).toUpperCase(java.util.Locale.US);
+        StringBuilder b = new StringBuilder("W-");
+        String compact = clean.replace("-", "");
+        b.append(compact.length() >= 8 ? compact.substring(2) : compact).append('-');
+        int taken = 0;
+        for (int i = 0; i < hash.length() && taken < 5; i++) {
+            char c = hash.charAt(i);
+            if ("ABCDEF23456789".indexOf(c) >= 0) { b.append(c); taken++; }
+        }
+        while (taken++ < 5) b.append('7');
+        return b.toString();
+    }
+
     /** تنسيق مبلغ للعرض داخل الرسائل. */
     public static String money(double value){
         return String.format(java.util.Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);

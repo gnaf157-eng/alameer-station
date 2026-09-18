@@ -65,7 +65,6 @@ public class HomeActivity extends Activity {
         shell.addView(welcome);
 
         // الوردية: إدخال ومطابقة وترحيل في دورة واحدة.
-        int waiting = db.pendingCount();
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
         row1.addView(tile("الوردية", "العدادات والحركات والمطابقة", 0,
@@ -94,12 +93,7 @@ public class HomeActivity extends Activity {
         row3.setGravity(Gravity.CENTER);
         row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
                 v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
-        // تظهر فقط حين تصل ورديات من جهاز عامل خارجي.
-        if (waiting > 0)
-            row3.addView(tile("ورديات واردة", waiting + " بانتظار المراجعة", 7,
-                    v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
-        else
-            row3.addView(new View(this), cell()); // يبقي الأرشيف بنصف العرض
+        row3.addView(new View(this), cell()); // يبقي الأرشيف بنصف العرض
         shell.addView(row3, rowWeight(true));
 
 
