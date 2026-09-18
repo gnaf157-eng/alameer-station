@@ -1009,6 +1009,12 @@ public class Db extends SQLiteOpenHelper {
         return Guard.lockLeft(failures, at, System.currentTimeMillis());
     }
 
+    /** يمسح أثر المحاولات الخاطئة والقفل المؤقت. */
+    public void clearLoginLock(){
+        setSetting("pw_failures","0");
+        setSetting("pw_locked_at","0");
+    }
+
     /** رسالة الرفض المناسبة بعد محاولة خاطئة. */
     public String loginMessage(){
         int failures;
@@ -1024,9 +1030,21 @@ public class Db extends SQLiteOpenHelper {
      */
     public String openSession(String password){
         if(loginLockLeft() > 0) return "LOCKED";
-        String hash = Guard.hash(password, salt());
+        String clean = password == null ? "" : password.trim();
+        String hash = Guard.hash(clean, salt());
         String role = Guard.same(hash, storedHash(true)) ? "MANAGER"
                     : Guard.same(hash, storedHash(false)) ? "WORKER" : "";
+        // ترحيل الأجهزة القديمة: كلمة محفوظة بالتجزئة السابقة تُقبل مرة ثم تُحدَّث.
+        if(role.isEmpty()){
+            String legacy = Calc.hash(clean);
+            if(Guard.same(legacy, setting("pw_manager",""))){
+                role = "MANAGER";
+                setSetting("pw_manager", hash);
+            }else if(Guard.same(legacy, setting("pw_worker",""))){
+                role = "WORKER";
+                setSetting("pw_worker", hash);
+            }
+        }
         if(role.isEmpty()){
             int failures;
             try{ failures = Integer.parseInt(setting("pw_failures","0")); }catch(Exception e){ failures = 0; }
@@ -1061,8 +1079,10 @@ public class Db extends SQLiteOpenHelper {
     /** هل ما زالت كلمة السر هي الافتراضية المنشورة؟ */
     public boolean defaultPin(String role){
         boolean manager = "MANAGER".equals(role);
-        return Guard.same(storedHash(manager),
-                Guard.hash(manager ? DEFAULT_MANAGER_PIN : DEFAULT_WORKER_PIN, salt()));
+        String pin = manager ? DEFAULT_MANAGER_PIN : DEFAULT_WORKER_PIN;
+        // يشمل الأجهزة التي ما زالت تحمل التجزئة القديمة.
+        return Guard.same(storedHash(manager), Guard.hash(pin, salt()))
+            || Guard.same(setting(manager ? "pw_manager" : "pw_worker",""), Calc.hash(pin));
     }
 
     // ==================== رمز الربط بين الجهازين ====================

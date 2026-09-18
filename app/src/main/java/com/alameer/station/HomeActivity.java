@@ -275,12 +275,22 @@ public class HomeActivity extends Activity {
             recreate();
         });
 
+        // الضغط المطوّل على الشعار يلغي القفل المؤقت لصاحب الجهاز.
+        shell.setOnLongClickListener(v -> {
+            if (db.loginLockLeft() <= 0) return false;
+            db.clearLoginLock();
+            Toast.makeText(this, "أُلغي القفل المؤقت. أعد المحاولة.", Toast.LENGTH_LONG).show();
+            recreate();
+            return true;
+        });
+
         int locked = db.loginLockLeft();
         if (locked > 0) {
             field.setEnabled(false);
             enter.setEnabled(false);
             enter.setAlpha(0.5f);
-            TextView warn = text(db.loginMessage(), 13, Util.RED, true);
+            TextView warn = text(db.loginMessage() + "\n(اضغط مطوّلًا على الشاشة لإلغاء القفل)",
+                    13, Util.RED, true);
             warn.setGravity(Gravity.CENTER);
             warn.setPadding(0, dp(12), 0, 0);
             shell.addView(warn);

@@ -55,6 +55,11 @@ public class GuardTest {
         assertEquals("", Guard.weakness("8371"));
     }
 
+    @Test public void legacyAndNewHashesDiffer() {
+        // التجزئة القديمة بلا ملح تختلف عن الجديدة، ولهذا لزم الترحيل.
+        assertNotEquals(Calc.hash("2216"), Guard.hash("2216", "anysalt"));
+    }
+
     @Test public void saltsAreRandomAndLongEnough() {
         String a = Guard.newSalt(new Random(1));
         String b = Guard.newSalt(new Random(2));
