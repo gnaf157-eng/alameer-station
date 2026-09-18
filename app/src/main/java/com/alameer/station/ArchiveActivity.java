@@ -145,8 +145,10 @@ public class ArchiveActivity extends Activity {
                 final java.io.File file = excel
                         ? new ExcelReport(this, db).build(id)
                         : new PdfReport(this, db).build(id);
+                // نوع عام عند المشاركة حتى تقبله واتساب وبقية التطبيقات،
+                // والنوع الدقيق عند الفتح ليختار برنامج الجداول.
                 final String mime = excel
-                        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        ? (view ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "*/*")
                         : "application/pdf";
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
@@ -163,10 +165,18 @@ public class ArchiveActivity extends Activity {
                             intent.setClipData(android.content.ClipData.newRawUri("تقرير الوردية", uri));
                         }
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        startActivity(view ? intent : Intent.createChooser(intent, "مشاركة التقرير"));
+                        if (view) {
+                            // إن لم يوجد تطبيق للفتح، تُعرض قائمة المشاركة بدل الفشل.
+                            if (intent.resolveActivity(getPackageManager()) != null) startActivity(intent);
+                            else share(id, false, excel);
+                        } else {
+                            startActivity(Intent.createChooser(intent, "مشاركة التقرير"));
+                        }
                     } catch (Exception e) {
-                        Toast.makeText(this, excel ? "لا يوجد تطبيق لفتح Excel"
-                                : "لا يوجد تطبيق لفتح PDF", Toast.LENGTH_LONG).show();
+                        // السبب الحقيقي يُعرض بدل رسالة عامة تخفي الخلل.
+                        new AlertDialog.Builder(this).setTitle("تعذرت المشاركة")
+                                .setMessage(String.valueOf(e.getMessage()))
+                                .setPositiveButton("حسنًا", null).show();
                     }
                 });
             } catch (Exception e) {

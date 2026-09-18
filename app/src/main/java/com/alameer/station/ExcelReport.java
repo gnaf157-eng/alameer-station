@@ -11,7 +11,10 @@ public final class ExcelReport {
         book.row(false,Branding.CREDIT,"","","","");
         File dir=new File(context.getCacheDir(),"exports");
         if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("تعذر إنشاء مجلد التقرير");
-        File file=new File(dir,"alameer-shift-"+id+"-"+System.currentTimeMillis()+".xlsx");
+        // اسم يحمل كود الوردية ليسهل تمييزه بعد المشاركة.
+        String code=db.shiftCode(id).replace(' ','-');
+        if(code.isEmpty())code="shift-"+id;
+        File file=new File(dir,code+".xlsx");
         book.write(file);return file;
     }
 }
