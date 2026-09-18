@@ -490,6 +490,30 @@ public class Db extends SQLiteOpenHelper {
             where+"ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
             boxId>0?new String[]{String.valueOf(boxId)}:null);
     }
+    /**
+     * حركات الصناديق ضمن مدى تاريخي، مرتّبة بالتاريخ ثم بالتسلسل.
+     * 0=تاريخ,1=اتجاه,2=مبلغ,3=بيان,4=اسم الصندوق,5=وردية المصدر
+     */
+    public Cursor cashboxRange(String from,String to,long boxId){
+        StringBuilder where=new StringBuilder("WHERE e.entry_date BETWEEN ? AND ? ");
+        java.util.List<String> args=new java.util.ArrayList<>();
+        args.add(from);args.add(to);
+        if(boxId>0){where.append("AND e.box_id=? ");args.add(String.valueOf(boxId));}
+        return getReadableDatabase().rawQuery(
+            "SELECT e.entry_date,e.direction,e.amount,e.note,b.name,e.source_shift "+
+            "FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+where+
+            "ORDER BY e.entry_date,e.id",args.toArray(new String[0]));
+    }
+
+    /** أقدم تاريخ حركة في الصناديق، أو تاريخ اليوم إن لم توجد حركات. */
+    public String firstCashboxDate(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT MIN(entry_date) FROM cashbox_entries",null)){
+            if(c.moveToFirst()&&c.getString(0)!=null&&!c.getString(0).isEmpty())return c.getString(0);
+        }
+        return ShiftDates.today();
+    }
+
     // ==================== حركة المخاريج ====================
     public long addExpense(String category,double amount,String note,String date,long boxId,long sourceShift){
         String clean=category.trim();

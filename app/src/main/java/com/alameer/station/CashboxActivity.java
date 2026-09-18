@@ -56,6 +56,10 @@ public class CashboxActivity extends Activity {
         listBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(listBox, space());
 
+        Button report = action("⤓  تقرير Excel لحركة الصناديق", true);
+        report.setOnClickListener(v -> reportDialog());
+        content.addView(report, space());
+
         Button newBox = action("＋  إضافة صندوق جديد", false);
         newBox.setOnClickListener(v -> boxDialog(0, "", 0));
         content.addView(newBox, space());
@@ -466,6 +470,123 @@ public class CashboxActivity extends Activity {
         box.setPadding(dp(14), dp(14), dp(14), dp(14));
         box.setBackground(Util.round(Color.WHITE, dp(16)));
         return box;
+    }
+
+    /** يختار المدى التاريخي والصندوق ثم يشارك التقرير. */
+    private void reportDialog() {
+        final String[] from = { ShiftDates.today().substring(0, 8) + "01" };
+        final String[] to = { ShiftDates.today() };
+        final long[] box = { 0 };
+        final String[] boxName = { "كل الصناديق" };
+
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        form.setPadding(dp(22), dp(10), dp(22), 0);
+
+        final Button fromBtn = action("من: " + from[0], false);
+        fromBtn.setOnClickListener(v -> pickDate(from[0], picked -> {
+            from[0] = picked; fromBtn.setText("من: " + picked);
+        }));
+        form.addView(fromBtn);
+
+        final Button toBtn = action("إلى: " + to[0], false);
+        toBtn.setOnClickListener(v -> pickDate(to[0], picked -> {
+            to[0] = picked; toBtn.setText("إلى: " + picked);
+        }));
+        form.addView(toBtn);
+
+        final Button boxBtn = action("الصندوق: " + boxName[0], false);
+        boxBtn.setOnClickListener(v -> {
+            final List<Long> ids = new ArrayList<>();
+            final List<String> names = new ArrayList<>();
+            ids.add(0L); names.add("كل الصناديق");
+            try (Cursor c = db.cashboxes(false)) {
+                while (c.moveToNext()) { ids.add(c.getLong(0)); names.add(c.getString(1)); }
+            }
+            new AlertDialog.Builder(this).setTitle("اختر الصندوق")
+                    .setItems(names.toArray(new String[0]), (d, which) -> {
+                        box[0] = ids.get(which);
+                        boxName[0] = names.get(which);
+                        boxBtn.setText("الصندوق: " + boxName[0]);
+                    }).show();
+        });
+        form.addView(boxBtn);
+
+        // اختصارات سريعة للمدى الشائع.
+        LinearLayout quick = new LinearLayout(this);
+        quick.setGravity(Gravity.CENTER);
+        String[] labels = { "اليوم", "هذا الشهر", "كل الحركات" };
+        for (int i = 0; i < labels.length; i++) {
+            final int which = i;
+            Button q = action(labels[i], false);
+            q.setTextSize(13);
+            q.setOnClickListener(v -> {
+                String today = ShiftDates.today();
+                if (which == 0) { from[0] = today; to[0] = today; }
+                else if (which == 1) { from[0] = today.substring(0, 8) + "01"; to[0] = today; }
+                else { from[0] = db.firstCashboxDate(); to[0] = today; }
+                fromBtn.setText("من: " + from[0]);
+                toBtn.setText("إلى: " + to[0]);
+            });
+            LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(0, -2, 1);
+            qp.setMargins(dp(3), dp(6), dp(3), 0);
+            quick.addView(q, qp);
+        }
+        form.addView(quick);
+
+        new AlertDialog.Builder(this).setTitle("تقرير حركة الصناديق")
+                .setView(form)
+                .setPositiveButton("إنشاء ومشاركة", (d, w) -> shareReport(from[0], to[0], box[0], boxName[0]))
+                .setNegativeButton("إلغاء", null)
+                .show();
+    }
+
+    private interface DateSink { void accept(String date); }
+
+    private void pickDate(String current, final DateSink sink) {
+        java.time.LocalDate start;
+        try { start = java.time.LocalDate.parse(current); }
+        catch (Exception e) { start = java.time.LocalDate.now(); }
+        new android.app.DatePickerDialog(this, (picker, y, m, d) ->
+                sink.accept(java.time.LocalDate.of(y, m + 1, d).toString()),
+                start.getYear(), start.getMonthValue() - 1, start.getDayOfMonth()).show();
+    }
+
+    private void shareReport(final String from, final String to, final long boxId, final String boxName) {
+        if (from.compareTo(to) > 0) {
+            Toast.makeText(this, "تاريخ البداية بعد النهاية", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "جارٍ تجهيز التقرير...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                final java.io.File file = new CashboxReport(this, db).build(from, to, boxId, boxName);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    try {
+                        android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                                this, getPackageName() + ".files", file);
+                        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                        intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                        intent.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+                        intent.putExtra(android.content.Intent.EXTRA_SUBJECT,
+                                "حركة الصناديق " + from + " إلى " + to);
+                        intent.setClipData(android.content.ClipData.newRawUri("تقرير الصناديق", uri));
+                        intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(android.content.Intent.createChooser(intent, "مشاركة التقرير"));
+                    } catch (Exception e) {
+                        Toast.makeText(this, "تعذرت مشاركة الملف", Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Exception e) {
+                final String why = String.valueOf(e.getMessage());
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed())
+                        Toast.makeText(this, why, Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
     }
 
     private Button action(String name, boolean primary) {
