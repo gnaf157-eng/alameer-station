@@ -1048,6 +1048,16 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    /** الورديات المرحّلة إلى الأرشيف: 0=id,1=عامل,2=تاريخ,3=مبيعات,4=الباقي,5=طرمبات */
+    public Cursor postedShifts(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.sales,s.balance,"+
+            "(SELECT COUNT(*) FROM readings r WHERE r.shift_id=s.id AND r.current IS NOT NULL) "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE s.status<>'OPEN' "+
+            "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null);
+    }
+
     /** كود الوردية الفريد، يُولَّد ويُثبَّت عند أول طلب. */
     public String shiftCode(long shiftId){
         try(Cursor c=getReadableDatabase().rawQuery(
