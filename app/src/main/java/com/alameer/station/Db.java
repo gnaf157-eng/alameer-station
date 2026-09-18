@@ -938,6 +938,104 @@ public class Db extends SQLiteOpenHelper {
             "FROM journal_lines GROUP BY account ORDER BY ABS(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END)) DESC",null);
     }
 
+    // ==================== تصفية الحساب الوسيط ====================
+
+    /** رصيد الحساب الوسيط: موجب مدين وسالب دائن. */
+    public double suspenseBalance(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END),0) "+
+                "FROM journal_lines WHERE account=?",new String[]{Journal.SUSPENSE})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    /**
+     * الحركات المعلّقة في الحساب الوسيط.
+     * 0=entryId,1=بيان,2=تاريخ,3=الجهة,4=المبلغ,5=الطرف الآخر,6=مصدرها
+     */
+    public Cursor suspenseEntries(){
+        return getReadableDatabase().rawQuery(
+            "SELECT j.id,j.memo,j.entry_date,l.side,l.amount,"+
+            "COALESCE((SELECT o.account FROM journal_lines o WHERE o.entry_id=j.id AND o.account<>? LIMIT 1),''),"+
+            "j.source "+
+            "FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
+            "WHERE l.account=? AND j.reversed_by=0 "+
+            "ORDER BY j.entry_date DESC,j.id DESC",
+            new String[]{Journal.SUSPENSE,Journal.SUSPENSE});
+    }
+
+    /** الحسابات التي يجوز تصريف الوسيط إليها. */
+    public static final String[] SUSPENSE_TARGETS={
+        Journal.RECEIVABLE, Journal.SALES, Journal.EXPENSE, Journal.CASH, Journal.EQUITY, Journal.WORKER
+    };
+
+    /**
+     * يصرّف حركة معلّقة إلى حسابها الصحيح: يعكس القيد القديم ويكتب قيدًا جديدًا
+     * بنفس المبلغ والتاريخ مع الحساب المختار. لا حذف، والأثر محفوظ.
+     * وإن كان الحساب «ذمم المدينين» واسم المدين معروف، يُخصم من رصيده فعليًا.
+     */
+    public void settleSuspense(long entryId,String targetAccount,String party,String reason){
+        if(targetAccount==null||targetAccount.trim().isEmpty())
+            throw new IllegalArgumentException("اختر الحساب الصحيح");
+        String memo="",date="",source="";long sourceId=0;
+        double amount=0;boolean suspenseIsDebit=false;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT j.memo,j.entry_date,j.source,j.source_id,l.side,l.amount "+
+                "FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
+                "WHERE j.id=? AND l.account=?",
+                new String[]{String.valueOf(entryId),Journal.SUSPENSE})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة في الحساب الوسيط");
+            memo=c.getString(0);date=c.getString(1);source=c.getString(2);sourceId=c.getLong(3);
+            suspenseIsDebit="DEBIT".equals(c.getString(4));
+            amount=c.getDouble(5);
+        }
+        // الطرف الآخر يبقى كما هو، والوسيط يُستبدل بالحساب الصحيح.
+        String other="";
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT account FROM journal_lines WHERE entry_id=? AND account<>? LIMIT 1",
+                new String[]{String.valueOf(entryId),Journal.SUSPENSE})){
+            if(c.moveToFirst())other=c.getString(0);
+        }
+        if(other.isEmpty())throw new IllegalStateException("القيد ناقص الطرف الآخر");
+
+        String why=reason==null||reason.trim().isEmpty()?"تصريف الحساب الوسيط":reason.trim();
+        reverseEntry(entryId,why);
+        Journal.Entry fresh=suspenseIsDebit
+            ? Journal.simple(memo,date,source,sourceId,targetAccount,other,amount,party)
+            : Journal.simple(memo,date,source,sourceId,other,targetAccount,amount,party);
+        long created=postEntry(fresh);
+        audit("journal",created,"SETTLE_SUSPENSE",Journal.SUSPENSE,targetAccount,why);
+
+        // السداد الحقيقي ينقص دَين المدين، فلا يبقى مطالَبًا بما دفع.
+        if(Journal.RECEIVABLE.equals(targetAccount)&&party!=null&&!party.trim().isEmpty()){
+            long debtorId=findDebtor(party.trim());
+            if(debtorId>0){
+                suppressJournal=true;
+                try{
+                    addDebtEntry(debtorId,suspenseIsDebit?"DEBT":"PAID",amount,
+                            (suspenseIsDebit?"دين من ":"سداد من ")+"تصريف حركة #"+entryId,date);
+                }finally{suppressJournal=false;}
+            }
+        }
+    }
+
+    /** يبحث عن مدين بالاسم، ويعيد صفرًا إن لم يوجد. */
+    public long findDebtor(String name){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id FROM debtors WHERE name=?",
+                new String[]{name==null?"":name.trim()})){
+            return c.moveToFirst()?c.getLong(0):0;
+        }
+    }
+
+    /** ينشئ مدينًا جديدًا إن لم يكن موجودًا ويعيد معرّفه. */
+    public long ensureDebtor(String name){
+        long id=findDebtor(name);
+        if(id>0)return id;
+        ContentValues v=new ContentValues();
+        v.put("name",name.trim());v.put("phone","");v.put("opening",0);v.put("created_at",Util.now());
+        return getWritableDatabase().insertOrThrow("debtors",null,v);
+    }
+
     /** الورديات المُغلقة التي لم يُسجَّل لها قيد بعد: 0=id,1=عامل,2=تاريخ,3=الفرق. */
     public Cursor unpostedShifts(){
         return getReadableDatabase().rawQuery(

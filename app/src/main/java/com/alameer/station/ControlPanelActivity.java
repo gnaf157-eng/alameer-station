@@ -1,6 +1,7 @@
 package com.alameer.station.shifts;
 
 import android.animation.ValueAnimator;
+import android.content.Intent;
 import android.app.Activity;
 import android.database.Cursor;
 import android.graphics.Color;
@@ -168,6 +169,23 @@ public class ControlPanelActivity extends Activity {
         LinearLayout.LayoutParams gapParams = new LinearLayout.LayoutParams(-1, -2);
         gapParams.setMargins(0, dp(12), 0, 0);
         box.addView(diff, gapParams);
+
+        // الحساب الوسيط: حركات بلا طرف محدّد، تُصرَّف من شاشتها.
+        double suspense = db.suspenseBalance();
+        if (Math.abs(suspense) >= 0.01) {
+            TextView pending = text("⚠ حساب وسيط " + money(Math.abs(suspense))
+                    + " ر.ي — اضغط لتصريفه", 12, Color.WHITE, true);
+            pending.setGravity(Gravity.CENTER);
+            pending.setPadding(dp(10), dp(9), dp(10), dp(9));
+            pending.setBackground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                    Util.round(0xffB86A00, dp(11)), null));
+            pending.setClickable(true);
+            pending.setOnClickListener(v -> startActivity(new Intent(this, SuspenseActivity.class)));
+            LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
+            pp.setMargins(0, dp(9), 0, 0);
+            box.addView(pending, pp);
+        }
 
         if (lockedPeriods > 0) {
             // سطر الفترات المقفلة قابل للضغط حتى يمكن فتحها من مكانها.
