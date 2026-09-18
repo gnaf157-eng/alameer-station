@@ -1509,6 +1509,50 @@ public class Db extends SQLiteOpenHelper {
     public int lowStockPercent(){try{return Integer.parseInt(setting("threshold_low_stock","25"));}catch(Exception e){return 25;}}
     public void setLowStockPercent(int v){setSetting("threshold_low_stock",String.valueOf(v));}
 
+    // ==================== تكلفة اللتر ====================
+
+    /** سعر شراء اللتر من المورّد. */
+    public double buyPrice(String material){
+        try{return Double.parseDouble(setting("buy_"+material,"0"));}catch(Exception e){return 0;}
+    }
+    public void setBuyPrice(String material,double value){
+        setSetting("buy_"+material,String.valueOf(value));
+        audit("material",0,"SET_BUY_PRICE",material,Calc.money(value)+" ريال/لتر","سعر الشراء");
+    }
+
+    /** أجرة التوصيل لكل لتر. */
+    public double freightPrice(String material){
+        try{return Double.parseDouble(setting("freight_"+material,"0"));}catch(Exception e){return 0;}
+    }
+    public void setFreightPrice(String material,double value){
+        setSetting("freight_"+material,String.valueOf(value));
+        audit("material",0,"SET_FREIGHT",material,Calc.money(value)+" ريال/لتر","أجرة التوصيل");
+    }
+
+    /** تكلفة اللتر الكاملة: الشراء زائد التوصيل. */
+    public double unitCost(String material){
+        return buyPrice(material)+freightPrice(material);
+    }
+
+    /** قيمة مخزون مادة بسعر التكلفة. */
+    public double stockValue(String material){
+        return Math.max(0,materialSummary(material)[3])*unitCost(material);
+    }
+
+    /** قيمة كل المخزون بسعر التكلفة. */
+    public double stockValueTotal(){
+        double total=0;
+        for(String m:MATERIALS)total+=stockValue(m);
+        return total;
+    }
+
+    /** ربح اللتر المتوقّع: سعر البيع ناقص التكلفة. */
+    public double unitMargin(String material){
+        double sell=priceFor(material);
+        double cost=unitCost(material);
+        return sell>0&&cost>0?sell-cost:0;
+    }
+
     /** سعة خزان مادة باللترات، لرسم شريط الامتلاء في لوحة التحكم. */
     public double capacity(String material){
         try{return Double.parseDouble(setting("capacity_"+material,defaultCapacity(material)));}

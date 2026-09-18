@@ -96,30 +96,53 @@ public class MaterialActivity extends Activity {
             LinearLayout words = new LinearLayout(this);
             words.setOrientation(LinearLayout.VERTICAL);
             words.addView(text(material, 17, Util.NAVY, true));
-            double price = db.priceFor(material);
-            words.addView(text((price > 0 ? money(price) + " ريال/لتر" : "السعر غير مضبوط")
-                    + "  •  السعة " + money(db.capacity(material)) + " لتر",
-                    12, price > 0 ? 0xff7c8186 : Util.RED, false));
-            row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
 
-            Button priceBtn = action("السعر", false);
-            priceBtn.setTextSize(13);
-            priceBtn.setOnClickListener(v -> numberDialog("سعر لتر " + material,
-                    db.priceFor(material), value -> {
-                        db.setFuelPrice(material, value);
-                        refresh();
-                    }));
-            row.addView(priceBtn);
+            double sell = db.priceFor(material);
+            double buy = db.buyPrice(material);
+            double freight = db.freightPrice(material);
+            double cost = db.unitCost(material);
+            double margin = db.unitMargin(material);
+
+            words.addView(text("بيع " + (sell > 0 ? money(sell) : "—")
+                    + "  •  شراء " + (buy > 0 ? money(buy) : "—")
+                    + "  •  توصيل " + (freight > 0 ? money(freight) : "—"),
+                    12, 0xff7c8186, false));
+            words.addView(text("التكلفة " + (cost > 0 ? money(cost) + " ريال/لتر" : "غير مضبوطة")
+                    + (margin != 0 ? "  •  الربح " + money(margin) : ""),
+                    12, cost <= 0 ? Util.RED : margin > 0 ? Util.GREEN : Util.RED, true));
+            words.addView(text("قيمة المخزون " + money(db.stockValue(material)) + " ر.ي"
+                    + "  •  السعة " + money(db.capacity(material)) + " لتر",
+                    11, 0xff8b9097, false));
+            row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+            box.addView(row);
+
+            // صفّ الأزرار: أربعة تروس لكل مادة.
+            LinearLayout buttons = new LinearLayout(this);
+            buttons.setPadding(0, 0, 0, dp(6));
+
+            Button sellBtn = action("بيع", false);
+            sellBtn.setTextSize(12);
+            sellBtn.setOnClickListener(v -> numberDialog("سعر بيع لتر " + material,
+                    db.priceFor(material), value -> { db.setFuelPrice(material, value); reopenSettings(); }));
+            buttons.addView(sellBtn, tabCell());
+
+            Button buyBtn = action("شراء", false);
+            buyBtn.setTextSize(12);
+            buyBtn.setOnClickListener(v -> numberDialog("سعر شراء لتر " + material,
+                    db.buyPrice(material), value -> { db.setBuyPrice(material, value); reopenSettings(); }));
+            buttons.addView(buyBtn, tabCell());
+
+            Button freightBtn = action("توصيل", false);
+            freightBtn.setTextSize(12);
+            freightBtn.setOnClickListener(v -> freightDialog(material));
+            buttons.addView(freightBtn, tabCell());
 
             Button capBtn = action("السعة", false);
-            capBtn.setTextSize(13);
+            capBtn.setTextSize(12);
             capBtn.setOnClickListener(v -> numberDialog("سعة خزان " + material,
-                    db.capacity(material), value -> {
-                        db.setCapacity(material, value);
-                        refresh();
-                    }));
-            row.addView(capBtn);
-            box.addView(row);
+                    db.capacity(material), value -> { db.setCapacity(material, value); reopenSettings(); }));
+            buttons.addView(capBtn, tabCell());
+            box.addView(buttons);
 
             View line = new View(this);
             line.setBackgroundColor(0xffeceef0);
@@ -133,6 +156,85 @@ public class MaterialActivity extends Activity {
                 .setView(form)
                 .setPositiveButton("تم", null)
                 .show();
+    }
+
+    private LinearLayout.LayoutParams tabCell() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
+        p.setMargins(dp(3), 0, dp(3), 0);
+        return p;
+    }
+
+    /** يعيد فتح نافذة الضبط بعد أي تغيير لتظهر الأرقام الجديدة. */
+    private void reopenSettings() {
+        refresh();
+        settingsDialog();
+    }
+
+    /**
+     * أجرة التوصيل: تُدخل لكل لتر مباشرة، أو كمبلغ شحنة يُقسَّم على لتراتها.
+     */
+    private void freightDialog(final String material) {
+        final EditText perLitre = new EditText(this);
+        styleInput(perLitre);
+        perLitre.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        perLitre.setHint("أجرة اللتر");
+        double current = db.freightPrice(material);
+        if (current > 0) perLitre.setText(fmt(current));
+
+        final EditText total = new EditText(this);
+        styleInput(total);
+        total.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        total.setHint("أجرة الشحنة كاملة");
+
+        final EditText litres = new EditText(this);
+        styleInput(litres);
+        litres.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        litres.setHint("لترات الشحنة");
+
+        final TextView result = text("", 13, Util.GREEN, true);
+
+        // القسمة تحسب أجرة اللتر تلقائيًا وتملأ الخانة الأولى.
+        android.text.TextWatcher watcher = new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
+            public void onTextChanged(CharSequence t, int a, int b, int c) {}
+            public void afterTextChanged(android.text.Editable e) {
+                double sum = Calc.number(total.getText().toString());
+                double qty = Calc.number(litres.getText().toString());
+                if (sum > 0 && qty > 0) {
+                    double each = sum / qty;
+                    result.setText("أجرة اللتر = " + money(each) + " ريال");
+                    perLitre.setText(fmt(each));
+                } else result.setText("");
+            }
+        };
+        total.addTextChangedListener(watcher);
+        litres.addTextChangedListener(watcher);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(text("أجرة التوصيل للتر", 13, 0xff7c8186, false));
+        box.addView(perLitre);
+        box.addView(text("أو احسبها من شحنة كاملة", 13, 0xff7c8186, false), space());
+        box.addView(total);
+        box.addView(litres);
+        box.addView(result);
+
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
+        new AlertDialog.Builder(this).setTitle("أجرة توصيل " + material)
+                .setMessage("تُضاف إلى سعر الشراء فتكون تكلفة اللتر الحقيقية.")
+                .setView(form)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    double value = Calc.number(perLitre.getText().toString());
+                    if (!(value > 0)) {
+                        Toast.makeText(this, "اكتب أجرة أكبر من صفر", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    db.setFreightPrice(material, value);
+                    reopenSettings();
+                })
+                .setNegativeButton("إلغاء", null).show();
     }
 
     private interface ValueSink { void accept(double value); }
@@ -216,8 +318,15 @@ public class MaterialActivity extends Activity {
         LinearLayout stats = new LinearLayout(this);
         stats.addView(stat("إجمالي الوارد", money(in)), cell());
         stats.addView(stat("المباع", money(sold)), cell());
-        stats.addView(stat("المواد", String.valueOf(Db.MATERIALS.length)), cell());
+        // قيمة المخزون بسعر التكلفة: الشراء زائد التوصيل.
+        double value = db.stockValueTotal();
+        stats.addView(stat("قيمة المخزون", value > 0 ? money(value) : "—"), cell());
         card.addView(stats);
+        if (value > 0) {
+            TextView hint = text("محسوبة بسعر الشراء وأجرة التوصيل", 11, 0xff8b9097, false);
+            hint.setGravity(Gravity.CENTER);
+            card.addView(hint);
+        }
         summaryBox.addView(card);
         totalText.setText(money(stock) + " لتر");
     }
