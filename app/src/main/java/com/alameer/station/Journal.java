@@ -124,7 +124,14 @@ public final class Journal {
     /** قيد وردية كاملة: المبيعات والمقبوضات دائنة، والنقد والديون والمخاريج والعهدة مدينة. */
     public static Entry shiftEntry(long shiftId, String date, double sales, double collections,
                                    double cash, double debts, double expenses, double balance) {
-        Entry e = new Entry("ترحيل وردية #" + shiftId, date, "SHIFT", shiftId);
+        return shiftEntry(shiftId, "", date, sales, collections, cash, debts, expenses, balance);
+    }
+
+    /** نفس القيد مع كود الوردية في البيان، فيُتتبَّع الرصيد إلى مصدره. */
+    public static Entry shiftEntry(long shiftId, String code, String date, double sales, double collections,
+                                   double cash, double debts, double expenses, double balance) {
+        String tag = code == null || code.trim().isEmpty() ? "#" + shiftId : code.trim();
+        Entry e = new Entry("ترحيل وردية " + tag, date, "SHIFT", shiftId);
         if (sales > 0) e.credit(SALES, sales, "");
         if (collections > 0) e.credit(RECEIVABLE, collections, "");
         if (cash > 0) e.debit(CASH, cash, "");

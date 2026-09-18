@@ -41,6 +41,7 @@ public class ShiftActivity extends Activity {
     boolean settingsOnly=false;
     boolean reviewing=false;
     Button postButton;
+    TextView shiftCodeBadge,matchCodeBadge;
     ScrollView screenScroll;
     int page=0;
     TextView headerBalance,stationTitle;
@@ -109,7 +110,21 @@ public class ShiftActivity extends Activity {
         LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
         for(int i=0;i<pages.length;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
-        pages[0].addView(heading("ورديتي"));
+        // عنوان الوردية مع كودها ظاهرًا بجانبه.
+        LinearLayout titleRow=new LinearLayout(this);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title=heading("ورديتي");
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setPadding(0,dp(20),0,dp(20));
+        titleRow.addView(title);
+        shiftCodeBadge=text("",13,Util.NAVY,true);
+        shiftCodeBadge.setPadding(dp(11),dp(6),dp(11),dp(6));
+        shiftCodeBadge.setBackground(Util.round(Util.ACCENT_SOFT,dp(10)));
+        shiftCodeBadge.setTextDirection(View.TEXT_DIRECTION_LTR);
+        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-2,-2);
+        bp.setMargins(dp(10),0,0,0);
+        titleRow.addView(shiftCodeBadge,bp);
+        pages[0].addView(titleRow);
         shiftDateButton=action("",false);
         shiftDateButton.setOnClickListener(v->chooseShiftDate());
         pages[0].addView(shiftDateButton,space());
@@ -136,7 +151,18 @@ public class ShiftActivity extends Activity {
 
         pages[1].addView(movementsBox,space());
         Button review=action("مطابقة وتسليم الوردية",false);review.setOnClickListener(v->showPage(2));pages[1].addView(review,space());
-        pages[2].addView(heading("مطابقة الوردية"));
+        LinearLayout matchRow=new LinearLayout(this);
+        matchRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView matchTitle=heading("مطابقة الوردية");
+        matchRow.addView(matchTitle);
+        matchCodeBadge=text("",13,Util.NAVY,true);
+        matchCodeBadge.setPadding(dp(11),dp(6),dp(11),dp(6));
+        matchCodeBadge.setBackground(Util.round(Util.ACCENT_SOFT,dp(10)));
+        matchCodeBadge.setTextDirection(View.TEXT_DIRECTION_LTR);
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-2,-2);
+        mp.setMargins(dp(10),0,0,0);
+        matchRow.addView(matchCodeBadge,mp);
+        pages[2].addView(matchRow);
         LinearLayout steps=new LinearLayout(this);
         String[] stepNames={"١\nالاستلام","٢\nالحركات","٣\nالتسليم"};
         for(int i=0;i<3;i++){
@@ -194,6 +220,10 @@ public class ShiftActivity extends Activity {
         // الدخول من ترس الواجهة الرئيسية: الرجوع يخرج إليها مباشرة لا إلى الوردية.
         settingsOnly=openSettings;
         showPage(openSettings?4:0);loadMovements();
+        // الشارتان تُملآن بعد اكتمال البناء.
+        String code=db.shiftCode(shiftId);
+        if(shiftCodeBadge!=null){shiftCodeBadge.setText(code);shiftCodeBadge.setVisibility(code.isEmpty()?View.GONE:View.VISIBLE);}
+        if(matchCodeBadge!=null){matchCodeBadge.setText(code);matchCodeBadge.setVisibility(code.isEmpty()?View.GONE:View.VISIBLE);}
     }
     /** تبويب الإعدادات: الأسعار والطرمبات قبل بدء المطابقة. */
     private void buildSettingsPage(){
@@ -838,6 +868,15 @@ public class ShiftActivity extends Activity {
     }
     private void loadReadings(){
         refreshShiftDate();
+        if(shiftCodeBadge!=null){
+            String code=db.shiftCode(shiftId);
+            shiftCodeBadge.setText(code);
+            shiftCodeBadge.setVisibility(code.isEmpty()?View.GONE:View.VISIBLE);
+            if(matchCodeBadge!=null){
+                matchCodeBadge.setText(code);
+                matchCodeBadge.setVisibility(code.isEmpty()?View.GONE:View.VISIBLE);
+            }
+        }
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
         readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){

@@ -88,7 +88,8 @@ public class ArchiveActivity extends Activity {
                 LinearLayout lines = new LinearLayout(this);
                 lines.setOrientation(LinearLayout.VERTICAL);
                 lines.addView(text(who, 18, Util.NAVY, true));
-                lines.addView(text(pumps + " طرمبة  •  " + date, 13, 0xff667078, false));
+                lines.addView(text(db.shiftCode(id) + "  •  " + pumps + " طرمبة", 13, Util.NAVY, true));
+                lines.addView(text(date, 12, 0xff8b9097, false));
                 top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView badge = text("PDF", 12, Color.WHITE, true);
                 badge.setPadding(dp(10), dp(5), dp(10), dp(5));

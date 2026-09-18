@@ -621,6 +621,8 @@ public class Db extends SQLiteOpenHelper {
         // كود الوردية هو الحارس: يُحجز داخل المعاملة نفسها، فإن كان محجوزًا
         // فالوردية مُرحّلة سلفًا ويُلغى كل شيء. لا اعتماد على عدّ السجلات.
         final String code=shiftCode(shiftId);
+        // كل سطر يحمل كود الوردية، فيُتتبَّع أي رصيد إلى مصدره.
+        final String tag=code.isEmpty()?("#"+shiftId):code;
         SQLiteDatabase db=getWritableDatabase();
         String date=shiftDate(shiftId);
         StringBuilder log=new StringBuilder();
@@ -636,7 +638,7 @@ public class Db extends SQLiteOpenHelper {
             }
             double cash=total(shiftId,"CASH");
             if(cashboxId>0&&cash>0){
-                addCashboxEntry(cashboxId,"IN",cash,"نقد مسلّم من وردية #"+shiftId,date,shiftId);
+                addCashboxEntry(cashboxId,"IN",cash,"نقد مسلّم من وردية "+tag,date,shiftId);
                 log.append("• دخل الصندوق ").append(Calc.money(cash)).append(" ر.ي\n");
             }
             int debtors=0;double debtTotal=0;
@@ -647,7 +649,7 @@ public class Db extends SQLiteOpenHelper {
                     double amount=c.getDouble(1);
                     if(name.isEmpty()||!(amount>0))continue;
                     long debtorId=findOrCreateDebtor(db,name);
-                    addDebtEntry(debtorId,"DEBT",amount,"دين من وردية #"+shiftId,date,shiftId);
+                    addDebtEntry(debtorId,"DEBT",amount,"دين من وردية "+tag,date,shiftId);
                     debtors++;debtTotal+=amount;
                 }
             }
@@ -661,7 +663,7 @@ public class Db extends SQLiteOpenHelper {
                     if(name.isEmpty()||!(amount>0))continue;
                     // الاسم الجديد يُفتح له حساب، فيصير رصيده سالبًا (له لا عليه).
                     long debtorId=findOrCreateDebtor(db,name);
-                    addDebtEntry(debtorId,"PAID",amount,"سداد من وردية #"+shiftId,date,shiftId);
+                    addDebtEntry(debtorId,"PAID",amount,"سداد من وردية "+tag,date,shiftId);
                     payers++;paidTotal+=amount;
                 }
             }
@@ -674,7 +676,7 @@ public class Db extends SQLiteOpenHelper {
                     double amount=c.getDouble(1);
                     if(name.isEmpty()||!(amount>0))continue;
                     ContentValues v=new ContentValues();
-                    v.put("category",name);v.put("amount",amount);v.put("note","وردية #"+shiftId);
+                    v.put("category",name);v.put("amount",amount);v.put("note","وردية "+tag);
                     v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",shiftId);v.put("box_id",0);
                     db.insertOrThrow("expense_entries",null,v);
                     expenses++;expenseTotal+=amount;
@@ -693,7 +695,7 @@ public class Db extends SQLiteOpenHelper {
                     if(!(litres>0))continue;
                     ContentValues v=new ContentValues();
                     v.put("material",fuel);v.put("direction","OUT");v.put("litres",litres);
-                    v.put("note","وردية #"+shiftId+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
+                    v.put("note","وردية "+tag+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
                     v.put("source_shift",shiftId);
                     db.insertOrThrow("material_entries",null,v);
                     materials++;
@@ -929,7 +931,7 @@ public class Db extends SQLiteOpenHelper {
         // فرق بلا تسوية أو تعليل يمنع الترحيل.
         if(Math.abs(balance)>=0.01&&reason.trim().isEmpty())
             throw new IllegalStateException("لا يمكن ترحيل وردية بفرق "+Calc.money(Math.abs(balance))+" ر.ي بلا سبب مكتوب.");
-        Journal.Entry e=Journal.shiftEntry(shiftId,date,sales,collections,cash,debts,expenses,balance);
+        Journal.Entry e=Journal.shiftEntry(shiftId,shiftCode(shiftId),date,sales,collections,cash,debts,expenses,balance);
         return postEntry(e);
     }
 
