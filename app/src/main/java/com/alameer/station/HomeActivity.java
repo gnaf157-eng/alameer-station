@@ -142,13 +142,16 @@ public class HomeActivity extends Activity {
     private void refreshBalances() {
         if (cashValue == null) return;
         double cash = db.cashboxesTotal();
-        cashValue.setText(money(cash) + " ر.ي");
-        cashValue.setTextColor(cash < 0 ? Util.RED : Util.GREEN);
+        // لا إشارة سالبة: العجز يُسمّى باسمه بدل أن يُخفى.
+        cashValue.setText(cash < -0.009
+                ? "عجز " + money(-cash) + " ر.ي"
+                : money(cash) + " ر.ي");
+        cashValue.setTextColor(cash < -0.009 ? Util.RED : Util.GREEN);
 
         double debts = db.debtsTotal();
         double credits = db.creditsTotal();
-        debtValue.setText(money(debts) + " ر.ي");
-        debtValue.setTextColor(debts > 0 ? Util.RED : Util.GREEN);
+        debtValue.setText(money(Math.max(0, debts)) + " ر.ي");
+        debtValue.setTextColor(debts > 0.009 ? Util.RED : Util.GREEN);
         debtNote.setText(credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين");
 
         double litres = 0;
@@ -162,9 +165,18 @@ public class HomeActivity extends Activity {
         supplierValue.setTextColor(owed > 0.009 ? Util.RED : Util.GREEN);
         supplierNote.setText(owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد");
 
-        // رأس المال: ما نملكه ناقص ما علينا للمورّد.
-        double capital = cash + debts + value - owed;
-        capitalValue.setText("رأس المال  " + money(capital) + " ر.ي");
+        // رأس المال: الموجودات ناقص ما علينا.
+        double assets = cash + debts + value;
+        double capital = assets - owed;
+        if (capital >= -0.009) {
+            capitalValue.setText("رأس المال  " + money(capital) + " ر.ي");
+            capitalValue.setTextColor(0xffCFE2FA);
+        } else {
+            // لا يُعرض رقم سالب: يُبيَّن أنّ ما علينا تجاوز موجوداتنا.
+            capitalValue.setText("الموجودات " + money(assets)
+                    + "  •  علينا " + money(owed) + " ر.ي");
+            capitalValue.setTextColor(0xffFFD79A);
+        }
     }
 
     private TextView cashValue, debtValue, debtNote, stockText, stockNote, supplierValue, supplierNote;
