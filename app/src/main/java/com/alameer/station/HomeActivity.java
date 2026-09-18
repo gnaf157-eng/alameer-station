@@ -64,36 +64,41 @@ public class HomeActivity extends Activity {
         welcome.setPadding(0, dp(14), 0, dp(10));
         shell.addView(welcome);
 
-        // سجل الانتظار أولًا: منه تُفتح الوردية للمراجعة والترحيل.
+        // إدخال الوردية أولًا: العدادات والحركات والمطابقة.
         int waiting = db.pendingCount();
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
+        row1.addView(tile("الوردية", "العدادات والحركات والمطابقة", 0,
+                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
         row1.addView(tile("مطابقة الوردية", waiting == 0 ? "لا ورديات منتظرة"
                         : waiting + " وردية بانتظار المراجعة", 7,
                 v -> startActivity(new Intent(this, IncomingActivity.class))), cell());
-        row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
-                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
         shell.addView(row1, rowWeight(false));
+
+        LinearLayout row0 = new LinearLayout(this);
+        row0.setGravity(Gravity.CENTER);
+        row0.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
+                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
+        row0.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
+                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
+        shell.addView(row0, rowWeight(true));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
-        row2.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
-                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
         row2.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
                 v -> startActivity(new Intent(this, DebtActivity.class))), cell());
+        row2.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
+                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
         shell.addView(row2, rowWeight(true));
 
         LinearLayout row3 = new LinearLayout(this);
         row3.setGravity(Gravity.CENTER);
         row3.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
                 v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
-        row3.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
-                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+        row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
+                v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
         shell.addView(row3, rowWeight(true));
 
-        // الأرشيف يُفتح أحيانًا فقط، فيكفيه شريط نحيل لا بطاقة كاملة.
-        shell.addView(strip("الأرشيف", "تقارير الورديات المرحّلة", 8,
-                v -> startActivity(new Intent(this, ArchiveActivity.class))));
 
         TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
         credit.setGravity(Gravity.CENTER);
@@ -104,7 +109,6 @@ public class HomeActivity extends Activity {
         new AppUpdater(this).check(false);
     }
 
-    /** غلاف موحّد لشاشات الدخول. */
     @Override protected void onResume() {
         super.onResume();
         recreateIfBrandChanged();
@@ -130,39 +134,6 @@ public class HomeActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 0, 1);
         p.setMargins(0, gap ? dp(10) : 0, 0, 0);
         return p;
-    }
-
-    /** شريط نحيل لمدخل ثانوي: أيقونة صغيرة وسطران بلا ارتفاع بطاقة. */
-    private View strip(String title, String note, int icon, View.OnClickListener action) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(14), dp(10), dp(14), dp(10));
-        row.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x18000000),
-                Util.round(Color.WHITE, dp(14)), null));
-        row.setElevation(dp(1));
-        row.setClickable(true);
-        row.setOnClickListener(action);
-
-        ImageView art = new ImageView(this);
-        HomeIcon drawable = new HomeIcon(icon);
-        drawable.setBounds(0, 0, dp(22), dp(22));
-        art.setImageDrawable(drawable);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(22), dp(22));
-        ip.setMargins(0, 0, dp(12), 0);
-        row.addView(art, ip);
-
-        LinearLayout words = new LinearLayout(this);
-        words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text(title, 15, Util.NAVY, true));
-        words.addView(text(note, 11, 0xff8b9097, false));
-        row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-        row.addView(text("‹", 18, 0xffb0b6bd, true));
-
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(dp(5), dp(12), dp(5), 0);
-        row.setLayoutParams(lp);
-        return row;
     }
 
     private LinearLayout tile(String title, String note, int icon, View.OnClickListener action) {
