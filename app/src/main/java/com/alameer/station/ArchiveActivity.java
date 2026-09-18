@@ -36,7 +36,7 @@ public class ArchiveActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("الأرشيف", 19, Color.WHITE, true));
-        words.addView(text("الورديات المرحّلة — تقارير PDF غير قابلة للتعديل", 11, 0xffCFE2FA, false));
+        words.addView(text("الورديات المرحّلة — تقارير PDF و Excel", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -91,7 +91,7 @@ public class ArchiveActivity extends Activity {
                 lines.addView(text(db.shiftCode(id) + "  •  " + pumps + " طرمبة", 13, Util.NAVY, true));
                 lines.addView(text(date, 12, 0xff8b9097, false));
                 top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
-                TextView badge = text("PDF", 12, Color.WHITE, true);
+                TextView badge = text("PDF · XLS", 11, Color.WHITE, true);
                 badge.setPadding(dp(10), dp(5), dp(10), dp(5));
                 badge.setBackground(Util.round(Util.RED, dp(9)));
                 top.addView(badge);
@@ -100,7 +100,7 @@ public class ArchiveActivity extends Activity {
                 TextView money = text("المبيعات " + money(sales) + " ر.ي", 15, Util.GREEN, true);
                 money.setPadding(0, dp(6), 0, 0);
                 card.addView(money);
-                card.addView(text("مُعتمدة ومُرحّلة  •  اضغط لعرض التقرير", 12, 0xff8b9097, false));
+                card.addView(text("مُعتمدة ومُرحّلة  •  اضغط لـ PDF أو Excel", 12, 0xff8b9097, false));
 
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
                 cp.setMargins(0, dp(6), 0, dp(6));
@@ -122,20 +122,32 @@ public class ArchiveActivity extends Activity {
         listBox.addView(sum, sp);
     }
 
-    /** يبني تقرير الوردية PDF ويعرضه للقراءة أو المشاركة. */
+    /** يعرض صيغ التقرير المتاحة للوردية المؤرشفة. */
     private void openReport(final long id) {
-        new AlertDialog.Builder(this).setTitle("تقرير الوردية #" + id)
+        new AlertDialog.Builder(this).setTitle("تقرير الوردية " + db.shiftCode(id))
                 .setMessage("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.")
-                .setPositiveButton("فتح PDF", (d, w) -> share(id, true))
-                .setNeutralButton("مشاركة", (d, w) -> share(id, false))
+                .setItems(new String[]{"فتح PDF", "مشاركة PDF", "تصدير Excel"}, (d, which) -> {
+                    if (which == 0) share(id, true, false);
+                    else if (which == 1) share(id, false, false);
+                    else share(id, false, true);
+                })
                 .setNegativeButton("إلغاء", null).show();
     }
 
-    private void share(final long id, final boolean view) {
+    /**
+     * يبني التقرير ويشاركه. الصيغة إمّا PDF أو Excel،
+     * والبناء في خيط منفصل حتى لا تتجمّد الشاشة.
+     */
+    private void share(final long id, final boolean view, final boolean excel) {
         Toast.makeText(this, "جارٍ تجهيز التقرير...", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             try {
-                final java.io.File file = new PdfReport(this, db).build(id);
+                final java.io.File file = excel
+                        ? new ExcelReport(this, db).build(id)
+                        : new PdfReport(this, db).build(id);
+                final String mime = excel
+                        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        : "application/pdf";
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     try {
@@ -143,16 +155,18 @@ public class ArchiveActivity extends Activity {
                                 this, getPackageName() + ".files", file);
                         Intent intent = view ? new Intent(Intent.ACTION_VIEW) : new Intent(Intent.ACTION_SEND);
                         if (view) {
-                            intent.setDataAndType(uri, "application/pdf");
+                            intent.setDataAndType(uri, mime);
                         } else {
-                            intent.setType("application/pdf");
+                            intent.setType(mime);
                             intent.putExtra(Intent.EXTRA_STREAM, uri);
-                            intent.putExtra(Intent.EXTRA_SUBJECT, "وردية #" + id);
+                            intent.putExtra(Intent.EXTRA_SUBJECT, "وردية " + db.shiftCode(id));
+                            intent.setClipData(android.content.ClipData.newRawUri("تقرير الوردية", uri));
                         }
                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         startActivity(view ? intent : Intent.createChooser(intent, "مشاركة التقرير"));
                     } catch (Exception e) {
-                        Toast.makeText(this, "لا يوجد تطبيق لفتح PDF", Toast.LENGTH_LONG).show();
+                        Toast.makeText(this, excel ? "لا يوجد تطبيق لفتح Excel"
+                                : "لا يوجد تطبيق لفتح PDF", Toast.LENGTH_LONG).show();
                     }
                 });
             } catch (Exception e) {

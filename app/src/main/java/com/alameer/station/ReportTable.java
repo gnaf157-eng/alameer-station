@@ -82,8 +82,11 @@ final class ReportTable {
                 totals[col]+=c.getDouble(2);movements.add(values);
             }
         }
-        if(!Calc.matched(Calc.balance(sales,totals[1],totals[3],totals[2],totals[0])))
-            throw new IllegalStateException("لا يمكن مشاركة التقرير: يجب أن يكون باقي الوردية صفرًا.");
+        // الوردية المؤرشفة تُصدَّر ولو كان فيها فرق، ما دام سببه مكتوبًا؛
+        // فالمنع إنما يخصّ الوردية المفتوحة قبل إغلاقها.
+        if(!Calc.matched(Calc.balance(sales,totals[1],totals[3],totals[2],totals[0]))
+                &&reason.trim().isEmpty())
+            throw new IllegalStateException("لا يمكن مشاركة التقرير: يجب أن يكون باقي الوردية صفرًا أو أن يكون للفرق سبب مكتوب.");
         Collections.sort(movements,(a,b)->Integer.compare(movementOrder(column(a)),movementOrder(column(b))));
         first=rows.size()+1;
         for(Object[] movement:movements)add(false,movement);
