@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 13;
+    private static final int DB_VERSION = 14;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -52,7 +52,7 @@ public class Db extends SQLiteOpenHelper {
 
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
-    static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL)";
+    static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0)";
@@ -74,6 +74,12 @@ public class Db extends SQLiteOpenHelper {
         "entry_date TEXT NOT NULL,created_at TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',actor TEXT NOT NULL DEFAULT '')";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<14){
+            try{db.execSQL("ALTER TABLE material_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
+            // ربط الحركات القديمة بورديّاتها المستخرجة من البيان.
+            try{db.execSQL("UPDATE material_entries SET source_shift=CAST(REPLACE(SUBSTR(note,INSTR(note,'#')+1),' — مبيعات','') AS INTEGER) "+
+                "WHERE source_shift=0 AND note LIKE 'وردية #%'");}catch(Exception ignored){}
+        }
         if(oldVersion<13){
             try{db.execSQL("ALTER TABLE shifts ADD COLUMN shift_code TEXT NOT NULL DEFAULT ''");}catch(Exception ignored){}
             try{db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_shift_code ON shifts(shift_code) WHERE shift_code<>''");}catch(Exception ignored){}
@@ -529,20 +535,57 @@ public class Db extends SQLiteOpenHelper {
     }
     public void setDefaultCashbox(long id){setSetting("default_cashbox",String.valueOf(id));}
     public boolean shiftPosted(long shiftId){
+        String id=String.valueOf(shiftId);
+        // لا بدّ من فحص المخزون أيضًا: وردية بمبيعات بلا نقد ولا دين ولا مخاريج
+        // كانت تُعدّ «غير مرحّلة» فتُخصم لتراتها مرة بعد مرة.
         try(Cursor c=getReadableDatabase().rawQuery(
             "SELECT (SELECT COUNT(*) FROM cashbox_entries WHERE source_shift=?)+(SELECT COUNT(*) FROM debt_entries WHERE source_shift=?)"+
-            "+(SELECT COUNT(*) FROM expense_entries WHERE source_shift=?)",
-            new String[]{String.valueOf(shiftId),String.valueOf(shiftId),String.valueOf(shiftId)})){
+            "+(SELECT COUNT(*) FROM expense_entries WHERE source_shift=?)"+
+            "+(SELECT COUNT(*) FROM material_entries WHERE source_shift=? OR note LIKE ?)"+
+            "+(SELECT COUNT(*) FROM journal WHERE source='SHIFT' AND source_id=?)",
+            new String[]{id,id,id,id,"وردية #"+shiftId+" —%",id})){
             c.moveToFirst();return c.getInt(0)>0;
         }
     }
+    /** الورديات التي رُحّلت أكثر من مرة: 0=id,1=عامل,2=تاريخ,3=عدد النسخ. */
+    public Cursor doublePosted(){
+        return getReadableDatabase().rawQuery(
+            "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),"+
+            "(SELECT COUNT(*) FROM material_entries m WHERE m.source_shift=s.id AND m.direction='OUT') "+
+            "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
+            "WHERE (SELECT COUNT(*) FROM material_entries m WHERE m.source_shift=s.id AND m.direction='OUT') > "+
+            "(SELECT COUNT(DISTINCT TRIM(p.fuel)) FROM readings r JOIN pumps p ON p.id=r.pump_id "+
+            " WHERE r.shift_id=s.id AND r.current IS NOT NULL AND r.current>=r.previous) "+
+            "ORDER BY s.id DESC",null);
+    }
+
+    /**
+     * يصلح وردية رُحّلت مرتين: يلغي كل أثرها ثم يرحّلها مرة واحدة.
+     * القيود المزدوجة تُعكس ولا تُحذف، فيبقى الأثر في سجل التدقيق.
+     */
+    public String repostShift(long shiftId){
+        java.util.List<Long> entries=new java.util.ArrayList<>();
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0",
+                new String[]{String.valueOf(shiftId)})){
+            while(c.moveToNext())entries.add(c.getLong(0));
+        }
+        for(long entry:entries)reverseEntry(entry,"إصلاح ترحيل مكرّر");
+        unpostShift(shiftId);
+        audit("shift",shiftId,"REPAIR_DOUBLE_POST","ترحيل مكرّر","أُعيد الترحيل مرة واحدة","إصلاح");
+        String posted=postShift(shiftId,defaultCashbox());
+        try{ journalShift(shiftId); }catch(Exception ignored){}
+        return posted;
+    }
+
     /** يلغي ترحيل وردية (عند حذفها أو إعادة ترحيلها). */
     public void unpostShift(long shiftId){
         SQLiteDatabase db=getWritableDatabase();
         db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
-        db.delete("material_entries","note LIKE ?",new String[]{"وردية #"+shiftId+"%"});
+        db.delete("material_entries","source_shift=? OR note LIKE ?",
+                new String[]{String.valueOf(shiftId),"وردية #"+shiftId+" —%"});
     }
     /**
      * يرحّل وردية مُغلقة إلى بقية السجلات في معاملة واحدة:
@@ -617,6 +660,7 @@ public class Db extends SQLiteOpenHelper {
                     ContentValues v=new ContentValues();
                     v.put("material",fuel);v.put("direction","OUT");v.put("litres",litres);
                     v.put("note","وردية #"+shiftId+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
+                    v.put("source_shift",shiftId);
                     db.insertOrThrow("material_entries",null,v);
                     materials++;
                 }
@@ -950,7 +994,8 @@ public class Db extends SQLiteOpenHelper {
             db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
             db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
             db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
-            db.delete("material_entries","note LIKE ?",new String[]{"وردية #"+shiftId+"%"});
+            db.delete("material_entries","source_shift=? OR note LIKE ?",
+                new String[]{String.valueOf(shiftId),"وردية #"+shiftId+" —%"});
             ContentValues v=new ContentValues();
             v.put("status","OPEN");v.put("closed_at","");v.put("sync_state","PENDING");
             db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});

@@ -231,6 +231,16 @@ public class ControlPanelActivity extends Activity {
             }
         }
 
+        try (Cursor c = db.doublePosted()) {
+            if (c.getCount() > 0) {
+                sb.append("\n— ورديات مُرحّلة أكثر من مرة —\n");
+                while (c.moveToNext())
+                    sb.append("\n• وردية #").append(c.getLong(0)).append(" — ").append(c.getString(1))
+                      .append("\n   ").append(c.getString(2))
+                      .append("  •  ").append(c.getInt(3)).append(" حركة مخزون\n");
+            }
+        }
+
         try (Cursor c = db.unpostedShifts()) {
             if (c.getCount() > 0) {
                 sb.append("\n— ورديات مُغلقة بلا قيد —\n");
@@ -250,13 +260,18 @@ public class ControlPanelActivity extends Activity {
             }
         }
 
+        final java.util.List<Long> doubled = new java.util.ArrayList<>();
+        try (Cursor c = db.doublePosted()) { while (c.moveToNext()) doubled.add(c.getLong(0)); }
         int waiting = 0;
         try (Cursor c = db.unpostedShifts()) { waiting = c.getCount(); }
         android.app.AlertDialog.Builder ask = new android.app.AlertDialog.Builder(this)
                 .setTitle("تفصيل حالة التوازن")
                 .setMessage(sb.toString())
                 .setNeutralButton("سجل التدقيق", (d, w) -> showAuditLog());
-        if (waiting > 0) {
+        if (!doubled.isEmpty()) {
+            ask.setPositiveButton("إصلاح " + doubled.size() + " ترحيل مكرّر", (d, w) -> repairDoubles(doubled));
+            ask.setNegativeButton("إغلاق", null);
+        } else if (waiting > 0) {
             ask.setPositiveButton("ترحيل " + waiting + " وردية", (d, w) -> runBacklog());
             ask.setNegativeButton("إغلاق", null);
         } else {
@@ -270,6 +285,29 @@ public class ControlPanelActivity extends Activity {
      * يرحّل الورديات القديمة إلى الدفتر.
      * إذا كانت فترتها مقفلة، يطلب السبب مرة واحدة ثم يفتحها ويرحّل ويعيد إقفالها تلقائيًا.
      */
+    /** يصلح الورديات المرحّلة مرتين: يلغي الأثر المكرّر ويعيد الترحيل مرة واحدة. */
+    private void repairDoubles(final java.util.List<Long> ids) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("إصلاح الترحيل المكرّر")
+                .setMessage("سيُلغى أثر " + ids.size() + " وردية من الصناديق والديون والمخزون،"
+                        + " ثم تُرحّل كل واحدة مرة واحدة فقط.\n\n"
+                        + "القيود المكرّرة تُعكس ولا تُحذف، فيبقى الأثر في سجل التدقيق.")
+                .setPositiveButton("إصلاح", (d, w) -> {
+                    int done = 0;
+                    StringBuilder failed = new StringBuilder();
+                    for (long id : ids) {
+                        try { db.repostShift(id); done++; }
+                        catch (Exception e) { failed.append("\n• #").append(id).append(": ").append(e.getMessage()); }
+                    }
+                    build();
+                    new android.app.AlertDialog.Builder(this).setTitle("اكتمل الإصلاح")
+                            .setMessage("أُصلحت " + done + " وردية."
+                                    + (failed.length() == 0 ? "" : "\n\nتعذّر:" + failed))
+                            .setPositiveButton("حسنًا", null).show();
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
     private void runBacklog() {
         final String blocked = db.blockingPeriod();
         if (blocked.isEmpty()) { doBacklog(""); return; }
