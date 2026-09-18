@@ -954,10 +954,13 @@ public class Db extends SQLiteOpenHelper {
 
     /** رصيد الحساب الوسيط: موجب مدين وسالب دائن. */
     public double suspenseBalance(){
+        // يُحسب من نفس الحركات المعروضة بالضبط: المعلّقة فقط.
+        // القيد المعكوس وقيده العكسي يُستبعدان معًا فيلغي أحدهما الآخر.
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COALESCE(SUM(CASE WHEN l.side='DEBIT' THEN l.amount ELSE -l.amount END),0) "+
                 "FROM journal_lines l JOIN journal j ON j.id=l.entry_id "+
-                "WHERE l.account=?",new String[]{Journal.SUSPENSE})){
+                "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0",
+                new String[]{Journal.SUSPENSE})){
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
@@ -1086,7 +1089,33 @@ public class Db extends SQLiteOpenHelper {
         for(long id:stale){
             try{ reverseEntry(id,"تنظيف تصريف مكرّر"); cleaned++; }catch(Exception ignored){}
         }
+
+        // 3) رصيد متبقٍّ بلا حركة معلّقة تقابله: أثر تصريفات قديمة معطوبة.
+        //    يُقفل بقيد تسوية متوازن، فيصير الوسيط صفرًا دون المساس بالحسابات الأخرى.
+        double left=suspenseResidual();
+        if(Math.abs(left)>=0.01&&suspenseCount()==0){
+            try{
+                String today=ShiftDates.today();
+                Journal.Entry fix=left>0
+                    ? Journal.simple("تسوية إقفال الحساب الوسيط",today,"FIXSUSPENSE",0,
+                            Journal.EQUITY,Journal.SUSPENSE,Math.abs(left),"")
+                    : Journal.simple("تسوية إقفال الحساب الوسيط",today,"FIXSUSPENSE",0,
+                            Journal.SUSPENSE,Journal.EQUITY,Math.abs(left),"");
+                postEntry(fix);
+                audit("journal",0,"CLOSE_SUSPENSE",Calc.money(left),"صفر","إقفال رصيد وسيط بلا حركات");
+                cleaned++;
+            }catch(Exception ignored){}
+        }
         return cleaned;
+    }
+
+    /** الرصيد الحقيقي للوسيط في الدفتر كله، شاملًا القيود العكسية. */
+    public double suspenseResidual(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END),0) "+
+                "FROM journal_lines WHERE account=?",new String[]{Journal.SUSPENSE})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
     }
 
     /** يبحث عن مدين بالاسم، ويعيد صفرًا إن لم يوجد. */

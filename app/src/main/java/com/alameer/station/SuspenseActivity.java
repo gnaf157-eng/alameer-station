@@ -99,12 +99,20 @@ public class SuspenseActivity extends Activity {
 
     private void refresh() {
         double balance = db.suspenseBalance();
+        double residual = db.suspenseResidual();
         boolean clean = Math.abs(balance) < 0.01;
         balanceText.setText(money(Math.abs(balance)) + " ر.ي");
         balanceText.setTextColor(clean ? Util.GREEN : Util.RED);
-        stateText.setText(clean ? "✓ الحساب الوسيط مُصفّى بالكامل"
-                : (balance > 0 ? "رصيد مدين معلّق" : "رصيد دائن معلّق") + " — يحتاج تصريفًا");
-        stateText.setTextColor(clean ? Util.GREEN : Util.RED);
+        if (clean && Math.abs(residual) >= 0.01) {
+            // لا حركات معلّقة لكن بقي أثر قديم في الدفتر: يُقفل بزرّ التنظيف.
+            stateText.setText("لا حركات معلّقة، وبقي أثر قديم "
+                    + money(Math.abs(residual)) + " ر.ي — اضغط «تنظيف» لإقفاله");
+            stateText.setTextColor(0xffB86A00);
+        } else {
+            stateText.setText(clean ? "✓ الحساب الوسيط مُصفّى بالكامل"
+                    : (balance > 0 ? "رصيد مدين معلّق" : "رصيد دائن معلّق") + " — يحتاج تصريفًا");
+            stateText.setTextColor(clean ? Util.GREEN : Util.RED);
+        }
 
         listBox.removeAllViews();
         int count = 0;
