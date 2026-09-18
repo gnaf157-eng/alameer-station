@@ -75,18 +75,33 @@ public class HomeActivity extends Activity {
 
         LinearLayout row0 = new LinearLayout(this);
         row0.setGravity(Gravity.CENTER);
-        row0.addView(tile("حركة الصناديق", "وارد وصادر النقد", 3,
+        // أرصدة حيّة تُقرأ من السجلات مباشرة.
+        double cash = db.cashboxesTotal();
+        double debts = db.debtsTotal();
+        double credits = db.creditsTotal();
+        row0.addView(balanceTile("حركة الصناديق", money(cash) + " ر.ي",
+                "وارد وصادر النقد", cash < 0 ? Util.RED : Util.GREEN, 3,
                 v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
-        row0.addView(tile("حركة الديون", "ديون وسداد المدينين", 4,
+        cashValue = lastAmount;
+        row0.addView(balanceTile("حركة الديون", money(debts) + " ر.ي",
+                credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين",
+                debts > 0 ? Util.RED : Util.GREEN, 4,
                 v -> startActivity(new Intent(this, DebtActivity.class))), cell());
+        debtValue = lastAmount; debtNote = lastNote;
         shell.addView(row0, rowWeight(true));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
         row2.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
                 v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
-        row2.addView(tile("حركة المواد", "وارد وصادر اللترات", 6,
+        double litres = 0;
+        for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
+        double stockValue = db.stockValueTotal();
+        row2.addView(balanceTile("حركة المواد", money(litres) + " لتر",
+                stockValue > 0 ? money(stockValue) + " ر.ي" : "وارد وصادر اللترات",
+                Util.NAVY, 6,
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+        stockValue = lastAmount; stockNote = lastNote;
         shell.addView(row2, rowWeight(true));
 
         LinearLayout row3 = new LinearLayout(this);
@@ -109,7 +124,30 @@ public class HomeActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         recreateIfBrandChanged();
+        refreshBalances();
     }
+
+    /** يحدّث أرقام البطاقات بعد العودة من شاشة عدّلت الأرصدة. */
+    private void refreshBalances() {
+        if (cashValue == null) return;
+        double cash = db.cashboxesTotal();
+        cashValue.setText(money(cash) + " ر.ي");
+        cashValue.setTextColor(cash < 0 ? Util.RED : Util.GREEN);
+
+        double debts = db.debtsTotal();
+        double credits = db.creditsTotal();
+        debtValue.setText(money(debts) + " ر.ي");
+        debtValue.setTextColor(debts > 0 ? Util.RED : Util.GREEN);
+        debtNote.setText(credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين");
+
+        double litres = 0;
+        for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
+        double value = db.stockValueTotal();
+        stockValue.setText(money(litres) + " لتر");
+        stockNote.setText(value > 0 ? money(value) + " ر.ي" : "وارد وصادر اللترات");
+    }
+
+    private TextView cashValue, debtValue, debtNote, stockValue, stockNote;
 
     private String lastBrand = null;
     private void recreateIfBrandChanged() {
@@ -131,6 +169,24 @@ public class HomeActivity extends Activity {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 0, 1);
         p.setMargins(0, gap ? dp(10) : 0, 0, 0);
         return p;
+    }
+
+    /** بطاقة تعرض رصيدًا بارزًا تحت اسمها بدل الوصف. */
+    private TextView lastAmount, lastNote;
+
+    private LinearLayout balanceTile(String title, String value, String note, int tint,
+                                     int icon, View.OnClickListener action) {
+        LinearLayout box = tile(title, note, icon, action);
+        lastNote = (TextView) box.getChildAt(box.getChildCount() - 1);
+        TextView amount = text(value, 17, tint, true);
+        amount.setGravity(Gravity.CENTER);
+        amount.setTextDirection(View.TEXT_DIRECTION_LTR);
+        amount.setMaxLines(1);
+        // الرصيد يوضع بين الاسم والوصف ليكون أول ما تقع عليه العين.
+        box.addView(amount, box.getChildCount() - 1,
+                new LinearLayout.LayoutParams(-1, -2));
+        lastAmount = amount;
+        return box;
     }
 
     private LinearLayout tile(String title, String note, int icon, View.OnClickListener action) {
@@ -203,6 +259,11 @@ public class HomeActivity extends Activity {
         public void setAlpha(int a) { ink.setAlpha(a); }
         public void setColorFilter(android.graphics.ColorFilter f) { ink.setColorFilter(f); }
         public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+
+    private String money(double value) {
+        return String.format(java.util.Locale.US,
+                value == Math.rint(value) ? "%,.0f" : "%,.2f", value);
     }
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
