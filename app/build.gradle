@@ -22,8 +22,8 @@ android {
         applicationId 'com.alameer.station.shifts.v2'
         minSdk 26
         targetSdk 35
-        versionCode 113
-        versionName '2.38.1'
+        versionCode 114
+        versionName '2.39.0'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://github.com/gnaf157-eng/alameer-station/releases/latest/download/update-manifest.json'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""

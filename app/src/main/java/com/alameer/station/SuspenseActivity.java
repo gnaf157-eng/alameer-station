@@ -108,15 +108,22 @@ public class SuspenseActivity extends Activity {
 
         listBox.removeAllViews();
         int count = 0;
+        // ملخّص المصادر: كم حركة من كل شاشة.
+        final java.util.LinkedHashMap<String, Integer> bySource = new java.util.LinkedHashMap<>();
         try (Cursor c = db.suspenseEntries()) {
             while (c.moveToNext()) {
                 count++;
                 final long entryId = c.getLong(0);
                 final String memo = c.getString(1);
                 String date = c.getString(2);
-                boolean suspenseDebit = "DEBIT".equals(c.getString(3));
+                final boolean suspenseDebit = "DEBIT".equals(c.getString(3));
                 double amount = c.getDouble(4);
                 String other = c.getString(5);
+                final String source = c.getString(6);
+                long recordId = c.getLong(7);
+                final String recordName = c.getString(8);
+                String recordNote = c.getString(9);
+                String actor = c.getString(10);
 
                 LinearLayout row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.VERTICAL);
@@ -125,14 +132,23 @@ public class SuspenseActivity extends Activity {
                         android.content.res.ColorStateList.valueOf(0x18000000),
                         Util.round(Color.WHITE, dp(14)), null));
                 row.setClickable(true);
-                row.setOnClickListener(v -> settleDialog(entryId, memo));
+                row.setOnClickListener(v -> settleDialog(entryId, memo, source, recordName, suspenseDebit));
 
                 LinearLayout top = new LinearLayout(this);
                 top.setGravity(Gravity.CENTER_VERTICAL);
                 LinearLayout lines = new LinearLayout(this);
                 lines.setOrientation(LinearLayout.VERTICAL);
                 lines.addView(text(memo.isEmpty() ? "حركة #" + entryId : memo, 16, Util.NAVY, true));
-                lines.addView(text(date + "  •  مقابل " + other, 12, 0xff8b9097, false));
+                // المصدر واضحًا: من أي شاشة جاءت الحركة وفي أي سجل.
+                String origin = sourceLabel(source)
+                        + (recordName == null || recordName.isEmpty() ? "" : " — " + recordName)
+                        + (recordId > 0 ? "  #" + recordId : "");
+                TextView originText = text(origin, 12, Util.ACCENT, true);
+                lines.addView(originText);
+                lines.addView(text(date + "  •  مقابل " + other
+                        + (actor == null || actor.isEmpty() ? "" : "  •  " + actor), 11, 0xff8b9097, false));
+                if (recordNote != null && !recordNote.trim().isEmpty() && !recordNote.equals(memo))
+                    lines.addView(text("البيان: " + recordNote.trim(), 11, 0xff8b9097, false));
                 top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(money(amount), 16,
                         suspenseDebit ? Util.RED : Util.GREEN, true);
@@ -142,34 +158,82 @@ public class SuspenseActivity extends Activity {
                 row.addView(text(suspenseDebit ? "الوسيط مدين — اضغط لتصريفه"
                         : "الوسيط دائن — اضغط لتصريفه", 12, Util.ACCENT, true));
 
+                String key = sourceLabel(source);
+                bySource.put(key, (bySource.containsKey(key) ? bySource.get(key) : 0) + 1);
+
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.setMargins(0, dp(4), 0, dp(4));
                 listBox.addView(row, lp);
             }
         }
-        if (count == 0)
+        if (count == 0) {
             listBox.addView(text("لا توجد حركات معلّقة.\nكل الحركات لها طرفها الصحيح.",
                     14, 0xff777d84, false));
+            return;
+        }
+        StringBuilder sum = new StringBuilder();
+        for (java.util.Map.Entry<String, Integer> e : bySource.entrySet()) {
+            if (sum.length() > 0) sum.append("  •  ");
+            sum.append(e.getKey()).append(": ").append(e.getValue());
+        }
+        TextView summary = text(sum.toString(), 12, Util.NAVY, true);
+        summary.setGravity(Gravity.CENTER);
+        summary.setPadding(dp(10), dp(9), dp(10), dp(9));
+        summary.setBackground(Util.round(Util.ACCENT_SOFT, dp(11)));
+        listBox.addView(summary, 0);
     }
 
     /** يختار الحساب الصحيح للحركة ثم يصرّفها إليه. */
-    private void settleDialog(final long entryId, final String memo) {
+    /** اسم الشاشة التي جاءت منها الحركة. */
+    private String sourceLabel(String source) {
+        if (source == null) return "مصدر غير معروف";
+        switch (source) {
+            case "CASHBOX": return "من حركة الصناديق";
+            case "DEBT": return "من حركة الديون";
+            case "EXPENSE": return "من حركة المخاريج";
+            case "SHIFT": return "من وردية";
+            default: return "مصدر غير معروف";
+        }
+    }
+
+    /**
+     * الحساب المرجَّح حسب المصدر والجهة، فيُختار مسبقًا ويوفّر على المستخدم التفكير.
+     * وارد صندوق غالبًا سداد مدين أو مبيعات، وصادره غالبًا مخاريج.
+     */
+    private int suggestTarget(String source, boolean suspenseDebit) {
+        String[] targets = Db.SUSPENSE_TARGETS;
+        String want;
+        if ("CASHBOX".equals(source)) want = suspenseDebit ? Journal.EXPENSE : Journal.RECEIVABLE;
+        else if ("DEBT".equals(source)) want = Journal.CASH;
+        else if ("EXPENSE".equals(source)) want = Journal.CASH;
+        else want = Journal.RECEIVABLE;
+        for (int i = 0; i < targets.length; i++) if (targets[i].equals(want)) return i;
+        return 0;
+    }
+
+    private void settleDialog(final long entryId, final String memo,
+                              final String source, final String recordName, final boolean suspenseDebit) {
         final String[] targets = Db.SUSPENSE_TARGETS;
         final String[] labels = new String[targets.length];
         for (int i = 0; i < targets.length; i++) labels[i] = targets[i];
 
-        final int[] chosen = {0};
+        final int suggested = suggestTarget(source, suspenseDebit);
+        final int[] chosen = {suggested};
         final EditText party = new EditText(this);
         party.setHint("اسم المدين (عند اختيار ذمم المدينين)");
         party.setTextSize(16);
         party.setSingleLine(true);
         // الاسم مأخوذ من بيان الحركة إن أمكن.
-        party.setText(guessName(memo));
+        party.setText(recordName != null && !recordName.isEmpty() ? recordName : guessName(memo));
 
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setPadding(dp(20), dp(8), dp(20), 0);
-        wrap.addView(text("إلى أي حساب تنتمي هذه الحركة؟", 13, 0xff7c8186, false));
+        wrap.addView(text(sourceLabel(source)
+                + (recordName == null || recordName.isEmpty() ? "" : " — " + recordName), 13, Util.ACCENT, true));
+        wrap.addView(text(suspenseDebit
+                ? "الوسيط مدين: المال خرج، فما وجهته؟"
+                : "الوسيط دائن: المال دخل، فمن أين جاء؟", 13, 0xff7c8186, false));
 
         final RadioGroup group = new RadioGroup(this);
         for (int i = 0; i < labels.length; i++) {
@@ -179,7 +243,7 @@ public class SuspenseActivity extends Activity {
             b.setId(1000 + i);
             group.addView(b);
         }
-        group.check(1000);
+        group.check(1000 + suggested);
         group.setOnCheckedChangeListener((g, id) -> chosen[0] = id - 1000);
         wrap.addView(group);
         wrap.addView(party);

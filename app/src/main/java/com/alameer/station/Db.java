@@ -962,13 +962,24 @@ public class Db extends SQLiteOpenHelper {
 
     /**
      * الحركات المعلّقة في الحساب الوسيط.
-     * 0=entryId,1=بيان,2=تاريخ,3=الجهة,4=المبلغ,5=الطرف الآخر,6=مصدرها
+     * 0=entryId,1=بيان,2=تاريخ,3=الجهة,4=المبلغ,5=الطرف الآخر,6=المصدر,
+     * 7=رقم السجل,8=اسم السجل,9=بيان الحركة الأصلية,10=من سجّلها
      */
     public Cursor suspenseEntries(){
         return getReadableDatabase().rawQuery(
             "SELECT j.id,j.memo,j.entry_date,l.side,l.amount,"+
             "COALESCE((SELECT o.account FROM journal_lines o WHERE o.entry_id=j.id AND o.account<>? LIMIT 1),''),"+
-            "j.source "+
+            "j.source,j.source_id,"+
+            // تفصيل المصدر: اسم الصندوق أو المدين أو باب المصروف، وبيان الحركة الأصلية.
+            "COALESCE((SELECT b.name FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+
+            " WHERE j.source='CASHBOX' AND e.id=j.source_id),"+
+            "(SELECT d.name FROM debt_entries e JOIN debtors d ON d.id=e.debtor_id "+
+            " WHERE j.source='DEBT' AND e.id=j.source_id),"+
+            "(SELECT e.category FROM expense_entries e WHERE j.source='EXPENSE' AND e.id=j.source_id),''),"+
+            "COALESCE((SELECT e.note FROM cashbox_entries e WHERE j.source='CASHBOX' AND e.id=j.source_id),"+
+            "(SELECT e.note FROM debt_entries e WHERE j.source='DEBT' AND e.id=j.source_id),"+
+            "(SELECT e.note FROM expense_entries e WHERE j.source='EXPENSE' AND e.id=j.source_id),''),"+
+            "COALESCE(j.actor,'') "+
             "FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
             // القيد العكسي يلغي أصله، فلا يُعرض ولا يُصرَّف من جديد.
             "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0 "+
