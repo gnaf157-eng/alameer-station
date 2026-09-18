@@ -79,6 +79,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Publish rolling release with direct APK download link
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp misbaha/app/build/outputs/apk/debug/app-debug.apk Misbaha-debug.apk
+          gh release delete misbaha-latest --cleanup-tag --yes 2>/dev/null || true
+          gh release create misbaha-latest Misbaha-debug.apk \
+            --title "المسبحة الإلكترونية — APK للتثبيت المباشر" \
+            --notes "نسخة debug تُحدَّث تلقائيًا مع كل بناء ناجح (آخر تحديث: $(date -u +%Y-%m-%d)).
+            رابط تثبيت ثابت:
+            https://github.com/gnaf157-eng/alameer-station/releases/download/misbaha-latest/Misbaha-debug.apk"
+
   tests:
     name: Unit tests (Robolectric)
     runs-on: ubuntu-latest
