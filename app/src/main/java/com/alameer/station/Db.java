@@ -1082,6 +1082,40 @@ public class Db extends SQLiteOpenHelper {
             "ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",null);
     }
 
+    /**
+     * كل الأسماء المحفوظة في التطبيق مهما كان مصدرها: حركات الورديات،
+     * والمخاريج، والصناديق، والمدينون. الاسم الواحد يظهر مرة واحدة.
+     */
+    public java.util.ArrayList<String> allNames(){
+        java.util.LinkedHashSet<String> set=new java.util.LinkedHashSet<>();
+        String[] queries={
+            "SELECT DISTINCT name FROM remembered_names WHERE TRIM(name)<>''",
+            "SELECT DISTINCT name FROM debtors WHERE TRIM(name)<>''",
+            "SELECT DISTINCT category FROM expense_entries WHERE TRIM(category)<>''",
+            "SELECT DISTINCT name FROM cashboxes WHERE TRIM(name)<>''"
+        };
+        for(String q:queries){
+            try(Cursor c=getReadableDatabase().rawQuery(q,null)){
+                while(c.moveToNext()){
+                    String v=c.getString(0);
+                    if(v!=null&&!v.trim().isEmpty())set.add(v.trim());
+                }
+            }catch(Exception ignored){}
+        }
+        java.util.ArrayList<String> names=new java.util.ArrayList<>(set);
+        java.util.Collections.sort(names);
+        return names;
+    }
+
+    /** يحفظ اسمًا في ذاكرة الأسماء ليُقترح لاحقًا في كل الشاشات. */
+    public void rememberName(String type,String name){
+        if(name==null||name.trim().isEmpty())return;
+        ContentValues v=new ContentValues();
+        v.put("type",type==null?"CASH":type);
+        v.put("name",name.trim());
+        getWritableDatabase().insertWithOnConflict("remembered_names",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
     /** كود الوردية الفريد، يُولَّد ويُثبَّت عند أول طلب. */
     public String shiftCode(long shiftId){
         try(Cursor c=getReadableDatabase().rawQuery(

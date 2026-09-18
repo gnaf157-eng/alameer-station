@@ -376,14 +376,22 @@ public class CashboxActivity extends Activity {
         kind.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"وارد (دخول نقد)", "صادر (خروج نقد)"}));
 
+        // الاسم أولًا، ويقترح كل الأسماء المحفوظة في التطبيق.
+        final AutoCompleteTextView note = new AutoCompleteTextView(this);
+        styleInput(note);
+        note.setHint("الاسم أو البيان");
+        note.setThreshold(1);
+        note.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, db.allNames()));
+        note.setOnTouchListener((v, e) -> {
+            if (e.getAction() == android.view.MotionEvent.ACTION_UP) note.showDropDown();
+            return false;
+        });
+
         final EditText amount = new EditText(this);
         styleInput(amount);
         amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amount.setHint("المبلغ بالريال اليمني");
-
-        EditText note = new EditText(this);
-        styleInput(note);
-        note.setHint("البيان (اختياري)");
 
         final Button dateButton = action("", false);
         final String[] date = {ShiftDates.today()};
@@ -420,10 +428,10 @@ public class CashboxActivity extends Activity {
         box.addView(balanceCard);
         box.addView(text("نوع الحركة", 13, 0xff7c8186, false), space());
         box.addView(kind);
+        box.addView(text("الاسم", 13, 0xff7c8186, false), space());
+        box.addView(note);
         box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
         box.addView(amount);
-        box.addView(text("البيان", 13, 0xff7c8186, false), space());
-        box.addView(note);
         box.addView(dateButton, space());
         ScrollView form = new ScrollView(this);
         form.addView(box);
@@ -443,6 +451,7 @@ public class CashboxActivity extends Activity {
                         .setMessage("رصيد الصندوق " + money(opening) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
                         .setPositiveButton("سجّل", (d, w) -> {
                             db.addCashboxEntry(boxId, direction, value, note.getText().toString(), date[0]);
+                            db.rememberName("CASH", note.getText().toString());
                             dialog.dismiss();
                             refresh();
                         })
@@ -451,6 +460,7 @@ public class CashboxActivity extends Activity {
             }
             try {
                 db.addCashboxEntry(boxId, direction, value, note.getText().toString(), date[0]);
+                db.rememberName("CASH", note.getText().toString());
             } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
             dialog.dismiss();
             refresh();
