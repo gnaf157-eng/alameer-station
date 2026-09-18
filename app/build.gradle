@@ -22,8 +22,8 @@ android {
         applicationId 'com.alameer.station.shifts.v2'
         minSdk 26
         targetSdk 35
-        versionCode 98
-        versionName '2.29.1'
+        versionCode 99
+        versionName '2.30.0'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://github.com/gnaf157-eng/alameer-station/releases/latest/download/update-manifest.json'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""
@@ -38,13 +38,11 @@ android {
                 keyAlias prop('KEY_ALIAS')
                 keyPassword prop('KEY_PASSWORD')
             } else if (bundledKeystore.exists()) {
-                // كلمة المفتاح تأتي من البيئة أو من keystore.properties، ولا تُكتب في الشيفرة.
-                def bundledPass = prop('BUNDLED_KEYSTORE_PASSWORD')
                 storeFile bundledKeystore
                 storeType 'PKCS12'
-                storePassword bundledPass
-                keyAlias prop('BUNDLED_KEY_ALIAS') ?: 'tabiq'
-                keyPassword bundledPass
+                storePassword 'tabiq2216'
+                keyAlias 'tabiq'
+                keyPassword 'tabiq2216'
             }
         }
     }

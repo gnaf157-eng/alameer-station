@@ -969,7 +969,7 @@ public class Db extends SQLiteOpenHelper {
 
     // ==================== كلمات السر والدخول ====================
 
-    /** الرمز الابتدائي عند أول تشغيل فقط، ويجب تغييره فورًا. */
+    /** الرمز الافتراضي للمدير والعامل قبل أي تغيير. */
     public static final String DEFAULT_MANAGER_PIN = "2216";
     public static final String DEFAULT_WORKER_PIN = "6114";
 
@@ -980,109 +980,58 @@ public class Db extends SQLiteOpenHelper {
     public static boolean managerMode(){ return "MANAGER".equals(session); }
     public static void endSession(){ session = ""; }
 
-    /** ملح خاص بهذا الجهاز: يجعل التجزئة عندك مختلفة عن أي جهاز آخر. */
-    public String salt(){
-        String value = setting("pw_salt","");
-        if(value.isEmpty()){
-            value = Guard.newSalt(new java.security.SecureRandom());
-            setSetting("pw_salt", value);
-        }
-        return value;
-    }
-
-    private String storedHash(boolean manager){
-        String key = manager ? "pw_manager" : "pw_worker";
-        String saved = setting(key,"");
-        if(!saved.isEmpty())return saved;
-        // أول تشغيل: يُثبَّت الرمز الابتدائي مُجزَّأً بملح الجهاز.
-        String fresh = Guard.hash(manager ? DEFAULT_MANAGER_PIN : DEFAULT_WORKER_PIN, salt());
-        setSetting(key, fresh);
-        return fresh;
-    }
-
-    /** حالة القفل الحالية بالثواني المتبقية، أو صفرًا. */
-    public int loginLockLeft(){
-        int failures;
-        long at;
-        try{ failures = Integer.parseInt(setting("pw_failures","0")); }catch(Exception e){ failures = 0; }
-        try{ at = Long.parseLong(setting("pw_locked_at","0")); }catch(Exception e){ at = 0; }
-        return Guard.lockLeft(failures, at, System.currentTimeMillis());
-    }
-
-    /** يمسح أثر المحاولات الخاطئة والقفل المؤقت. */
-    public void clearLoginLock(){
-        setSetting("pw_failures","0");
-        setSetting("pw_locked_at","0");
-    }
-
-    /** رسالة الرفض المناسبة بعد محاولة خاطئة. */
-    public String loginMessage(){
-        int failures;
-        long at;
-        try{ failures = Integer.parseInt(setting("pw_failures","0")); }catch(Exception e){ failures = 0; }
-        try{ at = Long.parseLong(setting("pw_locked_at","0")); }catch(Exception e){ at = 0; }
-        return Guard.message(failures, at, System.currentTimeMillis());
-    }
+    private String managerHash(){ return setting("pw_manager", Calc.hash(DEFAULT_MANAGER_PIN)); }
+    private String workerHash(){ return setting("pw_worker", Calc.hash(DEFAULT_WORKER_PIN)); }
 
     /**
      * يتحقّق من كلمة السر ويفتح الجلسة بالدور الذي تخصّها.
-     * يعيد MANAGER أو WORKER، أو LOCKED إن كان الدخول مقفلًا، أو نصًا فارغًا عند الخطأ.
+     * يعيد MANAGER أو WORKER، أو نصًا فارغًا إذا لم تطابق شيئًا.
      */
     public String openSession(String password){
-        if(loginLockLeft() > 0) return "LOCKED";
         String clean = password == null ? "" : password.trim();
-        String hash = Guard.hash(clean, salt());
-        String role = Guard.same(hash, storedHash(true)) ? "MANAGER"
-                    : Guard.same(hash, storedHash(false)) ? "WORKER" : "";
-        // ترحيل الأجهزة القديمة: كلمة محفوظة بالتجزئة السابقة تُقبل مرة ثم تُحدَّث.
+        String hash = Calc.hash(clean);
+        String role = hash.equals(managerHash()) ? "MANAGER"
+                    : hash.equals(workerHash()) ? "WORKER" : "";
+        // من ثبّت 2.29 مؤقتًا: كلمته محفوظة بالصيغة البطيئة، تُقبل مرة ثم تُعاد للصيغة السريعة.
         if(role.isEmpty()){
-            String legacy = Calc.hash(clean);
-            if(Guard.same(legacy, setting("pw_manager",""))){
-                role = "MANAGER";
-                setSetting("pw_manager", hash);
-            }else if(Guard.same(legacy, setting("pw_worker",""))){
-                role = "WORKER";
-                setSetting("pw_worker", hash);
+            String salt = setting("pw_salt","");
+            if(!salt.isEmpty()){
+                String slow = "tabiq::" + salt + "::" + clean;
+                for(int i=0;i<12000;i++) slow = Calc.hash(slow);
+                if(slow.equals(setting("pw_manager",""))){
+                    role = "MANAGER"; setSetting("pw_manager", hash);
+                }else if(slow.equals(setting("pw_worker",""))){
+                    role = "WORKER"; setSetting("pw_worker", hash);
+                }
             }
         }
-        if(role.isEmpty()){
-            int failures;
-            try{ failures = Integer.parseInt(setting("pw_failures","0")); }catch(Exception e){ failures = 0; }
-            failures++;
-            setSetting("pw_failures", String.valueOf(failures));
-            if(failures % Guard.MAX_TRIES == 0){
-                setSetting("pw_locked_at", String.valueOf(System.currentTimeMillis()));
-                audit("device", 0, "LOGIN_LOCKED", "", failures + " محاولة خاطئة", "قفل مؤقت");
-            }
-            return "";
+        if(!role.isEmpty()){
+            setSetting("pw_failures","0");
+            setSetting("pw_locked_at","0");
+            session = role;
+            audit("device", 0, "LOGIN", "", role.equals("MANAGER") ? "دخول المدير" : "دخول العامل", "");
         }
-        setSetting("pw_failures","0");
-        setSetting("pw_locked_at","0");
-        session = role;
-        audit("device", 0, "LOGIN", "", role.equals("MANAGER") ? "دخول المدير" : "دخول العامل", "");
         return role;
     }
 
     /** يغيّر كلمة سر أحد الدورين. متاح للمدير وحده من الضبط. */
     public void setPin(String role, String fresh){
         if(!managerMode())throw new IllegalStateException("تغيير كلمات السر للمدير وحده");
-        String weak = Guard.weakness(fresh);
-        if(!weak.isEmpty())throw new IllegalArgumentException(weak);
+        String clean = fresh == null ? "" : fresh.trim();
+        if(clean.length() < 4)throw new IllegalArgumentException("كلمة السر: 4 أرقام أو أحرف على الأقل");
         boolean manager = "MANAGER".equals(role);
-        String hash = Guard.hash(fresh, salt());
-        if(Guard.same(hash, storedHash(!manager)))
+        String other = manager ? workerHash() : managerHash();
+        if(Calc.hash(clean).equals(other))
             throw new IllegalArgumentException("لا يمكن أن تتطابق كلمتا السر");
-        setSetting(manager ? "pw_manager" : "pw_worker", hash);
+        setSetting(manager ? "pw_manager" : "pw_worker", Calc.hash(clean));
         audit("device", 0, "CHANGE_PIN", manager ? "المدير" : "العامل", "غُيّرت كلمة السر", "");
     }
 
-    /** هل ما زالت كلمة السر هي الافتراضية المنشورة؟ */
+    /** هل ما زالت كلمة السر هي الافتراضية؟ يُنبَّه المدير لتغييرها. */
     public boolean defaultPin(String role){
-        boolean manager = "MANAGER".equals(role);
-        String pin = manager ? DEFAULT_MANAGER_PIN : DEFAULT_WORKER_PIN;
-        // يشمل الأجهزة التي ما زالت تحمل التجزئة القديمة.
-        return Guard.same(storedHash(manager), Guard.hash(pin, salt()))
-            || Guard.same(setting(manager ? "pw_manager" : "pw_worker",""), Calc.hash(pin));
+        return "MANAGER".equals(role)
+            ? managerHash().equals(Calc.hash(DEFAULT_MANAGER_PIN))
+            : workerHash().equals(Calc.hash(DEFAULT_WORKER_PIN));
     }
 
     // ==================== رمز الربط بين الجهازين ====================

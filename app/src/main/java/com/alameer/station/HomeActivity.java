@@ -83,26 +83,6 @@ public class HomeActivity extends Activity {
         brand.addView(exit, ep);
         shell.addView(brand);
 
-        // تحذير ظاهر ما دامت كلمة سر منشورة في الشيفرة قيد الاستخدام.
-        if (db.defaultPin("MANAGER") || db.defaultPin("WORKER")) {
-            TextView risk = text("⚠ كلمة السر ما زالت الافتراضية المنشورة — اضغط لتغييرها الآن",
-                    13, Color.WHITE, true);
-            risk.setGravity(Gravity.CENTER);
-            risk.setPadding(dp(12), dp(10), dp(12), dp(10));
-            risk.setBackground(new android.graphics.drawable.RippleDrawable(
-                    android.content.res.ColorStateList.valueOf(0x33FFFFFF),
-                    Util.round(Util.RED, dp(12)), null));
-            risk.setClickable(true);
-            risk.setOnClickListener(v -> {
-                Intent intent = new Intent(this, ShiftActivity.class);
-                intent.putExtra("openSettings", true);
-                startActivity(intent);
-            });
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-            rp.setMargins(dp(5), dp(10), dp(5), 0);
-            shell.addView(risk, rp);
-        }
-
         TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
         welcome.setGravity(Gravity.CENTER);
         welcome.setPadding(0, dp(14), 0, dp(10));
@@ -213,7 +193,7 @@ public class HomeActivity extends Activity {
     private void logout() {
         new android.app.AlertDialog.Builder(this)
                 .setTitle("تسجيل خروج")
-                .setMessage("ستعود شاشة كلمة السر.\nكلمة سر العامل تفتح واجهته، وكلمة سرّك تعيدك إلى هنا.")
+                .setMessage("ستعود شاشة كلمة السر.\nأدخل 6114 لواجهة العامل، أو كلمة سر المدير للعودة إلى هنا.")
                 .setPositiveButton("خروج", (d, w) -> {
                     Db.endSession();
                     Intent home = new Intent(this, HomeActivity.class);
@@ -265,36 +245,14 @@ public class HomeActivity extends Activity {
         Button enter = bigButton("دخول");
         enter.setOnClickListener(v -> {
             String role = db.openSession(field.getText().toString());
-            if (!"MANAGER".equals(role) && !"WORKER".equals(role)) {
+            if (role.isEmpty()) {
                 field.setText("");
-                String why = db.loginMessage();
-                field.setError(why);
-                Toast.makeText(this, why, Toast.LENGTH_LONG).show();
+                field.setError("كلمة السر غير صحيحة");
+                Toast.makeText(this, "كلمة السر غير صحيحة", Toast.LENGTH_SHORT).show();
                 return;
             }
             recreate();
         });
-
-        // الضغط المطوّل على الشعار يلغي القفل المؤقت لصاحب الجهاز.
-        shell.setOnLongClickListener(v -> {
-            if (db.loginLockLeft() <= 0) return false;
-            db.clearLoginLock();
-            Toast.makeText(this, "أُلغي القفل المؤقت. أعد المحاولة.", Toast.LENGTH_LONG).show();
-            recreate();
-            return true;
-        });
-
-        int locked = db.loginLockLeft();
-        if (locked > 0) {
-            field.setEnabled(false);
-            enter.setEnabled(false);
-            enter.setAlpha(0.5f);
-            TextView warn = text(db.loginMessage() + "\n(اضغط مطوّلًا على الشاشة لإلغاء القفل)",
-                    13, Util.RED, true);
-            warn.setGravity(Gravity.CENTER);
-            warn.setPadding(0, dp(12), 0, 0);
-            shell.addView(warn);
-        }
         shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
 
         field.setOnEditorActionListener((v, id, event) -> { enter.performClick(); return true; });
