@@ -39,6 +39,10 @@ public class HomeActivity extends Activity {
         words.setPadding(dp(12), 0, 0, 0);
         words.addView(text(Branding.stationName(db), 19, Color.WHITE, true));
         words.addView(text("واجهة المدير", 12, 0xffCFE2FA, true));
+        // رأس المال: الصناديق + الديون + قيمة المواد بالتكلفة − ما علينا لشركة النفط.
+        capitalValue = text("", 12, 0xffCFE2FA, true);
+        capitalValue.setPadding(0, dp(3), 0, 0);
+        words.addView(capitalValue);
         brand.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
 
         // الترس انتقل إلى هنا؛ يفتح صفحة الإعدادات مباشرة بدل أن يزحم شاشة العامل.
@@ -124,6 +128,7 @@ public class HomeActivity extends Activity {
         shell.addView(credit);
 
         setContentView(shell);
+        refreshBalances();
         new AppUpdater(this).check(false);
     }
 
@@ -156,9 +161,14 @@ public class HomeActivity extends Activity {
         supplierValue.setText((owed > 0.009 ? money(owed) : "0") + " ر.ي");
         supplierValue.setTextColor(owed > 0.009 ? Util.RED : Util.GREEN);
         supplierNote.setText(owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد");
+
+        // رأس المال: ما نملكه ناقص ما علينا للمورّد.
+        double capital = cash + debts + value - owed;
+        capitalValue.setText("رأس المال  " + money(capital) + " ر.ي");
     }
 
     private TextView cashValue, debtValue, debtNote, stockText, stockNote, supplierValue, supplierNote;
+    private TextView capitalValue;
 
     private String lastBrand = null;
     private void recreateIfBrandChanged() {
