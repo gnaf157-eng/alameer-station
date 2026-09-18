@@ -29,6 +29,8 @@ public final class Journal {
     public static final String EQUITY = "أرصدة افتتاحية";
     /** الطرف المقابل للحركات اليدوية التي لم يُحدَّد سببها بعد. */
     public static final String SUSPENSE = "حساب وسيط";
+    /** ما علينا لشركة النفط: حساب دائن يزيد بالشراء وينقص بالتوريد. */
+    public static final String SUPPLIER = "شركة النفط";
 
     /** طرف واحد من القيد. */
     public static final class Line {

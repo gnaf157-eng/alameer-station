@@ -106,9 +106,15 @@ public class HomeActivity extends Activity {
 
         LinearLayout row3 = new LinearLayout(this);
         row3.setGravity(Gravity.CENTER);
+        double owed = db.supplierBalance();
+        row3.addView(balanceTile("حساب شركة النفط",
+                (owed > 0.009 ? money(owed) : "0") + " ر.ي",
+                owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد",
+                owed > 0.009 ? Util.RED : Util.GREEN, 9,
+                v -> startActivity(new Intent(this, SupplierActivity.class))), cell());
+        supplierValue = lastAmount; supplierNote = lastNote;
         row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
                 v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
-        row3.addView(new View(this), cell()); // يبقي الأرشيف بنصف العرض
         shell.addView(row3, rowWeight(true));
 
 
@@ -145,9 +151,14 @@ public class HomeActivity extends Activity {
         double value = db.stockValueTotal();
         stockText.setText(money(litres) + " لتر");
         stockNote.setText(value > 0 ? money(value) + " ر.ي" : "وارد وصادر اللترات");
+
+        double owed = db.supplierBalance();
+        supplierValue.setText((owed > 0.009 ? money(owed) : "0") + " ر.ي");
+        supplierValue.setTextColor(owed > 0.009 ? Util.RED : Util.GREEN);
+        supplierNote.setText(owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد");
     }
 
-    private TextView cashValue, debtValue, debtNote, stockText, stockNote;
+    private TextView cashValue, debtValue, debtNote, stockText, stockNote, supplierValue, supplierNote;
 
     private String lastBrand = null;
     private void recreateIfBrandChanged() {

@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 15;
+    private static final int DB_VERSION = 16;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -31,6 +31,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(PERIOD_LOCKS_SQL);
         db.execSQL(DIP_SQL);
         db.execSQL(POSTED_SQL);
+        db.execSQL(SUPPLIER_SQL);
         seed(db);
     }
 
@@ -78,7 +79,18 @@ public class Db extends SQLiteOpenHelper {
     static final String POSTED_SQL="CREATE TABLE IF NOT EXISTS posted_shifts("+
         "shift_code TEXT PRIMARY KEY,shift_id INTEGER NOT NULL,posted_at TEXT NOT NULL)";
 
+    /** حساب شركة النفط: مشتريات المواد وما وُرِّد من الصناديق. */
+    static final String SUPPLIER_SQL="CREATE TABLE IF NOT EXISTS supplier_entries("+
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,material TEXT NOT NULL DEFAULT '',"+
+        "litres REAL NOT NULL DEFAULT 0,unit_cost REAL NOT NULL DEFAULT 0,amount REAL NOT NULL,"+
+        "box_id INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,"+
+        "created_at TEXT NOT NULL,material_entry INTEGER NOT NULL DEFAULT 0,"+
+        "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0)";
+
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<16){
+            try{db.execSQL(SUPPLIER_SQL);}catch(Exception ignored){}
+        }
         if(oldVersion<15){
             try{db.execSQL(POSTED_SQL);}catch(Exception ignored){}
             // تسجيل ما رُحّل فعلًا حتى لا يُعاد ترحيله بعد الترقية.
@@ -1508,6 +1520,127 @@ public class Db extends SQLiteOpenHelper {
     public void setStaleDays(int v){setSetting("threshold_stale_days",String.valueOf(v));}
     public int lowStockPercent(){try{return Integer.parseInt(setting("threshold_low_stock","25"));}catch(Exception e){return 25;}}
     public void setLowStockPercent(int v){setSetting("threshold_low_stock",String.valueOf(v));}
+
+    // ==================== حساب شركة النفط ====================
+
+    /** ما علينا لشركة النفط: المشتريات ناقص ما وُرِّد. */
+    public double supplierBalance(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "FROM supplier_entries WHERE voided=0",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    public double supplierBought(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(amount),0) FROM supplier_entries WHERE voided=0 AND kind='BUY'",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    public double supplierPaid(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(amount),0) FROM supplier_entries WHERE voided=0 AND kind='PAY'",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    /** 0=id,1=نوع,2=مادة,3=لترات,4=سعر اللتر,5=مبلغ,6=صندوق,7=بيان,8=تاريخ */
+    public Cursor supplierEntries(int limit){
+        return getReadableDatabase().rawQuery(
+            "SELECT e.id,e.kind,e.material,e.litres,e.unit_cost,e.amount,"+
+            "COALESCE((SELECT b.name FROM cashboxes b WHERE b.id=e.box_id),''),e.note,e.entry_date "+
+            "FROM supplier_entries e WHERE e.voided=0 "+
+            "ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),null);
+    }
+
+    /**
+     * شراء مواد من شركة النفط: تدخل المخزون كوارد، وقيمتها تصير دَينًا علينا.
+     * القيد: مخزون الوقود مدين، وشركة النفط دائنة.
+     */
+    public long buyFromSupplier(String material,double litres,double unitCost,String note,String date){
+        if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
+        if(!Double.isFinite(unitCost)||unitCost<=0)throw new IllegalArgumentException("اكتب سعر اللتر");
+        double amount=litres*unitCost;
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        long id;
+        try{
+            // الوارد يُسجَّل في حركة المواد بلا قيد مستقل، فالقيد هنا يشمله.
+            ContentValues m=new ContentValues();
+            m.put("material",material);m.put("direction","IN");m.put("litres",litres);
+            m.put("note","شراء من شركة النفط"+(note.trim().isEmpty()?"":" — "+note.trim()));
+            m.put("entry_date",date);m.put("created_at",Util.now());
+            long materialEntry=db.insertOrThrow("material_entries",null,m);
+
+            ContentValues v=new ContentValues();
+            v.put("kind","BUY");v.put("material",material);v.put("litres",litres);
+            v.put("unit_cost",unitCost);v.put("amount",amount);v.put("note",note.trim());
+            v.put("entry_date",date);v.put("created_at",Util.now());
+            v.put("material_entry",materialEntry);
+            id=db.insertOrThrow("supplier_entries",null,v);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        journalManual("supplier",id,date,
+                "شراء "+Calc.money(litres)+" لتر "+material+" من شركة النفط",amount,
+                Journal.INVENTORY,Journal.SUPPLIER);
+        audit("supplier",id,"BUY_FUEL","",Calc.money(litres)+" لتر "+material+" بـ "+Calc.money(amount),note);
+        return id;
+    }
+
+    /**
+     * توريد مبلغ لشركة النفط من أحد الصناديق.
+     * القيد: شركة النفط مدينة، والصندوق دائن.
+     */
+    public long paySupplier(long boxId,double amount,String note,String date){
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        if(boxId<=0)throw new IllegalArgumentException("اختر الصندوق");
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        long id;
+        try{
+            suppressJournal=true;
+            long cashEntry;
+            try{
+                cashEntry=addCashboxEntry(boxId,"OUT",amount,
+                        "توريد لشركة النفط"+(note.trim().isEmpty()?"":" — "+note.trim()),date);
+            }finally{suppressJournal=false;}
+
+            ContentValues v=new ContentValues();
+            v.put("kind","PAY");v.put("amount",amount);v.put("box_id",boxId);
+            v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
+            v.put("cashbox_entry",cashEntry);
+            id=db.insertOrThrow("supplier_entries",null,v);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        journalManual("supplier",id,date,"توريد لشركة النفط",amount,
+                Journal.SUPPLIER,Journal.CASH);
+        audit("supplier",id,"PAY_SUPPLIER","",Calc.money(amount)+" ر.ي",note);
+        return id;
+    }
+
+    /** يلغي حركة مورّد بعكس قيدها وإزالة أثرها، ويبقى السجل محفوظًا. */
+    public void voidSupplierEntry(long id){
+        String kind="";long materialEntry=0,cashEntry=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT kind,material_entry,cashbox_entry FROM supplier_entries WHERE id=? AND voided=0",
+                new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
+            kind=c.getString(0);materialEntry=c.getLong(1);cashEntry=c.getLong(2);
+        }
+        reverseManual("SUPPLIER",id);
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            if(materialEntry>0)db.delete("material_entries","id=?",new String[]{String.valueOf(materialEntry)});
+            if(cashEntry>0)db.delete("cashbox_entries","id=?",new String[]{String.valueOf(cashEntry)});
+            ContentValues v=new ContentValues();v.put("voided",1);
+            db.update("supplier_entries",v,"id=?",new String[]{String.valueOf(id)});
+            audit(db,"supplier",id,"VOID_SUPPLIER",kind,"مُلغاة","إلغاء حركة مورّد");
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
 
     // ==================== تكلفة اللتر ====================
 
