@@ -101,7 +101,7 @@ public class HomeActivity extends Activity {
                 stockValue > 0 ? money(stockValue) + " ر.ي" : "وارد وصادر اللترات",
                 Util.NAVY, 6,
                 v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
-        stockValue = lastAmount; stockNote = lastNote;
+        stockText = lastAmount; stockNote = lastNote;
         shell.addView(row2, rowWeight(true));
 
         LinearLayout row3 = new LinearLayout(this);
@@ -143,11 +143,11 @@ public class HomeActivity extends Activity {
         double litres = 0;
         for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
         double value = db.stockValueTotal();
-        stockValue.setText(money(litres) + " لتر");
+        stockText.setText(money(litres) + " لتر");
         stockNote.setText(value > 0 ? money(value) + " ر.ي" : "وارد وصادر اللترات");
     }
 
-    private TextView cashValue, debtValue, debtNote, stockValue, stockNote;
+    private TextView cashValue, debtValue, debtNote, stockText, stockNote;
 
     private String lastBrand = null;
     private void recreateIfBrandChanged() {
