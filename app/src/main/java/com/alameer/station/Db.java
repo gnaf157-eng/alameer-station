@@ -1048,6 +1048,21 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
+    /** كود الوردية الفريد، يُولَّد ويُثبَّت عند أول طلب. */
+    public String shiftCode(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(shift_code,''),COALESCE(NULLIF(shift_date,''),substr(opened_at,1,10)) "+
+                "FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){
+            if(!c.moveToFirst())return "";
+            if(!c.getString(0).isEmpty())return c.getString(0);
+            String code=Calc.shiftCode(deviceId(),c.getString(1),shiftId);
+            ContentValues v=new ContentValues();
+            v.put("shift_code",code);
+            getWritableDatabase().update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
+            return code;
+        }
+    }
+
     /** معرّف ثابت لهذا الجهاز، يميّز ورديات كل جهاز عن غيره. */
     public String deviceId(){
         String id=setting("device_id","");

@@ -18,7 +18,7 @@ public class ShiftActivity extends Activity {
         }
         // فتح وردية بعينها قادمًا من شاشة ورديات العامل.
         long requested=getIntent().getLongExtra("openShift",0);
-        if(requested>0){shiftId=requested;reviewing=getIntent().getBooleanExtra("reviewing",false);}
+        if(requested>0)shiftId=requested;
         build();
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
@@ -39,8 +39,6 @@ public class ShiftActivity extends Activity {
     LinearLayout navBar;
     int settingsReturnPage=0;
     boolean settingsOnly=false;
-    boolean reviewing=false;
-    Button postButton;
     TextView shiftCodeBadge,matchCodeBadge;
     ScrollView screenScroll;
     int page=0;
@@ -183,12 +181,6 @@ public class ShiftActivity extends Activity {
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
         Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
         Button close=action("إغلاق الوردية وبدء وردية جديدة",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
-        // المرحلة الأخيرة في رحلة الوردية: الترحيل إلى الدفاتر بعد مراجعة المدير.
-        postButton=action("ترحيل إلى الدفاتر  ✓",true);
-        postButton.setOnClickListener(v->postToBooks());
-        postButton.setVisibility(reviewing?View.VISIBLE:View.GONE);
-        pages[2].addView(postButton,space());
-        if(reviewing)close.setVisibility(View.GONE);
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
