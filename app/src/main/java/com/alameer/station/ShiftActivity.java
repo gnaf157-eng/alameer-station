@@ -960,6 +960,72 @@ public class ShiftActivity extends Activity {
      * نافذة إدخال تبقى مفتوحة: الاسم ← التالي ← المبلغ ← التالي فتُحفظ الحركة
      * ويعود المؤشر للاسم لتسجيل حركة أخرى، ولا تُغلق إلا بزر إلغاء.
      */
+    /** تعديل حركة مسجّلة: النوع والاسم والمبلغ. */
+    private void editMovement(final long movementId){
+        String type="COLLECTION",name="";double amount=0;
+        try(Cursor c=db.movement(movementId)){
+            if(!c.moveToFirst()){Toast.makeText(this,"الحركة غير موجودة",Toast.LENGTH_SHORT).show();return;}
+            type=c.getString(0);name=c.getString(1);amount=c.getDouble(2);
+        }
+        int start=0;
+        for(int i=0;i<movementTypes.length;i++)if(movementTypes[i].equals(type))start=i;
+        final int[] chosen={start};
+
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22),dp(6),dp(22),0);
+
+        box.addView(text("نوع الحركة",12,0xff7c8186,false));
+        final Spinner picker=new Spinner(this);
+        picker.setAdapter(new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_dropdown_item,movementLabels));
+        picker.setSelection(start);
+        picker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onItemSelected(AdapterView<?> p,View v,int pos,long id){chosen[0]=pos;}
+            public void onNothingSelected(AdapterView<?> p){}
+        });
+        box.addView(picker,space());
+
+        box.addView(text("الاسم أو البيان",12,0xff7c8186,false));
+        final AutoCompleteTextView nameInput=new AutoCompleteTextView(this);
+        styleInput(nameInput);
+        nameInput.setSingleLine(true);
+        nameInput.setThreshold(1);
+        nameInput.setText(name);
+        nameInput.setAdapter(new ArrayAdapter<String>(this,
+                android.R.layout.simple_dropdown_item_1line,rememberedNames(type)));
+        box.addView(nameInput,space());
+
+        box.addView(text("المبلغ • ر.ي",12,0xff7c8186,false));
+        final EditText amountInput=new EditText(this);
+        styleInput(amountInput);
+        amountInput.setSingleLine(true);
+        amountInput.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        amountInput.setTextDirection(View.TEXT_DIRECTION_LTR);
+        amountInput.setText(fmt(amount));
+        amountInput.setSelectAllOnFocus(true);
+        box.addView(amountInput,space());
+
+        ScrollView form=new ScrollView(this);form.addView(box);
+        new AlertDialog.Builder(this)
+            .setTitle("تعديل الحركة")
+            .setMessage("يُحفظ التعديل في سجل التدقيق بقيمته قبل وبعد.")
+            .setView(form)
+            .setPositiveButton("حفظ",(d,w)->{
+                try{
+                    db.updateMovement(movementId,movementTypes[chosen[0]],
+                            nameInput.getText().toString(),
+                            Calc.number(amountInput.getText().toString()));
+                    loadMovements();refreshTotals();
+                    Toast.makeText(this,"عُدّلت الحركة",Toast.LENGTH_SHORT).show();
+                }catch(Exception e){
+                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("إلغاء",null)
+            .show();
+    }
+
     private void quickEntry(final int index){
         final String type=movementTypes[index];
         final String label=movementLabels[index];
@@ -1103,6 +1169,11 @@ public class ShiftActivity extends Activity {
             final long movementId=c.getLong(0);final String movementLabel=c.getString(2);
             boolean locked=!"OPEN".equals(db.shiftStatus(shiftId));
             if(!locked){
+                // الضغط على السطر يفتح التعديل، والعلامة تحذف.
+                row.setBackground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(0x14000000),null,null));
+                row.setClickable(true);
+                row.setOnClickListener(v->editMovement(movementId));
                 TextView remove=text("✕",18,Util.RED,true);remove.setPadding(dp(14),dp(4),dp(6),dp(4));
                 remove.setContentDescription("حذف الحركة");
                 remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(d,w)->{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}).setNegativeButton("إلغاء",null).show());
@@ -1111,6 +1182,8 @@ public class ShiftActivity extends Activity {
             movementsBox.addView(row);View line=new View(this);line.setBackgroundColor(0xffeceef0);movementsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
         }}
         if(count==0)movementsBox.addView(text("لا توجد حركات في هذه القائمة",15,0xff777d84,false));
+        else if("OPEN".equals(db.shiftStatus(shiftId)))
+            movementsBox.addView(text("اضغط على أي حركة لتعديلها",12,0xff8b9097,false));
     }
     private Double visibleCurrent(Cursor c){
         String key=draftKey(c.getLong(0),"current");

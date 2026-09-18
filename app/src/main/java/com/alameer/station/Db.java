@@ -319,6 +319,44 @@ public class Db extends SQLiteOpenHelper {
     }
     public String validateShift(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*),SUM(CASE WHEN r.current IS NULL THEN 1 ELSE 0 END),SUM(CASE WHEN r.price<=0 THEN 1 ELSE 0 END),SUM(CASE WHEN r.current<r.previous THEN 1 ELSE 0 END) FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP,new String[]{String.valueOf(shiftId)})){if(!c.moveToFirst()||c.getInt(0)==0)return "لا توجد طرمبات مسندة لهذا العامل";if(c.getInt(1)>0)return "أدخل القراءة الحالية لجميع الطرمبات";if(c.getInt(2)>0)return "سعر الوقود غير مضبوط. اطلب من المدير إدخال الأسعار";if(c.getInt(3)>0)return "إحدى القراءات الحالية أقل من القراءة السابقة";}return "";}
     public void addMovement(long shiftId,String type,String name,double amount){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("type",type);v.put("name",name.trim());v.put("amount",amount);v.put("created_at",Util.now());db.insertOrThrow("movements",null,v);ContentValues n=new ContentValues();n.put("type",type);n.put("name",name.trim());db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);}
+    /** بيانات حركة واحدة: 0=type,1=name,2=amount. */
+    public Cursor movement(long movementId){
+        return getReadableDatabase().rawQuery(
+            "SELECT type,name,amount FROM movements WHERE id=?",
+            new String[]{String.valueOf(movementId)});
+    }
+
+    /**
+     * يعدّل حركة مسجّلة في وردية مفتوحة.
+     * يُسجَّل التعديل في سجل التدقيق بقيمته قبل وبعد.
+     */
+    public void updateMovement(long movementId,String type,String name,double amount){
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        String clean=name==null?"":name.trim();
+        if(clean.isEmpty())throw new IllegalArgumentException("اكتب الاسم");
+        String before="";long shiftId=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT shift_id,type,name,amount FROM movements WHERE id=?",
+                new String[]{String.valueOf(movementId)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
+            shiftId=c.getLong(0);
+            before=Calc.arabicType(c.getString(1))+" — "+c.getString(2)+" — "+Calc.money(c.getDouble(3));
+        }
+        // الوردية المُغلقة لا تُعدَّل حركاتها؛ تُفتح أولًا.
+        if(!"OPEN".equals(shiftStatus(shiftId))&&!"RETURNED".equals(shiftStatus(shiftId)))
+            throw new IllegalStateException("الوردية مُغلقة. افتحها للتعديل أولًا.");
+
+        SQLiteDatabase db=getWritableDatabase();
+        ContentValues v=new ContentValues();
+        v.put("type",type);v.put("name",clean);v.put("amount",amount);
+        db.update("movements",v,"id=?",new String[]{String.valueOf(movementId)});
+        ContentValues n=new ContentValues();
+        n.put("type",type);n.put("name",clean);
+        db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);
+        audit("movement",movementId,"EDIT_MOVEMENT",before,
+                Calc.arabicType(type)+" — "+clean+" — "+Calc.money(amount),"تعديل حركة وردية");
+    }
+
     public Cursor movements(long shiftId){return getReadableDatabase().rawQuery("SELECT id,type,name,amount FROM movements WHERE shift_id=? ORDER BY id ASC",new String[]{String.valueOf(shiftId)});}
     public double total(long shiftId,String type){try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(amount),0) FROM movements WHERE shift_id=? AND type=?",new String[]{String.valueOf(shiftId),type})){c.moveToFirst();return c.getDouble(0);}}
     /** Clearing a field removes its prior contribution only when the worker saves it. */
