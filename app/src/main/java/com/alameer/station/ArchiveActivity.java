@@ -122,18 +122,46 @@ public class ArchiveActivity extends Activity {
         listBox.addView(sum, sp);
     }
 
-    /** يعرض صيغ التقرير المتاحة للوردية المؤرشفة. */
+    /**
+     * يعرض صيغ التقرير المتاحة للوردية المؤرشفة.
+     * الخيارات أزرار داخل العرض، لأن setItems مع setMessage لا يجتمعان.
+     */
     private void openReport(final long id) {
-        new AlertDialog.Builder(this).setTitle("تقرير الوردية " + db.shiftCode(id))
-                .setMessage("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.")
-                .setItems(new String[]{"فتح PDF", "مشاركة PDF",
-                        "مشاركة Excel", "حفظ Excel في التنزيلات"}, (d, which) -> {
-                    if (which == 0) share(id, true, false);
-                    else if (which == 1) share(id, false, false);
-                    else if (which == 2) share(id, false, true);
-                    else saveToDownloads(id);
-                })
-                .setNegativeButton("إلغاء", null).show();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(6), dp(20), dp(6));
+        box.addView(text("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.",
+                13, 0xff7c8186, false));
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("تقرير الوردية " + db.shiftCode(id))
+                .setView(box)
+                .setNegativeButton("إلغاء", null)
+                .create();
+
+        String[] labels = {"فتح PDF", "مشاركة PDF", "مشاركة Excel", "حفظ Excel في التنزيلات"};
+        for (int i = 0; i < labels.length; i++) {
+            final int which = i;
+            Button b = new Button(this);
+            b.setText(labels[i]);
+            b.setAllCaps(false);
+            b.setTextSize(16);
+            b.setTextColor(which == 3 ? Color.WHITE : Util.NAVY);
+            b.setStateListAnimator(null);
+            b.setBackground(Util.round(which == 3 ? Util.ACCENT : Util.ACCENT_SOFT, dp(12)));
+            b.setPadding(dp(12), dp(12), dp(12), dp(12));
+            b.setOnClickListener(v -> {
+                dialog.dismiss();
+                if (which == 0) share(id, true, false);
+                else if (which == 1) share(id, false, false);
+                else if (which == 2) share(id, false, true);
+                else saveToDownloads(id);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, dp(8), 0, 0);
+            box.addView(b, lp);
+        }
+        dialog.show();
     }
 
     /**
