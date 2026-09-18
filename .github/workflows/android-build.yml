@@ -77,8 +77,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           SYNC_URL: ${{ secrets.SYNC_URL }}
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
-          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
         run: |
+          # التطبيق يقرأ التحديث من المستودع العام للنسخ إن ضُبط.
+          if [ -n "${{ secrets.UPDATE_MANIFEST_URL }}" ]; then
+            export UPDATE_MANIFEST_URL="${{ secrets.UPDATE_MANIFEST_URL }}"
+          elif [ -n "$RELEASES_REPO" ]; then
+            export UPDATE_MANIFEST_URL="https://github.com/$RELEASES_REPO/releases/latest/download/update-manifest.json"
+          fi
+          echo "Update URL: ${UPDATE_MANIFEST_URL:-<default>}"
           ./gradlew --no-daemon :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk \
              "Tabiq-v${{ steps.version.outputs.name }}.apk"
@@ -94,7 +101,9 @@ jobs:
           FILE="Tabiq-v${{ steps.version.outputs.name }}.apk"
           SIZE=$(stat -c%s "$FILE")
           HASH=$(sha256sum "$FILE" | cut -d" " -f1)
-          BASE="https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.name }}"
+          HOST_REPO="${{ vars.RELEASES_REPO }}"
+          if [ -z "$HOST_REPO" ]; then HOST_REPO="${{ github.repository }}"; fi
+          BASE="https://github.com/$HOST_REPO/releases/download/v${{ steps.version.outputs.name }}"
           cat > update-manifest.json <<JSON
           {
             "versionCode": ${{ steps.version.outputs.code }},
@@ -112,15 +121,31 @@ jobs:
         if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
         run: |
           TAG="v${{ steps.version.outputs.name }}"
+          APK="Tabiq-v${{ steps.version.outputs.name }}.apk"
+
+          # النشر في المستودع العام للنسخ إن ضُبط، حتى يعمل التحديث التلقائي
+          # مع بقاء الشيفرة ومفتاح التوقيع في مستودع خاص.
+          if [ -n "$RELEASES_REPO" ] && [ -n "$RELEASES_TOKEN" ]; then
+            echo "Publishing to public releases repo: $RELEASES_REPO"
+            GH_TOKEN="$RELEASES_TOKEN" gh release delete "$TAG" --repo "$RELEASES_REPO" --yes --cleanup-tag 2>/dev/null || true
+            GH_TOKEN="$RELEASES_TOKEN" gh release create "$TAG" \
+              --repo "$RELEASES_REPO" \
+              --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
+              --notes "نسخة موقّعة تُثبَّت فوق السابقة دون فقدان البيانات." \
+              "$APK" update-manifest.json
+          fi
+
+          # نسخة في المستودع نفسه للأرشفة الداخلية.
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" \
             --target "${{ github.sha }}" \
             --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
             --notes "نسخة موقّعة تُثبَّت فوق السابقة دون فقدان البيانات." \
-            "Tabiq-v${{ steps.version.outputs.name }}.apk" \
-            update-manifest.json
+            "$APK" update-manifest.json
 
       - name: Clean up keystore
         if: always()
