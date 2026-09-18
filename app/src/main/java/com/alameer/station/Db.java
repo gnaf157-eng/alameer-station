@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 14;
+    private static final int DB_VERSION = 15;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -30,6 +30,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(LEDGER_AUDIT_SQL);
         db.execSQL(PERIOD_LOCKS_SQL);
         db.execSQL(DIP_SQL);
+        db.execSQL(POSTED_SQL);
         seed(db);
     }
 
@@ -73,7 +74,22 @@ public class Db extends SQLiteOpenHelper {
         "material TEXT NOT NULL,measured REAL NOT NULL,book REAL NOT NULL,gap REAL NOT NULL,"+
         "entry_date TEXT NOT NULL,created_at TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',actor TEXT NOT NULL DEFAULT '')";
 
+    /** سجل الترحيل: كود الوردية مفتاح فريد، فلا تُرحّل وردية مرتين أبدًا. */
+    static final String POSTED_SQL="CREATE TABLE IF NOT EXISTS posted_shifts("+
+        "shift_code TEXT PRIMARY KEY,shift_id INTEGER NOT NULL,posted_at TEXT NOT NULL)";
+
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<15){
+            try{db.execSQL(POSTED_SQL);}catch(Exception ignored){}
+            // تسجيل ما رُحّل فعلًا حتى لا يُعاد ترحيله بعد الترقية.
+            try{db.execSQL("INSERT OR IGNORE INTO posted_shifts(shift_code,shift_id,posted_at) "+
+                "SELECT s.shift_code,s.id,COALESCE(s.closed_at,s.opened_at) FROM shifts s "+
+                "WHERE s.shift_code<>'' AND ("+
+                "EXISTS(SELECT 1 FROM cashbox_entries e WHERE e.source_shift=s.id) OR "+
+                "EXISTS(SELECT 1 FROM debt_entries e WHERE e.source_shift=s.id) OR "+
+                "EXISTS(SELECT 1 FROM expense_entries e WHERE e.source_shift=s.id) OR "+
+                "EXISTS(SELECT 1 FROM material_entries e WHERE e.source_shift=s.id))");}catch(Exception ignored){}
+        }
         if(oldVersion<14){
             try{db.execSQL("ALTER TABLE material_entries ADD COLUMN source_shift INTEGER NOT NULL DEFAULT 0");}catch(Exception ignored){}
             // ربط الحركات القديمة بورديّاتها المستخرجة من البيان.
@@ -536,6 +552,11 @@ public class Db extends SQLiteOpenHelper {
     public void setDefaultCashbox(long id){setSetting("default_cashbox",String.valueOf(id));}
     public boolean shiftPosted(long shiftId){
         String id=String.valueOf(shiftId);
+        // سجل الترحيل هو المرجع الأول.
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM posted_shifts WHERE shift_id=?",
+                new String[]{id})){
+            if(c.moveToFirst())return true;
+        }
         // لا بدّ من فحص المخزون أيضًا: وردية بمبيعات بلا نقد ولا دين ولا مخاريج
         // كانت تُعدّ «غير مرحّلة» فتُخصم لتراتها مرة بعد مرة.
         try(Cursor c=getReadableDatabase().rawQuery(
@@ -581,6 +602,8 @@ public class Db extends SQLiteOpenHelper {
     /** يلغي ترحيل وردية (عند حذفها أو إعادة ترحيلها). */
     public void unpostShift(long shiftId){
         SQLiteDatabase db=getWritableDatabase();
+        // يُحرَّر حجز الكود ليجوز إعادة الترحيل بعد المراجعة.
+        db.delete("posted_shifts","shift_id=?",new String[]{String.valueOf(shiftId)});
         db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
         db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
@@ -595,11 +618,22 @@ public class Db extends SQLiteOpenHelper {
      */
     public String postShift(long shiftId,long cashboxId){
         if(shiftPosted(shiftId))return "";
+        // كود الوردية هو الحارس: يُحجز داخل المعاملة نفسها، فإن كان محجوزًا
+        // فالوردية مُرحّلة سلفًا ويُلغى كل شيء. لا اعتماد على عدّ السجلات.
+        final String code=shiftCode(shiftId);
         SQLiteDatabase db=getWritableDatabase();
         String date=shiftDate(shiftId);
         StringBuilder log=new StringBuilder();
         db.beginTransaction();
         try{
+            if(!code.isEmpty()){
+                ContentValues claim=new ContentValues();
+                claim.put("shift_code",code);
+                claim.put("shift_id",shiftId);
+                claim.put("posted_at",Util.now());
+                long row=db.insertWithOnConflict("posted_shifts",null,claim,SQLiteDatabase.CONFLICT_IGNORE);
+                if(row==-1)return ""; // محجوز: رُحّلت من قبل
+            }
             double cash=total(shiftId,"CASH");
             if(cashboxId>0&&cash>0){
                 addCashboxEntry(cashboxId,"IN",cash,"نقد مسلّم من وردية #"+shiftId,date,shiftId);
