@@ -27,6 +27,8 @@ public final class Journal {
     public static final String WORKER = "عهدة العامل";
     public static final String INVENTORY = "مخزون الوقود";
     public static final String EQUITY = "أرصدة افتتاحية";
+    /** الطرف المقابل للحركات اليدوية التي لم يُحدَّد سببها بعد. */
+    public static final String SUSPENSE = "حساب وسيط";
 
     /** طرف واحد من القيد. */
     public static final class Line {
@@ -140,6 +142,18 @@ public final class Journal {
         // الباقي مع العامل عهدة عليه؛ والسالب يعني زيادة يردّها الصندوق.
         if (balance > EPS) e.debit(WORKER, balance, "");
         else if (balance < -EPS) e.credit(WORKER, -balance, "");
+        return e;
+    }
+
+    /**
+     * قيد حركة يدوية بطرفين: حساب وطرف مقابل.
+     * يُستعمل لحركات الصناديق والديون والمخاريج المسجّلة خارج الورديات.
+     */
+    public static Entry simple(String memo, String date, String source, long sourceId,
+                               String debitAccount, String creditAccount, double amount, String party) {
+        Entry e = new Entry(memo, date, source, sourceId);
+        e.debit(debitAccount, amount, party);
+        e.credit(creditAccount, amount, party);
         return e;
     }
 

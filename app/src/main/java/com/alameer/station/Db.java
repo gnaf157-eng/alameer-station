@@ -477,9 +477,15 @@ public class Db extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();
         v.put("box_id",boxId);v.put("direction",direction);v.put("amount",amount);
         v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
-        return getWritableDatabase().insertOrThrow("cashbox_entries",null,v);
+        long id=getWritableDatabase().insertOrThrow("cashbox_entries",null,v);
+        // الحركة اليدوية تُقيَّد مزدوجة فورًا؛ حركات الورديات تُقيَّد مع قيد الوردية.
+        if(sourceShift==0)journalManual("cashbox",id,date,note.trim(),amount,
+                "IN".equals(direction)?Journal.CASH:Journal.SUSPENSE,
+                "IN".equals(direction)?Journal.SUSPENSE:Journal.CASH);
+        return id;
     }
     public boolean deleteCashboxEntry(long id){
+        reverseManual("CASHBOX",id);
         return getWritableDatabase().delete("cashbox_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** id,direction,amount,note,entry_date,box_name */
@@ -528,14 +534,23 @@ public class Db extends SQLiteOpenHelper {
             v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);v.put("box_id",boxId);
             id=db.insertOrThrow("expense_entries",null,v);
             // المصروف المدفوع من صندوق يخرج منه فعليًا.
-            if(boxId>0)addCashboxEntry(boxId,"OUT",amount,"مخاريج: "+clean+(note.trim().isEmpty()?"":" — "+note.trim()),date,sourceShift);
+            if(boxId>0){
+                suppressJournal=true;
+                try{
+                    addCashboxEntry(boxId,"OUT",amount,"مخاريج: "+clean+(note.trim().isEmpty()?"":" — "+note.trim()),date,sourceShift);
+                }finally{suppressJournal=false;}
+            }
             ContentValues n=new ContentValues();n.put("type","EXPENSE");n.put("name",clean);
             db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
+        // المخاريج مدينة، والدائن هو الصندوق إن دُفعت منه وإلا حساب وسيط.
+        if(sourceShift==0)journalManual("expense",id,date,"مخاريج: "+clean,amount,
+                Journal.EXPENSE,boxId>0?Journal.CASH:Journal.SUSPENSE);
         return id;
     }
     public boolean deleteExpense(long id){
+        reverseManual("EXPENSE",id);
         return getWritableDatabase().delete("expense_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** category,total,count — أبواب المصروف مرتّبة بالأكبر. */
@@ -1228,9 +1243,104 @@ public class Db extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();
         v.put("debtor_id",debtorId);v.put("direction",direction);v.put("amount",amount);
         v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
-        return getWritableDatabase().insertOrThrow("debt_entries",null,v);
+        long id=getWritableDatabase().insertOrThrow("debt_entries",null,v);
+        if(sourceShift==0){
+            String who=debtorName(debtorId);
+            // الدين يزيد ذمة المدين، والسداد ينقصها.
+            journalManual("debt",id,date,("DEBT".equals(direction)?"دين على ":"سداد من ")+who,amount,
+                    "DEBT".equals(direction)?Journal.RECEIVABLE:Journal.SUSPENSE,
+                    "DEBT".equals(direction)?Journal.SUSPENSE:Journal.RECEIVABLE);
+        }
+        return id;
+    }
+
+    /** اسم المدين، أو نص فارغ. */
+    public String debtorName(long debtorId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT name FROM debtors WHERE id=?",
+                new String[]{String.valueOf(debtorId)})){
+            return c.moveToFirst()?c.getString(0):"";
+        }
+    }
+
+    /**
+     * يقيّد حركة يدوية في الدفتر المزدوج.
+     * الطرف المقابل «حساب وسيط» حتى يُحدَّد سببه، فيبقى الدفتر متوازنًا دائمًا.
+     */
+    /**
+     * يقيّد الحركات اليدوية القديمة التي سُجّلت قبل تفعيل القيد المزدوج.
+     * يعيد عدد ما قُيّد.
+     */
+    public int journalManualBacklog(){
+        int done=0;
+        // الصناديق
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT e.id,e.direction,e.amount,e.note,e.entry_date FROM cashbox_entries e "+
+                "WHERE e.source_shift=0 AND NOT EXISTS("+
+                "SELECT 1 FROM journal j WHERE j.source='CASHBOX' AND j.source_id=e.id) ORDER BY e.id",null)){
+            while(c.moveToNext()){
+                boolean in="IN".equals(c.getString(1));
+                journalManual("cashbox",c.getLong(0),c.getString(4),c.getString(3),c.getDouble(2),
+                        in?Journal.CASH:Journal.SUSPENSE,in?Journal.SUSPENSE:Journal.CASH);
+                done++;
+            }
+        }
+        // الديون
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT e.id,e.direction,e.amount,e.entry_date,d.name FROM debt_entries e "+
+                "JOIN debtors d ON d.id=e.debtor_id WHERE e.source_shift=0 AND NOT EXISTS("+
+                "SELECT 1 FROM journal j WHERE j.source='DEBT' AND j.source_id=e.id) ORDER BY e.id",null)){
+            while(c.moveToNext()){
+                boolean debt="DEBT".equals(c.getString(1));
+                journalManual("debt",c.getLong(0),c.getString(3),
+                        (debt?"دين على ":"سداد من ")+c.getString(4),c.getDouble(2),
+                        debt?Journal.RECEIVABLE:Journal.SUSPENSE,
+                        debt?Journal.SUSPENSE:Journal.RECEIVABLE);
+                done++;
+            }
+        }
+        // المخاريج
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT e.id,e.category,e.amount,e.entry_date,e.box_id FROM expense_entries e "+
+                "WHERE e.source_shift=0 AND NOT EXISTS("+
+                "SELECT 1 FROM journal j WHERE j.source='EXPENSE' AND j.source_id=e.id) ORDER BY e.id",null)){
+            while(c.moveToNext()){
+                journalManual("expense",c.getLong(0),c.getString(3),"مخاريج: "+c.getString(1),c.getDouble(2),
+                        Journal.EXPENSE,c.getLong(4)>0?Journal.CASH:Journal.SUSPENSE);
+                done++;
+            }
+        }
+        return done;
+    }
+
+    /** يعكس قيد حركة يدوية عند حذفها، فلا يبقى أثر بلا مقابل. */
+    void reverseManual(String source,long id){
+        try{
+            java.util.List<Long> entries=new java.util.ArrayList<>();
+            try(Cursor c=getReadableDatabase().rawQuery(
+                    "SELECT id FROM journal WHERE source=? AND source_id=? AND reversed_by=0",
+                    new String[]{source,String.valueOf(id)})){
+                while(c.moveToNext())entries.add(c.getLong(0));
+            }
+            for(long entry:entries)reverseEntry(entry,"حذف الحركة");
+        }catch(Exception ignored){}
+    }
+
+    private boolean suppressJournal=false;
+
+    void journalManual(String source,long id,String date,String memo,double amount,
+                       String debitAccount,String creditAccount){
+        try{
+            if(suppressJournal)return;
+            if(!(amount>0))return;
+            String when=date==null||date.trim().isEmpty()?ShiftDates.today():date.trim();
+            if(periodLocked(when))return;
+            String label=memo==null||memo.trim().isEmpty()?source:memo.trim();
+            postEntry(Journal.simple(label,when,source.toUpperCase(java.util.Locale.US),id,
+                    debitAccount,creditAccount,amount,label));
+        }catch(Exception ignored){}
     }
     public boolean deleteDebtEntry(long id){
+        reverseManual("DEBT",id);
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** حدود التنبيه القابلة للضبط من الإعدادات. */

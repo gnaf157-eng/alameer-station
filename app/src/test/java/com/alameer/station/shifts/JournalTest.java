@@ -74,6 +74,26 @@ public class JournalTest {
         assertEquals("تاريخ القيد مطلوب", Journal.rejectReason(e));
     }
 
+    @Test public void manualEntryBalancesBothSides() {
+        // وارد صندوق 25000: الصندوق مدين والطرف المقابل دائن.
+        Journal.Entry e = Journal.simple("وارد صالح مضفر", "2026-09-18", "CASHBOX", 5,
+                Journal.CASH, Journal.SUSPENSE, 25000, "صالح مضفر");
+        assertTrue(Journal.valid(e));
+        assertEquals(25000, e.totalDebit(), 0.001);
+        assertEquals(25000, e.totalCredit(), 0.001);
+        assertEquals(2, e.lines.size());
+        assertTrue(e.lines.get(0).debit());
+        assertEquals(Journal.CASH, e.lines.get(0).account);
+        assertFalse(e.lines.get(1).debit());
+    }
+
+    @Test public void manualExpensePaidFromCashHasNoSuspense() {
+        Journal.Entry e = Journal.simple("مخاريج: زيت", "2026-09-18", "EXPENSE", 9,
+                Journal.EXPENSE, Journal.CASH, 4000, "زيت");
+        assertTrue(Journal.valid(e));
+        for (Journal.Line l : e.lines) assertNotEquals(Journal.SUSPENSE, l.account);
+    }
+
     @Test public void centsTolerated() {
         assertTrue(Journal.balanced(0.004));
         assertFalse(Journal.balanced(0.02));

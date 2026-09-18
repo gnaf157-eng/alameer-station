@@ -62,6 +62,8 @@ public class ControlPanelActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (isFinishing() || content == null) return;
+        // كل حركة يدوية تدخل الدفتر، فيعبّر التوازن عن كل الأموال لا الورديات وحدها.
+        try { db.journalManualBacklog(); } catch (Exception ignored) { }
         LOW_CASH = db.lowCash();
         STALE_DAYS = db.staleDays();
         LOW_STOCK = db.lowStockPercent();
@@ -341,6 +343,11 @@ public class ControlPanelActivity extends Activity {
     /** ينفّذ الترحيل، ثم يعيد إقفال الفترة إن كانت مقفلة قبله ونجح الترحيل كاملًا. */
     private void doBacklog(String relock) {
         String report;
+        // الحركات اليدوية القديمة تدخل الدفتر أيضًا.
+        try {
+            int manual = db.journalManualBacklog();
+            if (manual > 0) Toast.makeText(this, "قُيّدت " + manual + " حركة يدوية", Toast.LENGTH_SHORT).show();
+        } catch (Exception ignored) { }
         try { report = db.journalBacklog(); }
         catch (Exception e) { report = "تعذّر الترحيل: " + e.getMessage(); }
 
