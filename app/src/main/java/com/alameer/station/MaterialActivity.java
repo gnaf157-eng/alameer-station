@@ -39,6 +39,19 @@ public class MaterialActivity extends Activity {
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         totalText = text("", 17, 0xffCFE2FA, true);
         header.addView(totalText);
+
+        // ترس الضبط: أسعار اللتر وسعات الخزانات.
+        ImageButton gear = new ImageButton(this);
+        gear.setContentDescription("ضبط المواد");
+        gear.setPadding(dp(10), dp(10), dp(10), dp(10));
+        gear.setImageDrawable(new GearIcon());
+        gear.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(0x22FFFFFF, dp(21)), Util.round(Color.WHITE, dp(21))));
+        gear.setOnClickListener(v -> settingsDialog());
+        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        gp.setMargins(dp(10), 0, 0, 0);
+        header.addView(gear, gp);
         shell.addView(header);
 
         LinearLayout content = new LinearLayout(this);
@@ -67,6 +80,112 @@ public class MaterialActivity extends Activity {
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(shell);
         refresh();
+    }
+
+    /** ضبط المواد: سعر اللتر وسعة الخزان لكل مادة. */
+    private void settingsDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(10), dp(20), 0);
+
+        for (final String material : Db.MATERIALS) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(9), 0, dp(9));
+
+            LinearLayout words = new LinearLayout(this);
+            words.setOrientation(LinearLayout.VERTICAL);
+            words.addView(text(material, 17, Util.NAVY, true));
+            double price = db.priceFor(material);
+            words.addView(text((price > 0 ? money(price) + " ريال/لتر" : "السعر غير مضبوط")
+                    + "  •  السعة " + money(db.capacity(material)) + " لتر",
+                    12, price > 0 ? 0xff7c8186 : Util.RED, false));
+            row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+
+            Button priceBtn = action("السعر", false);
+            priceBtn.setTextSize(13);
+            priceBtn.setOnClickListener(v -> numberDialog("سعر لتر " + material,
+                    db.priceFor(material), value -> {
+                        db.setFuelPrice(material, value);
+                        refresh();
+                    }));
+            row.addView(priceBtn);
+
+            Button capBtn = action("السعة", false);
+            capBtn.setTextSize(13);
+            capBtn.setOnClickListener(v -> numberDialog("سعة خزان " + material,
+                    db.capacity(material), value -> {
+                        db.setCapacity(material, value);
+                        refresh();
+                    }));
+            row.addView(capBtn);
+            box.addView(row);
+
+            View line = new View(this);
+            line.setBackgroundColor(0xffeceef0);
+            box.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+        }
+
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
+        new AlertDialog.Builder(this).setTitle("ضبط المواد")
+                .setMessage("سعر اللتر يُطبَّق على كل طرمبات المادة، والسعة تُستعمل في نسبة الامتلاء.")
+                .setView(form)
+                .setPositiveButton("تم", null)
+                .show();
+    }
+
+    private interface ValueSink { void accept(double value); }
+
+    private void numberDialog(String title, double current, final ValueSink sink) {
+        final EditText input = new EditText(this);
+        styleInput(input);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setText(current > 0 ? fmt(current) : "");
+        input.setSelectAllOnFocus(true);
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(8), dp(24), 0);
+        wrap.addView(input);
+        new AlertDialog.Builder(this).setTitle(title).setView(wrap)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    double value = Calc.number(input.getText().toString());
+                    if (!(value > 0)) {
+                        Toast.makeText(this, "اكتب قيمة أكبر من صفر", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    sink.accept(value);
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    private String fmt(double n) {
+        return n == Math.rint(n) ? String.format(Locale.US, "%.0f", n) : String.format(Locale.US, "%.2f", n);
+    }
+
+    /** ترس مرسوم بلا ملف صورة. */
+    private class GearIcon extends android.graphics.drawable.Drawable {
+        final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        public void draw(android.graphics.Canvas c) {
+            c.save();
+            c.translate(getBounds().left, getBounds().top);
+            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+            ink.setColor(Color.WHITE);
+            ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setStrokeWidth(2.3f);
+            ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            c.drawCircle(12, 12, 7, ink);
+            c.drawCircle(12, 12, 2.8f, ink);
+            for (int i = 0; i < 8; i++) {
+                double a = Math.PI * i / 4;
+                c.drawLine((float) (12 + Math.cos(a) * 7), (float) (12 + Math.sin(a) * 7),
+                        (float) (12 + Math.cos(a) * 10), (float) (12 + Math.sin(a) * 10), ink);
+            }
+            c.restore();
+        }
+        public void setAlpha(int a) {}
+        public void setColorFilter(android.graphics.ColorFilter f) {}
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     private void refresh() {
