@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 16;
+    private static final int DB_VERSION = 17;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -55,7 +55,7 @@ public class Db extends SQLiteOpenHelper {
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
     static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
-    static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
+    static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '',telegram TEXT NOT NULL DEFAULT '')";
     static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0)";
     /** دفتر القيود: رأس القيد وأطرافه، وسجل التدقيق، وإقفال الفترات. */
@@ -88,6 +88,9 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<17){
+            try{db.execSQL("ALTER TABLE debtors ADD COLUMN telegram TEXT NOT NULL DEFAULT ''");}catch(Exception ignored){}
+        }
         if(oldVersion<16){
             try{db.execSQL(SUPPLIER_SQL);}catch(Exception ignored){}
         }
@@ -1439,6 +1442,38 @@ public class Db extends SQLiteOpenHelper {
         return getWritableDatabase().delete("debtors","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** id,name,phone,opening,active,debt,paid,balance */
+    // ==================== إشعار تلغرام ====================
+
+    public String telegramToken(){ return setting("telegram_token",""); }
+    public void setTelegramToken(String token){
+        setSetting("telegram_token",token==null?"":token.trim());
+        audit("device",0,"SET_TELEGRAM","","رمز البوت مضبوط","إشعارات العملاء");
+    }
+    public boolean telegramOn(){ return "1".equals(setting("telegram_on","1")); }
+    public void setTelegramOn(boolean on){ setSetting("telegram_on",on?"1":"0"); }
+
+    /** معرّف محادثة العميل، أو نص فارغ. */
+    public String debtorTelegram(long debtorId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(telegram,'') FROM debtors WHERE id=?",
+                new String[]{String.valueOf(debtorId)})){
+            return c.moveToFirst()?c.getString(0):"";
+        }
+    }
+    public void setDebtorTelegram(long debtorId,String chatId){
+        ContentValues v=new ContentValues();
+        v.put("telegram",chatId==null?"":chatId.trim());
+        getWritableDatabase().update("debtors",v,"id=?",new String[]{String.valueOf(debtorId)});
+        audit("debtor",debtorId,"SET_TELEGRAM","",chatId==null?"":chatId.trim(),"ربط تلغرام العميل");
+    }
+
+    /** عدد العملاء المربوطين بتلغرام. */
+    public int telegramLinkedCount(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM debtors WHERE TRIM(COALESCE(telegram,''))<>''",null)){
+            return c.moveToFirst()?c.getInt(0):0;
+        }
+    }
+
     public Cursor debtors(boolean onlyActive){
         return getReadableDatabase().rawQuery(
             "SELECT d.id,d.name,d.phone,d.opening,d.active,"+
@@ -1479,6 +1514,7 @@ public class Db extends SQLiteOpenHelper {
         v.put("debtor_id",debtorId);v.put("direction",direction);v.put("amount",amount);
         v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
         long id=getWritableDatabase().insertOrThrow("debt_entries",null,v);
+        notifyDebtor(debtorId,"DEBT".equals(direction),amount,note,date);
         if(sourceShift==0){
             String who=debtorName(debtorId);
             // الدين يزيد ذمة المدين، والسداد ينقصها.
@@ -1487,6 +1523,28 @@ public class Db extends SQLiteOpenHelper {
                     "DEBT".equals(direction)?Journal.SUSPENSE:Journal.RECEIVABLE);
         }
         return id;
+    }
+
+    /**
+     * يرسل إشعار تلغرام للعميل بعد تسجيل الحركة.
+     * الإرسال في خيط منفصل، وأي فشل لا يمسّ الحركة المحفوظة.
+     */
+    void notifyDebtor(final long debtorId,final boolean debt,final double amount,
+                      final String note,final String date){
+        try{
+            if(!telegramOn())return;
+            final String token=telegramToken();
+            final String chat=debtorTelegram(debtorId);
+            if(token.isEmpty()||chat.trim().isEmpty())return;
+            final String name=debtorName(debtorId);
+            final double balance=debtorBalance(debtorId);
+            final String station=Branding.stationName(this);
+            final String when=date==null||date.trim().isEmpty()?ShiftDates.today():date;
+            new Thread(()->{
+                Telegram.send(token,chat,
+                        Telegram.message(station,name,debt,amount,balance,note,when));
+            },"telegram").start();
+        }catch(Exception ignored){}
     }
 
     /** اسم المدين، أو نص فارغ. */

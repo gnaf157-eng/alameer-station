@@ -312,14 +312,18 @@ public class DebtActivity extends Activity {
     /** خيارات المدين: تعديل، عرض حركاته، إيقاف، حذف. */
     private void debtorOptions(long id, String name, String phone, double opening) {
         int entries = db.debtEntryCount(id);
+        boolean linked = !db.debtorTelegram(id).trim().isEmpty();
         new AlertDialog.Builder(this).setTitle(name)
-                .setItems(new String[]{"📄  كشف حساب وإرساله", "سجل حركاته", "تعديل البيانات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
+                .setItems(new String[]{"📄  كشف حساب وإرساله", "سجل حركاته",
+                        linked ? "✓ تلغرام مربوط — تعديل" : "ربط تلغرام",
+                        "تعديل البيانات", "إيقاف المدين", "تفعيل المدين", "حذف المدين"},
                         (d, which) -> {
                             if (which == 0) sendStatement(id, phone);
                             else if (which == 1) debtorHistory(id, name);
-                            else if (which == 2) debtorDialog(id, name, phone, opening);
-                            else if (which == 3) { db.setDebtorActive(id, false); refresh(); }
-                            else if (which == 4) { db.setDebtorActive(id, true); refresh(); }
+                            else if (which == 2) telegramDialog(id, name);
+                            else if (which == 3) debtorDialog(id, name, phone, opening);
+                            else if (which == 4) { db.setDebtorActive(id, false); refresh(); }
+                            else if (which == 5) { db.setDebtorActive(id, true); refresh(); }
                             else {
                                 if (entries > 0) {
                                     new AlertDialog.Builder(this).setTitle("لا يمكن الحذف")
@@ -358,6 +362,58 @@ public class DebtActivity extends Activity {
                     else if (pick == 1) share(uri, body);
                     else open(uri);
                 }).show();
+    }
+
+    /** ربط العميل بمحادثة تلغرام ليصله إشعار بعد كل حركة. */
+    private void telegramDialog(final long id, final String name) {
+        final EditText input = new EditText(this);
+        styleInput(input);
+        input.setHint("معرّف المحادثة، مثل 123456789");
+        input.setText(db.debtorTelegram(id));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(text("يصل " + name + " إشعار فور تسجيل دين أو سداد.", 13, 0xff7c8186, false));
+        box.addView(input);
+        box.addView(text("كيف تحصل عليه: اطلب من العميل مراسلة البوت، ثم افتح"
+                + " @userinfobot في تلغرام ليعطيه رقمه.", 12, 0xff8b9097, false));
+
+        new AlertDialog.Builder(this).setTitle("تلغرام " + name)
+                .setView(box)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    String chat = input.getText().toString().trim();
+                    if (!chat.isEmpty() && !Telegram.validChat(chat)) {
+                        Toast.makeText(this, "معرّف المحادثة غير صالح", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    db.setDebtorTelegram(id, chat);
+                    Toast.makeText(this, chat.isEmpty() ? "أُلغي الربط" : "رُبط بتلغرام", Toast.LENGTH_SHORT).show();
+                })
+                .setNeutralButton("رسالة تجريبية", (d, w) -> testTelegram(id, name))
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    /** يرسل رسالة تجربة للتأكد من صحة الرمز والمعرّف. */
+    private void testTelegram(final long id, final String name) {
+        final String token = db.telegramToken();
+        final String chat = db.debtorTelegram(id);
+        if (token.isEmpty()) {
+            Toast.makeText(this, "اضبط رمز البوت من الإعدادات أولًا", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "جارٍ الإرسال...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            final String error = Telegram.send(token, chat,
+                    Branding.stationName(db) + "\nرسالة تجريبية للأخ/ " + name
+                            + "\nسيصلك إشعار بعد كل حركة في حسابك.");
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                new AlertDialog.Builder(this).setTitle(error.isEmpty() ? "وصلت الرسالة" : "تعذر الإرسال")
+                        .setMessage(error.isEmpty() ? "تحقّق من هاتف العميل." : error)
+                        .setPositiveButton("حسنًا", null).show();
+            });
+        }, "telegram-test").start();
     }
 
     /** يفتح محادثة واتساب مع الرقم ويرفق الملف؛ يسقط إلى المشاركة عند غياب واتساب. */

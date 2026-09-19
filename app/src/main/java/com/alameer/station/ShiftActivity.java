@@ -337,6 +337,7 @@ public class ShiftActivity extends Activity {
             backupSection.addView(text("الاستعادة تستبدل كل البيانات الحالية ولا يمكن التراجع عنها.",
                     12,Util.RED,true));
 
+            buildTelegramSettings();
             buildFreshStartSettings();
         }
         LinearLayout aboutSection=section("حول التطبيق");
@@ -378,6 +379,45 @@ public class ShiftActivity extends Activity {
         pages[4].addView(head,hp);
         pages[4].addView(body);
         return body;
+    }
+
+    /** إشعارات تلغرام: رمز البوت وتفعيل الإرسال. */
+    private void buildTelegramSettings(){
+        LinearLayout box=section("إشعارات تلغرام للعملاء");
+        LinearLayout card=panel(Color.WHITE);
+        boolean ready=!db.telegramToken().isEmpty();
+        card.addView(text(ready?"البوت مضبوط":"البوت غير مضبوط",17,ready?Util.GREEN:Util.RED,true));
+        card.addView(text("يصل العميل إشعار فور تسجيل دين أو سداد في حسابه.",13,0xff7c8186,false));
+        card.addView(text(db.telegramLinkedCount()+" عميلًا مربوطًا بتلغرام",12,0xff8b9097,false));
+
+        Button token=action(ready?"تغيير رمز البوت":"إدخال رمز البوت",!ready);
+        token.setOnClickListener(v->{
+            EditText input=new EditText(this);styleInput(input);
+            input.setHint("123456:ABC-DEF...");
+            input.setText(db.telegramToken());
+            LinearLayout form=column();form.setPadding(dp(22),dp(8),dp(22),0);form.addView(input);
+            new AlertDialog.Builder(this).setTitle("رمز بوت تلغرام")
+                .setMessage("احصل عليه من BotFather في تلغرام.")
+                .setView(form)
+                .setPositiveButton("حفظ",(d,w)->{
+                    db.setTelegramToken(input.getText().toString());
+                    buildSettingsPage();
+                    Toast.makeText(this,"حُفظ الرمز",Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("إلغاء",null).show();
+        });
+        card.addView(token,space());
+
+        final CheckBox on=new CheckBox(this);
+        on.setText("تفعيل الإرسال التلقائي");
+        on.setTextSize(15);
+        on.setChecked(db.telegramOn());
+        on.setOnCheckedChangeListener((b,checked)->db.setTelegramOn(checked));
+        card.addView(on);
+
+        card.addView(text("اربط كل عميل برقم محادثته من: حركة الديون ← العميل ← تلغرام.",
+                12,0xff8b9097,false));
+        box.addView(card,space());
     }
 
     /** بداية جديدة: تفريغ الحركات ثم تقييد الأرصدة الافتتاحية. */
