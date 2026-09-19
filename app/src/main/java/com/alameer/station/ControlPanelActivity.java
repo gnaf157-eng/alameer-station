@@ -656,22 +656,84 @@ public class ControlPanelActivity extends Activity {
     private View cashSection() {
         LinearLayout box = panel();
         box.addView(sectionHead("الصناديق"));
-        int count = 0;
+
+        // تُقرأ أولًا لتُرتَّب بالأكبر رصيدًا ويُعرف نصيب كل صندوق.
+        final java.util.List<String> names = new java.util.ArrayList<>();
+        final java.util.List<double[]> figures = new java.util.ArrayList<>();
+        double total = 0, biggest = 0;
+        int low = 0;
         try (Cursor c = db.cashboxes(true)) {
             while (c.moveToNext()) {
-                count++;
-                double balance = c.getDouble(6);
-                box.addView(flatRow(c.getString(1), money(balance) + " ر.ي",
-                        balance < 0 ? Util.RED : balance < LOW_CASH ? AMBER : Util.GREEN));
-                box.addView(divider());
+                double in = c.getDouble(4), out = c.getDouble(5), balance = c.getDouble(6);
+                names.add(c.getString(1));
+                figures.add(new double[]{balance, in, out});
+                total += balance;
+                if (balance > biggest) biggest = balance;
+                if (balance < LOW_CASH) low++;
             }
         }
-        if (count == 0) box.addView(emptyLine("لم تُنشئ صناديق بعد."));
-        else {
-            double total = db.cashboxesTotal();
-            LinearLayout sum = flatRow("الإجمالي", money(total) + " ر.ي", Util.NAVY);
-            sum.setBackground(Util.round(Util.ACCENT_SOFT, 0));
-            box.addView(sum);
+        if (names.isEmpty()) {
+            box.addView(emptyLine("لم تُنشئ صناديق بعد."));
+            return box;
+        }
+
+        // ترتيب تنازلي: الصندوق الأكبر أولًا.
+        for (int i = 0; i < names.size(); i++)
+            for (int j = i + 1; j < names.size(); j++)
+                if (figures.get(j)[0] > figures.get(i)[0]) {
+                    double[] f = figures.get(i); figures.set(i, figures.get(j)); figures.set(j, f);
+                    String n = names.get(i); names.set(i, names.get(j)); names.set(j, n);
+                }
+
+        // الإجمالي في الأعلى، فهو أول ما يبحث عنه المدير.
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.VERTICAL);
+        head.setPadding(dp(14), dp(6), dp(14), dp(12));
+        head.addView(text("إجمالي النقد في " + names.size() + " صندوق", 12, 0xff7c8186, false));
+        TextView grand = text(money(total) + " ر.ي", 26, total < 0 ? Util.RED : Util.NAVY, true);
+        grand.setTextDirection(View.TEXT_DIRECTION_LTR);
+        head.addView(grand);
+        if (low > 0)
+            head.addView(text("⚠ " + low + " صندوق تحت حدّ التنبيه", 11, AMBER, true));
+        box.addView(head);
+        box.addView(divider());
+
+        for (int i = 0; i < names.size(); i++) {
+            double balance = figures.get(i)[0], in = figures.get(i)[1], out = figures.get(i)[2];
+            int tint = balance < 0 ? Util.RED : balance < LOW_CASH ? AMBER : Util.GREEN;
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(14), dp(11), dp(14), dp(11));
+
+            LinearLayout line = new LinearLayout(this);
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            TextView name = text(names.get(i), 15, Util.NAVY, true);
+            name.setMaxLines(1);
+            line.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView value = text(money(balance), 16, tint, true);
+            value.setTextDirection(View.TEXT_DIRECTION_LTR);
+            line.addView(value);
+            row.addView(line);
+
+            // شريط يوضّح نصيب الصندوق من النقد كله.
+            int share = biggest > 0 ? (int) Math.round(Math.max(0, balance) * 100 / biggest) : 0;
+            LinearLayout track = new LinearLayout(this);
+            track.setBackground(Util.round(0xffeef1f4, dp(3)));
+            View fill = new View(this);
+            fill.setBackground(Util.round(tint, dp(3)));
+            track.addView(fill, new LinearLayout.LayoutParams(0, dp(5), Math.max(1, share)));
+            View rest = new View(this);
+            track.addView(rest, new LinearLayout.LayoutParams(0, dp(5), Math.max(1, 100 - share)));
+            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, dp(5));
+            tp.setMargins(0, dp(7), 0, dp(5));
+            row.addView(track, tp);
+
+            int percent = total > 0 ? (int) Math.round(Math.max(0, balance) * 100 / total) : 0;
+            row.addView(text("وارد " + money(in) + "  •  صادر " + money(out)
+                    + "  •  " + percent + "٪ من النقد", 11, 0xff8b9097, false));
+            box.addView(row);
+            if (i < names.size() - 1) box.addView(divider());
         }
         return box;
     }
