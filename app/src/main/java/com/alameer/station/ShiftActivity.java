@@ -109,12 +109,16 @@ public class ShiftActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(4),dp(16),dp(16));
         for(int i=0;i<pages.length;i++){pages[i]=new LinearLayout(this);pages[i].setOrientation(LinearLayout.VERTICAL);content.addView(pages[i]);}
         // عنوان الوردية مع كودها ظاهرًا بجانبه.
+        // بطاقة واحدة تجمع هوية الوردية: العامل وكودها وتاريخها.
+        LinearLayout shiftCard=panel(Color.WHITE);
+        shiftCard.setPadding(dp(16),dp(14),dp(16),dp(14));
+
         LinearLayout titleRow=new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title=heading("ورديتي");
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        title.setPadding(0,dp(20),0,dp(20));
-        titleRow.addView(title);
+        titleRow.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));
+        greetingText=text(workerName,21,Util.NAVY,true);
+        greetingText.setMaxLines(1);
+        titleRow.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         shiftCodeBadge=text("",13,Util.NAVY,true);
         shiftCodeBadge.setPadding(dp(11),dp(6),dp(11),dp(6));
         shiftCodeBadge.setBackground(Util.round(Util.ACCENT_SOFT,dp(10)));
@@ -122,15 +126,18 @@ public class ShiftActivity extends Activity {
         LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-2,-2);
         bp.setMargins(dp(10),0,0,0);
         titleRow.addView(shiftCodeBadge,bp);
-        pages[0].addView(titleRow);
+        shiftCard.addView(titleRow);
+
+        shiftCard.addView(text("ورديتي  •  محفوظة على الجهاز",12,0xff8b9097,false));
+
         shiftDateButton=action("",false);
+        shiftDateButton.setTextSize(14);
         shiftDateButton.setOnClickListener(v->chooseShiftDate());
-        pages[0].addView(shiftDateButton,space());
+        LinearLayout.LayoutParams dpp=new LinearLayout.LayoutParams(-1,-2);
+        dpp.setMargins(0,dp(10),0,0);
+        shiftCard.addView(shiftDateButton,dpp);
         refreshShiftDate();
-        LinearLayout greeting=new LinearLayout(this);greeting.setGravity(Gravity.CENTER_VERTICAL);
-        greetingText=text("مرحبًا، "+workerName,18,Util.NAVY,true);greeting.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
-        TextView local=text("محفوظ على الجهاز",11,0xff6b7077,false);local.setPadding(dp(10),dp(8),dp(10),dp(8));local.setBackground(Util.round(0xffe7e8e9,dp(12)));greeting.addView(local);
-        pages[0].addView(greeting,space());
+        pages[0].addView(shiftCard,space());
         fuelLitresBox=panel(Color.WHITE);pinnedSummaries.addView(fuelLitresBox);
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
         Button save=action("حفظ القراءات ومتابعة الوردية",true);
@@ -645,7 +652,7 @@ public class ShiftActivity extends Activity {
         },"station-logo").start();
     }
 
-    private void refreshGreeting(){if(greetingText!=null)greetingText.setText("مرحبًا، "+workerName);}
+    private void refreshGreeting(){if(greetingText!=null)greetingText.setText(workerName);}
     private void nameDialog(){
         EditText input=new EditText(this);styleInput(input);
         input.setHint("اسم العامل");input.setText(workerName);
