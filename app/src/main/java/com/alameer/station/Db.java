@@ -1915,8 +1915,9 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=cashboxes(false)){while(c.moveToNext())cash+=c.getDouble(2);}
         try(Cursor c=debtors(false)){while(c.moveToNext())debts+=c.getDouble(3);}
         for(String m:MATERIALS)stock+=Math.max(0,materialSummary(m)[3])*unitCost(m);
-        double owed=supplierBalance();
-        double total=cash+debts+stock-owed;
+        // الرصيد الآن بقاعدة: موجب لنا وسالب علينا.
+        double supplier=supplierBalance();
+        double total=cash+debts+stock+supplier;
         if(Math.abs(total)<0.01&&cash<0.01&&debts<0.01&&stock<0.01)
             throw new IllegalStateException("لا توجد أرصدة افتتاحية لتقييدها");
 
@@ -1924,8 +1925,9 @@ public class Db extends SQLiteOpenHelper {
         if(cash>0.009)e.debit(Journal.CASH,cash,"");
         if(debts>0.009)e.debit(Journal.RECEIVABLE,debts,"");
         if(stock>0.009)e.debit(Journal.INVENTORY,stock,"");
-        if(owed>0.009)e.credit(Journal.SUPPLIER,owed,"");
-        double capital=cash+debts+stock-owed;
+        if(supplier<-0.009)e.credit(Journal.SUPPLIER,-supplier,"");
+        else if(supplier>0.009)e.debit(Journal.SUPPLIER,supplier,"");
+        double capital=cash+debts+stock+supplier;
         if(capital>0.009)e.credit(Journal.EQUITY,capital,"");
         else if(capital<-0.009)e.debit(Journal.EQUITY,-capital,"");
         postEntry(e);
@@ -1965,23 +1967,32 @@ public class Db extends SQLiteOpenHelper {
         return "GAS".equals(code)?Journal.SUPPLIER_GAS:Journal.SUPPLIER;
     }
 
-    /** ما علينا لمورّد بعينه: المشتريات ناقص ما وُرِّد. */
+    /**
+     * رصيد مورّد بقاعدة التطبيق الموحّدة: الموجب لنا والسالب علينا.
+     * ما وُرِّد يزيد رصيدنا، والمشتريات تنقصه.
+     */
     public double supplierBalance(String supplier){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0 AND COALESCE(supplier,'OIL')=?",
                 new String[]{supplier})){
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
 
-    /** ما علينا للموردين جميعًا. */
+    /** رصيد الموردين جميعًا: الموجب لنا والسالب علينا. */
     public double supplierBalance(){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0",null)){
             return c.moveToFirst()?c.getDouble(0):0;
         }
+    }
+
+    /** ما علينا للموردين فقط (موجب)، لحساب المطلوبات. */
+    public double supplierOwed(){
+        double v=supplierBalance();
+        return v<0?-v:0;
     }
 
     public double supplierBought(String supplier){

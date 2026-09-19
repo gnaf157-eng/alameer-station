@@ -89,8 +89,9 @@ public class ControlPanelActivity extends Activity {
         final double credits = db.creditsTotal();
         final double netDebt = debts - credits;
         final double stock = db.stockValueTotal();
+        // القاعدة الموحّدة: الموجب لنا والسالب علينا، فالرصيد يُجمع كما هو.
         final double owed = db.supplierBalance();
-        final double capital = cash + netDebt + stock - owed;
+        final double capital = cash + netDebt + stock + owed;
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -108,7 +109,7 @@ public class ControlPanelActivity extends Activity {
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
         box.addView(grand);
-        box.addView(text("الصناديق + الديون + المخزون − الموردين  •  اضغط للتفصيل",
+        box.addView(text("الصناديق + الديون + المخزون + الموردين  •  اضغط للتفصيل",
                 11, 0xffCFE2FA, false));
         return box;
     }
@@ -125,12 +126,20 @@ public class ControlPanelActivity extends Activity {
             sb.append("\n   لنا ").append(whole(gross)).append("  •  علينا ").append(whole(owedUs));
         sb.append("\n");
         sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي\n");
-        sb.append("\n   مجموع الموجودات ").append(whole(cash + netDebt + stock)).append(" ر.ي\n");
+        // كل مورّد في جانبه: الموجب موجودات والسالب مطلوبات.
+        double oil = db.supplierBalance("OIL"), gas = db.supplierBalance("GAS");
+        double assetSide = cash + netDebt + stock + Math.max(0, oil) + Math.max(0, gas);
+        if (oil > 0.009)
+            sb.append("\n• رصيد لنا عند شركة النفط\n   ").append(whole(oil)).append(" ر.ي\n");
+        if (gas > 0.009)
+            sb.append("\n• رصيد لنا عند شركة الغاز\n   ").append(whole(gas)).append(" ر.ي\n");
+        sb.append("\n   مجموع الموجودات ").append(whole(assetSide)).append(" ر.ي\n");
 
+        double dueOil = oil < 0 ? -oil : 0, dueGas = gas < 0 ? -gas : 0;
         sb.append("\n\nالمطلوبات\n");
-        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(db.supplierBalance("OIL"))).append(" ر.ي\n");
-        sb.append("\n• مستحق لشركة الغاز\n   ").append(whole(db.supplierBalance("GAS"))).append(" ر.ي\n");
-        sb.append("\n   مجموع المطلوبات ").append(whole(owed)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(dueOil)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة الغاز\n   ").append(whole(dueGas)).append(" ر.ي\n");
+        sb.append("\n   مجموع المطلوبات ").append(whole(dueOil + dueGas)).append(" ر.ي\n");
 
         sb.append("\n\nرأس المال = الموجودات − المطلوبات\n");
         sb.append("   ").append(whole(capital)).append(" ر.ي");

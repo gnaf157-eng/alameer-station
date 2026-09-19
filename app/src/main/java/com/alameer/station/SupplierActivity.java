@@ -121,10 +121,11 @@ public class SupplierActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(Util.round(Util.NAVY, dp(18)));
-        card.addView(text(owed > 0.009 ? "المستحق لـ" + Db.supplierName(supplier)
-                : owed < -0.009 ? "رصيد لنا عند الشركة" : "الحساب مسدّد", 13, 0xffCFE2FA, false));
-        TextView grand = text(money(Math.abs(owed)) + "  ر.ي", 30,
-                owed > 0.009 ? 0xffFFB3BC : Color.WHITE, true);
+        // القاعدة الموحّدة: الموجب لنا والسالب علينا، والرقم يظهر بإشارته.
+        card.addView(text(owed < -0.009 ? "المستحق لـ" + Db.supplierName(supplier)
+                : owed > 0.009 ? "رصيد لنا عند الشركة" : "الحساب مسدّد", 13, 0xffCFE2FA, false));
+        TextView grand = text(money(owed) + "  ر.ي", 30,
+                owed < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(10));
         card.addView(grand);
@@ -305,7 +306,7 @@ public class SupplierActivity extends Activity {
         styleInput(amount);
         amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amount.setHint("المبلغ المورّد");
-        double owed = db.supplierBalance(supplier);
+        double owed = db.supplierBalance(supplier) < 0 ? -db.supplierBalance(supplier) : 0;
         if (owed > 0) amount.setText(fmt(owed));
 
         final EditText note = new EditText(this);
@@ -319,7 +320,7 @@ public class SupplierActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("المستحق الآن " + money(Math.max(0, owed)) + " ر.ي", 14, Util.NAVY, true));
+        box.addView(text("المستحق الآن " + money(owed) + " ر.ي", 14, Util.NAVY, true));
         box.addView(text("من صندوق", 13, 0xff7c8186, false));
         box.addView(picker);
         box.addView(text("المبلغ", 13, 0xff7c8186, false));
@@ -397,8 +398,8 @@ public class SupplierActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("المستحق الآن " + money(Math.max(0, db.supplierBalance(supplier)))
-                + " ر.ي", 14, Util.NAVY, true));
+        double due = db.supplierBalance(supplier) < 0 ? -db.supplierBalance(supplier) : 0;
+        box.addView(text("المستحق الآن " + money(due) + " ر.ي", 14, Util.NAVY, true));
         box.addView(text("المادة", 13, 0xff7c8186, false));
         box.addView(picker);
         box.addView(text("الكمية", 13, 0xff7c8186, false));
