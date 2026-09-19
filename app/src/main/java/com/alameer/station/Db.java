@@ -1478,7 +1478,7 @@ public class Db extends SQLiteOpenHelper {
         return Lock.same(Lock.hash(pin,lockSalt()),setting("lock_pin",""));
     }
 
-    /** هل تُطلب البصمة أو الرمز الآن؟ */
+    /** هل يُطلب الرمز الآن؟ */
     public boolean shouldAskLock(){
         return Lock.shouldAsk(lockOn(),unlocked,leftAt,System.currentTimeMillis());
     }

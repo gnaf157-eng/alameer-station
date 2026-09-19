@@ -22,8 +22,10 @@ public class HomeActivity extends Activity {
         Db.signIn(Branding.stationName(db));
         // القفل قبل أي شيء: لا تُبنى الواجهة قبل تجاوزه.
         if (db.shouldAskLock()) {
-            startActivity(new Intent(this, LockActivity.class));
+            askLock();
+            return;
         }
+        built = true;
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -145,12 +147,22 @@ public class HomeActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (db.shouldAskLock()) {
-            startActivity(new Intent(this, LockActivity.class));
-            return;
-        }
+        if (db.shouldAskLock()) { askLock(); return; }
+        askingLock = false;
+        // فُتح التطبيق مقفلًا فلم تُبنَ الواجهة؛ تُبنى الآن مرة واحدة.
+        if (!built) { built = true; recreate(); return; }
         recreateIfBrandChanged();
         refreshBalances();
+    }
+
+    private boolean askingLock = false;
+    private boolean built = false;
+
+    /** يفتح شاشة القفل مرة واحدة فقط، فلا تتوالد الشاشات. */
+    private void askLock() {
+        if (askingLock) return;
+        askingLock = true;
+        startActivity(new Intent(this, LockActivity.class));
     }
 
     /** يحدّث أرقام البطاقات بعد العودة من شاشة عدّلت الأرصدة. */

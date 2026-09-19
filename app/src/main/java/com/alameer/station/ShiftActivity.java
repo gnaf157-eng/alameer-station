@@ -382,14 +382,13 @@ public class ShiftActivity extends Activity {
         return body;
     }
 
-    /** قفل التطبيق بالبصمة أو الرمز. */
+    /** قفل التطبيق برمز. */
     private void buildLockSettings(){
         LinearLayout box=section("قفل التطبيق");
         LinearLayout card=panel(Color.WHITE);
         final boolean on=db.lockOn();
         card.addView(text(on?"القفل مفعّل":"القفل معطّل",17,on?Util.GREEN:0xff7c8186,true));
-        card.addView(text("تُطلب البصمة عند فتح التطبيق، والرمز بديل عنها دائمًا.",
-                13,0xff7c8186,false));
+        card.addView(text("يُطلب الرمز عند فتح التطبيق.",13,0xff7c8186,false));
 
         Button pin=action(db.lockPinSet()?"تغيير الرمز":"ضبط الرمز",!db.lockPinSet());
         pin.setOnClickListener(v->lockPinDialog());
@@ -408,7 +407,7 @@ public class ShiftActivity extends Activity {
             db.setLockOn(checked);
         });
         card.addView(toggle);
-        card.addView(text("الرمز ضروري: البصمة قد لا تعمل على كل جهاز.",12,0xff8b9097,false));
+        card.addView(text("احفظ الرمز جيدًا؛ بدونه لا يُفتح التطبيق.",12,Util.RED,true));
         box.addView(card,space());
     }
 
@@ -422,7 +421,7 @@ public class ShiftActivity extends Activity {
         LinearLayout form=column();form.setPadding(dp(22),dp(8),dp(22),0);
         form.addView(first);form.addView(again);
         new AlertDialog.Builder(this).setTitle("رمز القفل")
-            .setMessage("اختر رمزًا من أربعة رموز فأكثر، واحفظه؛ فبدونه لا يُفتح التطبيق إن تعذّرت البصمة.")
+            .setMessage("اختر رمزًا من أربعة رموز فأكثر، واحفظه؛ فبدونه لا يُفتح التطبيق.")
             .setView(form)
             .setPositiveButton("حفظ",(d,w)->{
                 String why=Lock.reject(first.getText().toString(),again.getText().toString());

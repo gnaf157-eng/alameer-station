@@ -2,7 +2,6 @@ package com.alameer.station.shifts;
 
 import android.app.Activity;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -10,15 +9,11 @@ import android.view.View;
 import android.widget.*;
 
 /**
- * قفل التطبيق: تُطلب البصمة أولًا، والرمز بديل دائم عنها.
- * لا يُفتح شيء من التطبيق قبل تجاوز هذه الشاشة.
- * تستعمل واجهة البصمة الأصلية في أندرويد فلا تحتاج مكتبة خارجية.
+ * قفل التطبيق برمز. لا يُفتح شيء من التطبيق قبل تجاوز هذه الشاشة.
  */
 public class LockActivity extends Activity {
     private Db db;
     private EditText pinInput;
-    private TextView hint;
-    private android.os.CancellationSignal cancel;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -44,7 +39,7 @@ public class LockActivity extends Activity {
         name.setGravity(Gravity.CENTER);
         shell.addView(name);
 
-        hint = text("التطبيق مقفل", 14, 0xff7c8186, false);
+        TextView hint = text("أدخل رمز الدخول", 14, 0xff7c8186, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(6), 0, dp(20));
         shell.addView(hint);
@@ -64,97 +59,37 @@ public class LockActivity extends Activity {
         pp.bottomMargin = dp(12);
         shell.addView(pinInput, pp);
 
-        Button enter = big("دخول", true);
+        Button enter = big("دخول");
         enter.setOnClickListener(v -> tryPin());
         shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
 
-        if (fingerprintReady()) {
-            Button finger = big("استخدام البصمة", false);
-            finger.setOnClickListener(v -> askFingerprint());
-            LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
-            fp.topMargin = dp(10);
-            shell.addView(finger, fp);
-        }
-
         setContentView(shell);
         pinInput.setOnEditorActionListener((v, id, e) -> { tryPin(); return true; });
-        if (fingerprintReady()) askFingerprint();
-    }
-
-    /** هل الجهاز يملك بصمة مسجّلة؟ */
-    private boolean fingerprintReady() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false;
-        try {
-            android.hardware.biometrics.BiometricManager manager =
-                    getSystemService(android.hardware.biometrics.BiometricManager.class);
-            if (manager == null) return false;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                return manager.canAuthenticate()
-                        == android.hardware.biometrics.BiometricManager.BIOMETRIC_SUCCESS;
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void askFingerprint() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
-        try {
-            if (cancel != null) cancel.cancel();
-            cancel = new android.os.CancellationSignal();
-            new android.hardware.biometrics.BiometricPrompt.Builder(this)
-                    .setTitle(Branding.stationName(db))
-                    .setSubtitle("افتح التطبيق بالبصمة")
-                    .setNegativeButton("استخدام الرمز", getMainExecutor(),
-                            (d, w) -> hint.setText("أدخل الرمز للدخول"))
-                    .build()
-                    .authenticate(cancel, getMainExecutor(),
-                            new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
-                                @Override public void onAuthenticationSucceeded(
-                                        android.hardware.biometrics.BiometricPrompt.AuthenticationResult r) {
-                                    unlock();
-                                }
-                                @Override public void onAuthenticationError(int code, CharSequence message) {
-                                    // الإلغاء ليس خطأً: الرمز يبقى متاحًا.
-                                    if (hint != null) hint.setText("أدخل الرمز، أو أعد المحاولة بالبصمة");
-                                }
-                            });
-        } catch (Exception e) {
-            hint.setText("البصمة غير متاحة — أدخل الرمز");
-        }
     }
 
     private void tryPin() {
         String pin = pinInput.getText().toString().trim();
-        if (!db.lockPinSet()) { unlock(); return; }
-        if (db.checkLockPin(pin)) { unlock(); return; }
+        if (!db.lockPinSet() || db.checkLockPin(pin)) {
+            Db.markUnlocked();
+            finish();
+            return;
+        }
         pinInput.setText("");
         pinInput.setError("الرمز غير صحيح");
         Toast.makeText(this, "الرمز غير صحيح", Toast.LENGTH_SHORT).show();
     }
 
-    private void unlock() {
-        Db.markUnlocked();
-        if (cancel != null) try { cancel.cancel(); } catch (Exception ignored) {}
-        finish();
-    }
-
     /** زرّ الرجوع لا يتخطّى القفل: يخرج من التطبيق. */
     @Override public void onBackPressed() { finishAffinity(); }
 
-    @Override protected void onDestroy() {
-        super.onDestroy();
-        if (cancel != null) try { cancel.cancel(); } catch (Exception ignored) {}
-    }
-
-    private Button big(String label, boolean primary) {
+    private Button big(String label) {
         Button b = new Button(this);
         b.setText(label);
         b.setAllCaps(false);
         b.setTextSize(17);
-        b.setTextColor(primary ? Color.WHITE : Util.NAVY);
+        b.setTextColor(Color.WHITE);
         b.setStateListAnimator(null);
-        b.setBackground(Util.round(primary ? Util.NAVY : Util.ACCENT_SOFT, dp(14)));
+        b.setBackground(Util.round(Util.NAVY, dp(14)));
         b.setPadding(dp(16), dp(14), dp(16), dp(14));
         return b;
     }
