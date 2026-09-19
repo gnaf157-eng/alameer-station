@@ -66,6 +66,16 @@ public class SupplierActivity extends Activity {
         actions.addView(pay, cell());
         content.addView(actions);
 
+        LinearLayout more = new LinearLayout(this);
+        more.setPadding(0, dp(6), 0, dp(4));
+        Button inKind = action("سداد بالمواد", false);
+        inKind.setOnClickListener(v -> inKindDialog());
+        more.addView(inKind, cell());
+        Button move = action("نقل رصيد من الديون", false);
+        move.setOnClickListener(v -> moveDialog());
+        more.addView(move, cell());
+        content.addView(more);
+
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(listBox);
@@ -155,9 +165,13 @@ public class SupplierActivity extends Activity {
 
                 LinearLayout lines = new LinearLayout(this);
                 lines.setOrientation(LinearLayout.VERTICAL);
-                lines.addView(text(isBuy
-                        ? "شراء " + material + "  " + money(litres) + " لتر"
-                        : "توريد من " + (boxName.isEmpty() ? "صندوق" : boxName), 16, Util.NAVY, true));
+                // السداد إمّا نقدي من صندوق، أو عيني بلترات، أو نقل رصيد.
+                String title;
+                if (isBuy) title = "شراء " + material + "  " + money(litres) + " لتر";
+                else if (litres > 0) title = "سداد بالمواد  " + money(litres) + " لتر " + material;
+                else if (!boxName.isEmpty()) title = "توريد من " + boxName;
+                else title = "تسوية رصيد";
+                lines.addView(text(title, 16, Util.NAVY, true));
                 lines.addView(text(date + (isBuy && unit > 0 ? "  •  " + money(unit) + " ريال/لتر" : "")
                         + (note == null || note.trim().isEmpty() ? "" : "  •  " + note.trim()),
                         12, 0xff8b9097, false));
@@ -324,6 +338,132 @@ public class SupplierActivity extends Activity {
                                 Calc.number(amount.getText().toString()),
                                 note.getText().toString(), date[0]);
                         Toast.makeText(this, "سُجّل التوريد", Toast.LENGTH_SHORT).show();
+                        refresh();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    /** سداد المورّد بلترات بدل النقد: يُخصم من المخزون ومن دَينه. */
+    private void inKindDialog() {
+        final String[] materials = Db.materialsOf(supplier);
+        final Spinner picker = new Spinner(this);
+        picker.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, materials));
+
+        final EditText litres = new EditText(this);
+        styleInput(litres);
+        litres.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        litres.setHint("اللترات المردودة");
+
+        final EditText unit = new EditText(this);
+        styleInput(unit);
+        unit.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        unit.setHint("سعر اللتر المتّفق عليه");
+        double suggested = db.buyPrice(materials[0]);
+        if (suggested > 0) unit.setText(fmt(suggested));
+
+        final EditText note = new EditText(this);
+        styleInput(note);
+        note.setHint("البيان (اختياري)");
+
+        final TextView total = text("", 16, Util.NAVY, true);
+        total.setGravity(Gravity.CENTER);
+        total.setPadding(0, dp(8), 0, 0);
+        android.text.TextWatcher watcher = new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
+            public void onTextChanged(CharSequence t, int a, int b, int c) {}
+            public void afterTextChanged(android.text.Editable e) {
+                double q = Calc.number(litres.getText().toString());
+                double u = Calc.number(unit.getText().toString());
+                double stock = db.materialSummary(materials[picker.getSelectedItemPosition()])[3];
+                if (q > 0 && u > 0) {
+                    String line = "يُخصم من الدَّين " + money(q * u) + " ر.ي";
+                    if (q > stock) line += "\nالمخزون " + money(stock) + " لتر فقط";
+                    total.setText(line);
+                    total.setTextColor(q > stock ? Util.RED : Util.GREEN);
+                } else total.setText("");
+            }
+        };
+        litres.addTextChangedListener(watcher);
+        unit.addTextChangedListener(watcher);
+
+        final String[] date = {ShiftDates.today()};
+        final Button dateButton = action("التاريخ: " + date[0], false);
+        dateButton.setOnClickListener(v -> pickDate(date, dateButton));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(text("المستحق الآن " + money(Math.max(0, db.supplierBalance(supplier)))
+                + " ر.ي", 14, Util.NAVY, true));
+        box.addView(text("المادة", 13, 0xff7c8186, false));
+        box.addView(picker);
+        box.addView(text("الكمية", 13, 0xff7c8186, false));
+        box.addView(litres);
+        box.addView(text("سعر اللتر", 13, 0xff7c8186, false));
+        box.addView(unit);
+        box.addView(note);
+        box.addView(dateButton);
+        box.addView(total);
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
+
+        new AlertDialog.Builder(this).setTitle("سداد بالمواد لـ" + Db.supplierName(supplier))
+                .setMessage("تخرج اللترات من المخزون وينقص دَين المورّد بقيمتها، بلا نقد.")
+                .setView(form)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    try {
+                        db.paySupplierInKind(supplier, materials[picker.getSelectedItemPosition()],
+                                Calc.number(litres.getText().toString()),
+                                Calc.number(unit.getText().toString()),
+                                note.getText().toString(), date[0]);
+                        Toast.makeText(this, "سُجّل السداد العيني", Toast.LENGTH_SHORT).show();
+                        refresh();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    /** ينقل رصيد حساب من شاشة الديون إلى حساب هذا المورّد. */
+    private void moveDialog() {
+        final ArrayList<Long> ids = new ArrayList<>();
+        final ArrayList<String> labels = new ArrayList<>();
+        try (Cursor c = db.debtorsWithBalance()) {
+            while (c.moveToNext()) {
+                ids.add(c.getLong(0));
+                double bal = c.getDouble(2);
+                labels.add(c.getString(1) + "   ("
+                        + (bal < 0 ? "لهم " + money(-bal) : "علينا لهم " + money(bal)) + ")");
+            }
+        }
+        if (ids.isEmpty()) {
+            Toast.makeText(this, "لا توجد حسابات لها رصيد", Toast.LENGTH_LONG).show();
+            return;
+        }
+        final Spinner picker = new Spinner(this);
+        picker.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, labels));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(text("اختر الحساب المسجّل في الديون وهو في الحقيقة مورّد:",
+                13, 0xff7c8186, false));
+        box.addView(picker);
+
+        new AlertDialog.Builder(this).setTitle("نقل رصيد إلى " + Db.supplierName(supplier))
+                .setView(box)
+                .setMessage("يُصفّر الحساب في الديون ويُنقل رصيده إلى حساب المورّد بقيد سليم.")
+                .setPositiveButton("نقل", (d, w) -> {
+                    try {
+                        db.moveDebtorToSupplier(ids.get(picker.getSelectedItemPosition()),
+                                supplier, "", ShiftDates.today());
+                        Toast.makeText(this, "نُقل الرصيد", Toast.LENGTH_LONG).show();
                         refresh();
                     } catch (Exception e) {
                         Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();

@@ -2065,6 +2065,99 @@ public class Db extends SQLiteOpenHelper {
      * توريد مبلغ لشركة النفط من أحد الصناديق.
      * القيد: شركة النفط مدينة، والصندوق دائن.
      */
+    /**
+     * ينقل رصيد حساب من الديون إلى حساب مورّد.
+     * يُستعمل حين يكون الحساب مورّدًا سُجّل خطأً في الديون.
+     * القيد: حساب المورّد مدين، وذمم المدينين دائنة.
+     */
+    public long moveDebtorToSupplier(long debtorId,String supplier,String note,String date){
+        double balance=debtorBalance(debtorId);
+        double amount=Math.abs(balance);
+        if(amount<0.01)throw new IllegalStateException("رصيد الحساب صفر، لا شيء يُنقل");
+        final String who=debtorName(debtorId);
+        final String to=supplierName(supplier);
+        // الرصيد الدائن يعني أنّ الحساب دائن لنا: يصير دَينًا على المورّد.
+        final boolean credit=balance<0;
+        String label=(note==null||note.trim().isEmpty())
+                ?"نقل رصيد "+who+" إلى "+to:note.trim();
+
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        long id;
+        try{
+            // قيد معاكس في الديون يصفّر الحساب هناك بلا حذف.
+            suppressJournal=true;
+            try{
+                addDebtEntry(debtorId,credit?"DEBT":"PAID",amount,
+                        "نقل الرصيد إلى حساب "+to,date);
+            }finally{suppressJournal=false;}
+
+            ContentValues v=new ContentValues();
+            v.put("kind",credit?"BUY":"PAY");
+            v.put("amount",amount);v.put("note",label);
+            v.put("entry_date",date);v.put("created_at",Util.now());
+            v.put("supplier",supplier);
+            id=db.insertOrThrow("supplier_entries",null,v);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+
+        journalManual("supplier",id,date,label,amount,
+                credit?Journal.RECEIVABLE:supplierAccount(supplier),
+                credit?supplierAccount(supplier):Journal.RECEIVABLE);
+        audit("supplier",id,"MOVE_TO_SUPPLIER",who+" — "+Calc.money(balance),
+                to+" — "+Calc.money(amount),"نقل رصيد من الديون إلى الموردين");
+        return id;
+    }
+
+    /**
+     * سداد عيني للمورّد: تُردّ لترات بدل النقد.
+     * تُخصم من المخزون ومن دَين المورّد بقيمتها.
+     * القيد: المورّد مدين، ومخزون الوقود دائن.
+     */
+    public long paySupplierInKind(String supplier,String material,double litres,
+                                  double unitCost,String note,String date){
+        if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
+        if(!Double.isFinite(unitCost)||unitCost<=0)throw new IllegalArgumentException("اكتب سعر اللتر");
+        double amount=litres*unitCost;
+        final String who=supplierName(supplier);
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        long id;
+        try{
+            // اللترات تخرج من المخزون بلا قيد مستقل؛ القيد أدناه يشملها.
+            ContentValues m=new ContentValues();
+            m.put("material",material);m.put("direction","OUT");m.put("litres",litres);
+            m.put("note","سداد عيني لـ"+who+(note.trim().isEmpty()?"":" — "+note.trim()));
+            m.put("entry_date",date);m.put("created_at",Util.now());
+            long materialEntry=db.insertOrThrow("material_entries",null,m);
+
+            ContentValues v=new ContentValues();
+            v.put("kind","PAY");v.put("material",material);v.put("litres",litres);
+            v.put("unit_cost",unitCost);v.put("amount",amount);v.put("note",note.trim());
+            v.put("entry_date",date);v.put("created_at",Util.now());
+            v.put("material_entry",materialEntry);
+            v.put("supplier",supplier);
+            id=db.insertOrThrow("supplier_entries",null,v);
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+
+        journalManual("supplier",id,date,
+                "سداد "+Calc.money(litres)+" لتر "+material+" لـ"+who,amount,
+                supplierAccount(supplier),Journal.INVENTORY);
+        audit("supplier",id,"PAY_IN_KIND",who,
+                Calc.money(litres)+" لتر "+material+" بـ "+Calc.money(amount),note);
+        return id;
+    }
+
+    /** حسابات الديون التي لها رصيد، لاختيار ما يُنقل إلى المورّدين. */
+    public Cursor debtorsWithBalance(){
+        return getReadableDatabase().rawQuery(
+            "SELECT d.id,d.name,"+
+            "d.opening+COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='DEBT'),0)"+
+            "-COALESCE((SELECT SUM(e.amount) FROM debt_entries e WHERE e.debtor_id=d.id AND e.direction='PAID'),0) AS bal "+
+            "FROM debtors d WHERE ABS(bal)>=0.01 ORDER BY d.name",null);
+    }
+
     public long paySupplier(String supplier,long boxId,double amount,String note,String date){
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         if(boxId<=0)throw new IllegalArgumentException("اختر الصندوق");
