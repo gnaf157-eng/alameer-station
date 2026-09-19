@@ -235,7 +235,7 @@ public class ShiftActivity extends Activity {
         final boolean boss=true;
         if(boss)buildStationSettings();
 
-        pages[4].addView(sectionTitle("اسم العامل"));
+        LinearLayout nameSection=section("اسم العامل");
         LinearLayout nameBox=panel(Color.WHITE);
         LinearLayout nameRow=new LinearLayout(this);nameRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout nameWords=column();
@@ -246,11 +246,10 @@ public class ShiftActivity extends Activity {
         editName.setOnClickListener(v->nameDialog());
         nameRow.addView(editName);
         nameBox.addView(nameRow);
-        pages[4].addView(nameBox,space());
+        nameSection.addView(nameBox,space());
 
         if(boss){
-        pages[4].addView(sectionTitle("أسعار اللتر"));
-
+        LinearLayout priceSection=section("أسعار اللتر");
         LinearLayout priceBox=panel(Color.WHITE);
         int types=0;
         try(Cursor c=db.fuelPrices()){
@@ -273,10 +272,10 @@ public class ShiftActivity extends Activity {
             }
         }
         if(types==0)priceBox.addView(text("لا توجد طرمبات نشطة بعد.",15,0xff777d84,false));
-        pages[4].addView(priceBox,space());
+        priceSection.addView(priceBox,space());
         }
 
-        pages[4].addView(sectionTitle(boss?"الطرمبات":"الطرمبات — إيقاف أو تفعيل"));
+        LinearLayout pumpSection=section(boss?"الطرمبات":"الطرمبات — إيقاف أو تفعيل");
         LinearLayout pumpBox=panel(Color.WHITE);
         try(Cursor c=db.pumps()){
             while(c.moveToNext()){
@@ -310,34 +309,66 @@ public class ShiftActivity extends Activity {
                 pumpBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
             }
         }
-        pages[4].addView(pumpBox,space());
+        pumpSection.addView(pumpBox,space());
         if(boss){
             Button addPump=action("＋  إضافة طرمبة",true);
             addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
-            pages[4].addView(addPump,space());
+            pumpSection.addView(addPump,space());
 
             buildTankSettings();
             buildThresholdSettings();
 
-            Button backupBtn=action("نسخة احتياطية",false);
+            LinearLayout backupSection=section("النسخة الاحتياطية");
+            Button backupBtn=action("حفظ نسخة احتياطية",false);
             backupBtn.setOnClickListener(v->new Backup(this).export());
-            pages[4].addView(backupBtn,space());
+            backupSection.addView(backupBtn,space());
 
             buildFreshStartSettings();
         }
-        pages[4].addView(sectionTitle("حول التطبيق"));
+        LinearLayout aboutSection=section("حول التطبيق");
         LinearLayout about=panel(Color.WHITE);
         about.addView(text("طابق ورحّل  •  "+BuildConfig.VERSION_NAME,19,Util.NAVY,true));
         about.addView(text("تطوير: أبوقناف للأتمتة",16,Util.NAVY,true),space());
         TextView contact=text("للتواصل: 777808020",16,Util.NAVY,false);contact.setTextIsSelectable(true);about.addView(contact);
         Button call=action("تواصل مع المطوّر",false);
         call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
-        about.addView(call,space());pages[4].addView(about,space());
+        about.addView(call,space());aboutSection.addView(about,space());
+    }
+
+    /**
+     * قسم قابل للطي: عنوان يُضغط فيظهر محتواه أو يختفي.
+     * يعيد الحاوية ليضيف القسم محتواه داخلها.
+     */
+    private LinearLayout section(String title){
+        final LinearLayout body=column();
+        body.setVisibility(View.GONE);
+
+        final TextView chevron=text("▾",16,Util.NAVY,true);
+        LinearLayout head=new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(14),dp(13),dp(14),dp(13));
+        head.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x18000000),
+                Util.round(Util.ACCENT_SOFT,dp(13)),null));
+        head.setClickable(true);
+        head.addView(text(title,17,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
+        head.addView(chevron);
+        head.setOnClickListener(v->{
+            boolean open=body.getVisibility()==View.VISIBLE;
+            body.setVisibility(open?View.GONE:View.VISIBLE);
+            chevron.setText(open?"▾":"▴");
+        });
+
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,-2);
+        hp.setMargins(0,dp(8),0,0);
+        pages[4].addView(head,hp);
+        pages[4].addView(body);
+        return body;
     }
 
     /** بداية جديدة: تفريغ الحركات ثم تقييد الأرصدة الافتتاحية. */
     private void buildFreshStartSettings(){
-        pages[4].addView(sectionTitle("بداية جديدة"));
+        LinearLayout freshSection=section("بداية جديدة");
         LinearLayout box=panel(Color.WHITE);
         box.addView(text("تُفرَّغ كل الحركات وتبقى الطرمبات والصناديق والعملاء والأسعار.",
                 13,0xff7c8186,false));
@@ -351,7 +382,7 @@ public class ShiftActivity extends Activity {
         box.addView(opening,space());
         if(db.openingPosted())
             box.addView(text("✓ سبق تقييد أرصدة افتتاحية",12,Util.GREEN,true));
-        pages[4].addView(box,space());
+        freshSection.addView(box,space());
     }
 
     /** تفريغ الحركات بعد تأكيد مكتوب، فالعملية لا رجعة فيها. */
@@ -417,7 +448,7 @@ public class ShiftActivity extends Activity {
 
     /** سعات الخزانات ومطابقة العجز بالمقياس اليدوي. */
     private void buildTankSettings(){
-        pages[4].addView(sectionTitle("الخزانات ومطابقة العجز"));
+        LinearLayout tankSection=section("الخزانات ومطابقة العجز");
         LinearLayout box=panel(Color.WHITE);
         for(final String material:Db.MATERIALS){
             final double cap=db.capacity(material);
@@ -439,10 +470,10 @@ public class ShiftActivity extends Activity {
             View line=new View(this);line.setBackgroundColor(0xffeceef0);
             box.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
         }
-        pages[4].addView(box,space());
+        tankSection.addView(box,space());
         Button history=action("سجل المطابقات",false);
         history.setOnClickListener(v->dipHistory());
-        pages[4].addView(history,space());
+        tankSection.addView(history,space());
     }
 
     private void capacityDialog(final String material,double current){
@@ -523,7 +554,7 @@ public class ShiftActivity extends Activity {
 
     /** حدود التنبيه في لوحة التحكم. */
     private void buildThresholdSettings(){
-        pages[4].addView(sectionTitle("حدود التنبيه"));
+        LinearLayout limitSection=section("حدود التنبيه");
         LinearLayout box=panel(Color.WHITE);
         box.addView(thresholdRow("الصندوق المنخفض",money(db.lowCash())+" ريال",
                 "يُنبَّه على أي صندوق رصيده أقل من هذا الحد.",
@@ -537,7 +568,7 @@ public class ShiftActivity extends Activity {
         box.addView(thresholdRow("المخزون المنخفض",db.lowStockPercent()+"٪",
                 "تُنبَّه المادة التي ينزل مخزونها تحت هذه النسبة من السعة.",
                 v->numberDialog("نسبة المخزون المنخفض",db.lowStockPercent(),true,value->db.setLowStockPercent((int)value))));
-        pages[4].addView(box,space());
+        limitSection.addView(box,space());
     }
 
     private View thresholdRow(String title,String value,String note,View.OnClickListener tap){
@@ -576,7 +607,7 @@ public class ShiftActivity extends Activity {
         }
     }
     private void buildStationSettings(){
-        pages[4].addView(sectionTitle("المحطة"));
+        LinearLayout stationSection=section("المحطة");
         LinearLayout box=panel(Color.WHITE);
         box.addView(text(Branding.stationName(db),20,Util.NAVY,true));
         box.addView(text("اسم المحطة وشعارها يظهران في الواجهة والتقرير",13,0xff7c8186,false));
@@ -601,7 +632,7 @@ public class ShiftActivity extends Activity {
         box.addView(logo,space());
         Button remove=action("استخدام شعار وردية",false);
         remove.setOnClickListener(v->{Branding.removeLogo(this);refreshStationBrand();Toast.makeText(this,"تم استخدام شعار وردية",Toast.LENGTH_SHORT).show();});
-        box.addView(remove,space());pages[4].addView(box,space());
+        box.addView(remove,space());stationSection.addView(box,space());
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
