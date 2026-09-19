@@ -705,15 +705,23 @@ public class ControlPanelActivity extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.VERTICAL);
             row.setPadding(dp(14), dp(11), dp(14), dp(11));
+            // بعرض كامل، وإلا انهار الوزن والتصق المبلغ بالاسم.
+            row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
             LinearLayout line = new LinearLayout(this);
             line.setGravity(Gravity.CENTER_VERTICAL);
+            line.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+            // الاسم في طرف والرصيد في الطرف المقابل.
             TextView name = text(names.get(i), 15, Util.NAVY, true);
             name.setMaxLines(1);
+            name.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
             line.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
             TextView value = text(money(balance), 16, tint, true);
             value.setTextDirection(View.TEXT_DIRECTION_LTR);
-            line.addView(value);
+            value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-2, -2);
+            vp.setMargins(dp(12), 0, 0, 0);
+            line.addView(value, vp);
             row.addView(line);
 
             // شريط يوضّح نصيب الصندوق من النقد كله.
