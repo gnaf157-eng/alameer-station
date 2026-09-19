@@ -89,28 +89,39 @@ public class CashboxActivity extends Activity {
     /** بطاقة الإجمالي العام أعلى الشاشة. */
     private void refreshSummary() {
         summaryBox.removeAllViews();
-        double total = 0;
+        // الأرصدة الموجبة نقد متوفّر، والسالبة عجز. والصافي فرقهما.
+        double positive = 0, negative = 0;
         int count = 0;
-        double totalIn = 0, totalOut = 0;
         try (Cursor c = db.cashboxes(true)) {
-            while (c.moveToNext()) { count++; total += c.getDouble(6); totalIn += c.getDouble(4); totalOut += c.getDouble(5); }
+            while (c.moveToNext()) {
+                count++;
+                double balance = c.getDouble(6);
+                if (balance > 0.009) positive += balance;
+                else if (balance < -0.009) negative -= balance;
+            }
         }
+        double net = positive - negative;
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(Util.round(Util.NAVY, dp(18)));
-        card.addView(text("إجمالي أرصدة الصناديق", 13, 0xffCFE2FA, false));
-        TextView grand = text(money(total) + "  ر.ي", 30, Color.WHITE, true);
+        // الرصيد يظهر كما هو: موجبًا كان أو سالبًا.
+        card.addView(text(net < -0.009 ? "صافي الصناديق — عجز" : "صافي الصناديق — متوفّر",
+                13, 0xffCFE2FA, false));
+        TextView grand = text(money(net) + "  ر.ي", 30,
+                net < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(12));
         card.addView(grand);
+
         LinearLayout stats = new LinearLayout(this);
-        stats.addView(stat("الصناديق", String.valueOf(count)), statCell());
-        stats.addView(stat("إجمالي الوارد", money(totalIn)), statCell());
-        stats.addView(stat("إجمالي الصادر", money(totalOut)), statCell());
+        stats.addView(stat("نقد متوفّر", money(positive)), statCell());
+        stats.addView(stat("عجز", money(negative)), statCell());
+        stats.addView(stat("صافي الصناديق", money(net)), statCell());
         card.addView(stats);
         summaryBox.addView(card);
-        totalText.setText(count == 0 ? "" : money(total) + " ر.ي");
+        totalText.setText(count == 0 ? "" : money(net) + " ر.ي");
     }
 
     private LinearLayout.LayoutParams statCell() {

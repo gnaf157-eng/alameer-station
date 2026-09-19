@@ -169,17 +169,18 @@ public class HomeActivity extends Activity {
     private void refreshBalances() {
         if (cashValue == null) return;
         double cash = db.cashboxesTotal();
-        // لا إشارة سالبة: العجز يُسمّى باسمه بدل أن يُخفى.
-        cashValue.setText(cash < -0.009
-                ? "عجز " + money(-cash) + " ر.ي"
-                : money(cash) + " ر.ي");
+        // الرصيد يظهر كما هو، والعجز يُميَّز بلونه.
+        cashValue.setText(money(cash) + " ر.ي");
         cashValue.setTextColor(cash < -0.009 ? Util.RED : Util.GREEN);
 
         double debts = db.debtsTotal();
         double credits = db.creditsTotal();
-        debtValue.setText(money(Math.max(0, debts)) + " ر.ي");
-        debtValue.setTextColor(debts > 0.009 ? Util.RED : Util.GREEN);
-        debtNote.setText(credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين");
+        double netDebt = debts - credits;
+        debtValue.setText(money(netDebt) + " ر.ي");
+        debtValue.setTextColor(netDebt < -0.009 ? Util.RED : Util.GREEN);
+        debtNote.setText(credits > 0
+                ? "لنا " + money(debts) + " • علينا " + money(credits)
+                : "ديون وسداد المدينين");
 
         double litres = 0;
         for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
@@ -192,8 +193,8 @@ public class HomeActivity extends Activity {
         supplierValue.setTextColor(owed > 0.009 ? Util.RED : Util.GREEN);
         supplierNote.setText(owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد");
 
-        // رأس المال: الموجودات ناقص ما علينا.
-        double assets = cash + debts + value;
+        // رأس المال: الموجودات ناقص ما علينا. الديون بصافيها لا بإجماليها.
+        double assets = cash + netDebt + value;
         double capital = assets - owed;
         if (capital >= -0.009) {
             capitalValue.setText("رأس المال  " + money(capital) + " ر.ي");
