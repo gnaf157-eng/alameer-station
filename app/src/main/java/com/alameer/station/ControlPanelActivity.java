@@ -103,7 +103,7 @@ public class ControlPanelActivity extends Activity {
         box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
 
         box.addView(text("رأس المال", 13, 0xffCFE2FA, false));
-        TextView grand = text(money(capital) + "  ر.ي", 30,
+        TextView grand = text(whole(capital) + "  ر.ي", 30,
                 capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
@@ -118,20 +118,20 @@ public class ControlPanelActivity extends Activity {
                                    double owed, double capital) {
         StringBuilder sb = new StringBuilder();
         sb.append("الموجودات\n");
-        sb.append("\n• نقد الصناديق\n   ").append(money(cash)).append(" ر.ي\n");
-        sb.append("\n• صافي الديون\n   ").append(money(netDebt)).append(" ر.ي");
+        sb.append("\n• نقد الصناديق\n   ").append(whole(cash)).append(" ر.ي\n");
+        sb.append("\n• صافي الديون\n   ").append(whole(netDebt)).append(" ر.ي");
         double gross = db.debtsTotal(), owedUs = db.creditsTotal();
         if (owedUs > 0.009)
-            sb.append("\n   لنا ").append(money(gross)).append("  •  علينا ").append(money(owedUs));
+            sb.append("\n   لنا ").append(whole(gross)).append("  •  علينا ").append(whole(owedUs));
         sb.append("\n");
-        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(money(stock)).append(" ر.ي\n");
-        sb.append("\n   مجموع الموجودات ").append(money(cash + netDebt + stock)).append(" ر.ي\n");
+        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي\n");
+        sb.append("\n   مجموع الموجودات ").append(whole(cash + netDebt + stock)).append(" ر.ي\n");
 
         sb.append("\n\nالمطلوبات\n");
-        sb.append("\n• مستحق لشركة النفط\n   ").append(money(owed)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(owed)).append(" ر.ي\n");
 
         sb.append("\n\nرأس المال = الموجودات − المطلوبات\n");
-        sb.append("   ").append(money(capital)).append(" ر.ي");
+        sb.append("   ").append(whole(capital)).append(" ر.ي");
         if (capital < -0.009)
             sb.append("\n\n⚠ المطلوبات تتجاوز الموجودات.");
 
@@ -991,6 +991,11 @@ public class ControlPanelActivity extends Activity {
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
         return t;
+    }
+
+    /** رأس المال بالريالات الكاملة: لا كسور بعد الفاصلة. */
+    private String whole(double value) {
+        return String.format(Locale.US, "%,.0f", value);
     }
 
     private String money(double value) {
