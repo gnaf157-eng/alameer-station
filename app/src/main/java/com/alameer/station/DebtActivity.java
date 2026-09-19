@@ -99,34 +99,39 @@ public class DebtActivity extends Activity {
     /** بطاقة إجمالي الديون غير المسدّدة. */
     private void refreshSummary() {
         summaryBox.removeAllViews();
-        double total = 0, credit = 0, paid = 0;
-        int count = 0, settled = 0;
+        // ديون لنا: الأرصدة الموجبة. وديون علينا: السالبة. والصافي فرقهما.
+        double ours = 0, theirs = 0;
+        int count = 0;
         try (Cursor c = db.debtors(true)) {
             while (c.moveToNext()) {
                 count++;
                 double balance = c.getDouble(7);
-                if (balance > 0.009) total += balance;
-                else if (balance < -0.009) credit -= balance;
-                else settled++;
-                paid += c.getDouble(6);
+                if (balance > 0.009) ours += balance;
+                else if (balance < -0.009) theirs -= balance;
             }
         }
+        double net = ours - theirs;
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(Util.round(Util.NAVY, dp(18)));
-        card.addView(text("إجمالي الديون غير المسدّدة", 13, 0xffCFE2FA, false));
-        TextView grand = text(money(total) + "  ر.ي", 30, Color.WHITE, true);
+        // الرصيد يظهر كما هو: موجبًا كان أو سالبًا.
+        card.addView(text(net < -0.009 ? "صافي الديون — علينا" : "صافي الديون — لنا",
+                13, 0xffCFE2FA, false));
+        TextView grand = text(money(net) + "  ر.ي", 30,
+                net < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(12));
         card.addView(grand);
+
         LinearLayout stats = new LinearLayout(this);
-        stats.addView(stat("المدينون", String.valueOf(count)), cell());
-        stats.addView(stat("لهم عندنا", money(credit)), cell());
-        stats.addView(stat("مسدّدون بالكامل", String.valueOf(settled)), cell());
+        stats.addView(stat("ديون لنا", money(ours)), cell());
+        stats.addView(stat("ديون علينا", money(theirs)), cell());
+        stats.addView(stat("صافي الديون", money(net)), cell());
         card.addView(stats);
         summaryBox.addView(card);
-        totalText.setText(count == 0 ? "" : money(total) + " ر.ي");
+        totalText.setText(count == 0 ? "" : money(net) + " ر.ي");
     }
 
     /** بطاقة لكل مدين: الضغط عليها يسجّل حركة، والضغط المطوّل يفتح خياراته. */
