@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 17;
+    private static final int DB_VERSION = 18;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -53,7 +53,7 @@ public class Db extends SQLiteOpenHelper {
     public static String hash(String pin){ return Calc.hash(pin); }
 
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
-    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
+    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,currency TEXT NOT NULL DEFAULT 'YER',orig_amount REAL NOT NULL DEFAULT 0,rate REAL NOT NULL DEFAULT 1)";
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '',telegram TEXT NOT NULL DEFAULT '')";
     static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
@@ -88,6 +88,13 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<18){
+            for(String col:new String[]{"currency TEXT NOT NULL DEFAULT 'YER'",
+                    "orig_amount REAL NOT NULL DEFAULT 0","rate REAL NOT NULL DEFAULT 1"})
+                try{db.execSQL("ALTER TABLE cashbox_entries ADD COLUMN "+col);}catch(Exception ignored){}
+            // الحركات القديمة كلها بالريال اليمني.
+            try{db.execSQL("UPDATE cashbox_entries SET orig_amount=amount WHERE orig_amount=0");}catch(Exception ignored){}
+        }
         if(oldVersion<17){
             try{db.execSQL("ALTER TABLE debtors ADD COLUMN telegram TEXT NOT NULL DEFAULT ''");}catch(Exception ignored){}
         }
@@ -521,6 +528,66 @@ public class Db extends SQLiteOpenHelper {
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
+    // ==================== العملات وأسعار الصرف ====================
+
+    /** العملات المتاحة في إدخال حركة الصندوق. */
+    public static final String[] CURRENCIES={"YER","SAR","USD"};
+    public static final String[] CURRENCY_NAMES={"يمني","سعودي","دولار"};
+
+    public static String currencyName(String code){
+        for(int i=0;i<CURRENCIES.length;i++)if(CURRENCIES[i].equals(code))return CURRENCY_NAMES[i];
+        return code==null?"يمني":code;
+    }
+
+    /** سعر صرف العملة إلى الريال اليمني. اليمني دائمًا واحد. */
+    public double rate(String code){
+        if(code==null||"YER".equals(code))return 1;
+        try{
+            double v=Double.parseDouble(setting("rate_"+code,defaultRate(code)));
+            return v>0?v:Double.parseDouble(defaultRate(code));
+        }catch(Exception e){return Double.parseDouble(defaultRate(code));}
+    }
+
+    public void setRate(String code,double value){
+        if("YER".equals(code))throw new IllegalArgumentException("الريال اليمني هو عملة الأساس");
+        if(!(value>0))throw new IllegalArgumentException("اكتب سعر صرف أكبر من صفر");
+        setSetting("rate_"+code,String.valueOf(value));
+        audit("device",0,"SET_RATE",code,Calc.money(value)+" ريال يمني","سعر الصرف");
+    }
+
+    private static String defaultRate(String code){
+        if("SAR".equals(code))return "670";
+        if("USD".equals(code))return "2500";
+        return "1";
+    }
+
+    /** يحوّل مبلغًا من عملته إلى الريال اليمني. */
+    public double toYer(double amount,String code){
+        return amount*rate(code);
+    }
+
+    /**
+     * حركة صندوق بعملة محدّدة: يُحفظ المبلغ الأصلي وسعر الصرف،
+     * ويُخزَّن الرصيد بالريال اليمني حتى تبقى الأرصدة موحّدة.
+     */
+    public long addCashboxEntry(long boxId,String direction,double amount,String note,
+                                String date,String currency){
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        String code=currency==null||currency.trim().isEmpty()?"YER":currency.trim();
+        double rate=rate(code);
+        double yer=amount*rate;
+        String label=note==null?"":note.trim();
+        // العملة الأجنبية تُذكر في البيان ليُعرف أصل المبلغ.
+        if(!"YER".equals(code))
+            label=(label.isEmpty()?"":label+" — ")+Calc.money(amount)+" "+currencyName(code)
+                    +" × "+Calc.money(rate);
+        long id=addCashboxEntry(boxId,direction,yer,label,date,0);
+        ContentValues v=new ContentValues();
+        v.put("currency",code);v.put("orig_amount",amount);v.put("rate",rate);
+        getWritableDatabase().update("cashbox_entries",v,"id=?",new String[]{String.valueOf(id)});
+        return id;
+    }
+
     public long addCashboxEntry(long boxId,String direction,double amount,String note,String date){
         return addCashboxEntry(boxId,direction,amount,note,date,0);
     }

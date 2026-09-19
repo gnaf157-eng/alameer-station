@@ -42,6 +42,19 @@ public class CashboxActivity extends Activity {
         totalText = text("", 17, 0xffCFE2FA, true);
         totalText.setTextDirection(View.TEXT_DIRECTION_RTL);
         header.addView(totalText);
+
+        // ترس أسعار الصرف.
+        ImageButton gear = new ImageButton(this);
+        gear.setContentDescription("أسعار الصرف");
+        gear.setPadding(dp(10), dp(10), dp(10), dp(10));
+        gear.setImageDrawable(new GearIcon());
+        gear.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(0x22FFFFFF, dp(21)), Util.round(Color.WHITE, dp(21))));
+        gear.setOnClickListener(v -> ratesDialog());
+        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        gp.setMargins(dp(10), 0, 0, 0);
+        header.addView(gear, gp);
         shell.addView(header);
 
         LinearLayout content = new LinearLayout(this);
@@ -87,6 +100,99 @@ public class CashboxActivity extends Activity {
     }
 
     /** بطاقة الإجمالي العام أعلى الشاشة. */
+    /** ضبط سعر صرف كل عملة أجنبية إلى الريال اليمني. */
+    private void ratesDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(10), dp(22), 0);
+        box.addView(text("كم ريالًا يمنيًا يساوي الواحد من كل عملة؟", 13, 0xff7c8186, false));
+
+        for (int i = 0; i < Db.CURRENCIES.length; i++) {
+            final String code = Db.CURRENCIES[i];
+            if ("YER".equals(code)) continue;
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(10), 0, dp(10));
+            row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+
+            LinearLayout words = new LinearLayout(this);
+            words.setOrientation(LinearLayout.VERTICAL);
+            words.addView(text("الريال " + Db.currencyName(code), 17, Util.NAVY, true));
+            words.addView(text("١ " + Db.currencyName(code) + " = " + money(db.rate(code)) + " ر.ي",
+                    12, 0xff7c8186, false));
+            row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+
+            Button edit = action("تغيير", false);
+            edit.setTextSize(13);
+            edit.setOnClickListener(v -> rateDialog(code));
+            row.addView(edit);
+            box.addView(row);
+
+            View line = new View(this);
+            line.setBackgroundColor(0xffeceef0);
+            box.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+        }
+        box.addView(text("الأرصدة تُحفظ بالريال اليمني، فتغيير السعر لا يغيّر الحركات السابقة.",
+                12, 0xff8b9097, false));
+
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
+        new AlertDialog.Builder(this).setTitle("أسعار الصرف")
+                .setView(form).setPositiveButton("تم", null).show();
+    }
+
+    private void rateDialog(final String code) {
+        final EditText input = new EditText(this);
+        styleInput(input);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setText(money(db.rate(code)).replace(",", ""));
+        input.setSelectAllOnFocus(true);
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(24), dp(8), dp(24), 0);
+        wrap.addView(wrapText("١ " + Db.currencyName(code) + " = كم ريالًا يمنيًا؟"));
+        wrap.addView(input);
+        new AlertDialog.Builder(this).setTitle("سعر صرف الريال " + Db.currencyName(code))
+                .setView(wrap)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    try {
+                        db.setRate(code, Calc.number(input.getText().toString()));
+                        refresh();
+                        ratesDialog();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
+    private TextView wrapText(String value) { return text(value, 13, 0xff7c8186, false); }
+
+    /** ترس مرسوم بلا ملف صورة. */
+    private class GearIcon extends android.graphics.drawable.Drawable {
+        final android.graphics.Paint ink = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        public void draw(android.graphics.Canvas c) {
+            c.save();
+            c.translate(getBounds().left, getBounds().top);
+            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+            ink.setColor(Color.WHITE);
+            ink.setStyle(android.graphics.Paint.Style.STROKE);
+            ink.setStrokeWidth(2.3f);
+            ink.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+            c.drawCircle(12, 12, 7, ink);
+            c.drawCircle(12, 12, 2.8f, ink);
+            for (int i = 0; i < 8; i++) {
+                double a = Math.PI * i / 4;
+                c.drawLine((float) (12 + Math.cos(a) * 7), (float) (12 + Math.sin(a) * 7),
+                        (float) (12 + Math.cos(a) * 10), (float) (12 + Math.sin(a) * 10), ink);
+            }
+            c.restore();
+        }
+        public void setAlpha(int a) {}
+        public void setColorFilter(android.graphics.ColorFilter f) {}
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
     private void refreshSummary() {
         summaryBox.removeAllViews();
         // الأرصدة الموجبة نقد متوفّر، والسالبة عجز. والصافي فرقهما.
@@ -387,6 +493,11 @@ public class CashboxActivity extends Activity {
         kind.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"وارد (دخول نقد)", "صادر (خروج نقد)"}));
 
+        // العملة بجانب نوع الحركة؛ الرصيد يبقى بالريال اليمني دائمًا.
+        final Spinner currency = new Spinner(this);
+        currency.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                Db.CURRENCY_NAMES));
+
         // الاسم أولًا، ويقترح كل الأسماء المحفوظة في التطبيق.
         final AutoCompleteTextView note = new AutoCompleteTextView(this);
         styleInput(note);
@@ -415,12 +526,16 @@ public class CashboxActivity extends Activity {
             }, Integer.parseInt(parts[0]), Integer.parseInt(parts[1]) - 1, Integer.parseInt(parts[2])).show();
         });
 
-        // الرصيد المتوقّع يتحدّث مع الكتابة.
+        // الرصيد المتوقّع يتحدّث مع الكتابة، ويبيّن التحويل إن كانت العملة أجنبية.
         final Runnable preview = () -> {
-            double value = Calc.number(amount.getText().toString());
-            if (!(value > 0)) { afterText.setText(""); return; }
+            double entered = Calc.number(amount.getText().toString());
+            if (!(entered > 0)) { afterText.setText(""); return; }
+            String code = Db.CURRENCIES[currency.getSelectedItemPosition()];
+            double value = db.toYer(entered, code);
             double after = kind.getSelectedItemPosition() == 0 ? opening + value : opening - value;
-            afterText.setText("الرصيد بعد الحركة: " + money(after) + " ر.ي");
+            String line = "YER".equals(code) ? ""
+                    : money(entered) + " " + Db.currencyName(code) + " = " + money(value) + " ر.ي\n";
+            afterText.setText(line + "الرصيد بعد الحركة: " + money(after) + " ر.ي");
             afterText.setTextColor(after < 0 ? Util.RED : Util.GREEN);
         };
         amount.addTextChangedListener(new android.text.TextWatcher() {
@@ -428,17 +543,37 @@ public class CashboxActivity extends Activity {
             public void onTextChanged(CharSequence t, int a, int b, int c) {}
             public void afterTextChanged(android.text.Editable e) { preview.run(); }
         });
-        kind.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { preview.run(); }
+        AdapterView.OnItemSelectedListener redraw = new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                amount.setHint("YER".equals(Db.CURRENCIES[currency.getSelectedItemPosition()])
+                        ? "المبلغ بالريال اليمني"
+                        : "المبلغ بالـ" + Db.currencyName(Db.CURRENCIES[currency.getSelectedItemPosition()]));
+                preview.run();
+            }
             public void onNothingSelected(AdapterView<?> parent) {}
-        });
+        };
+        kind.setOnItemSelectedListener(redraw);
+        currency.setOnItemSelectedListener(redraw);
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(10), dp(24), 0);
         box.addView(balanceCard);
-        box.addView(text("نوع الحركة", 13, 0xff7c8186, false), space());
-        box.addView(kind);
+        LinearLayout kinds = new LinearLayout(this);
+        kinds.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout kindCol = new LinearLayout(this);
+        kindCol.setOrientation(LinearLayout.VERTICAL);
+        kindCol.addView(text("نوع الحركة", 13, 0xff7c8186, false));
+        kindCol.addView(kind);
+        kinds.addView(kindCol, new LinearLayout.LayoutParams(0, -2, 2));
+        LinearLayout curCol = new LinearLayout(this);
+        curCol.setOrientation(LinearLayout.VERTICAL);
+        curCol.addView(text("العملة", 13, 0xff7c8186, false));
+        curCol.addView(currency);
+        LinearLayout.LayoutParams cw = new LinearLayout.LayoutParams(0, -2, 1);
+        cw.setMargins(dp(10), 0, 0, 0);
+        kinds.addView(curCol, cw);
+        box.addView(kinds, space());
         box.addView(text("الاسم", 13, 0xff7c8186, false), space());
         box.addView(note);
         box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
@@ -454,14 +589,17 @@ public class CashboxActivity extends Activity {
                 .setNegativeButton("إلغاء", null)
                 .create();
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            double value = Calc.number(amount.getText().toString());
-            if (!(value > 0)) { amount.setError("اكتب مبلغًا أكبر من صفر"); return; }
+            double entered = Calc.number(amount.getText().toString());
+            if (!(entered > 0)) { amount.setError("اكتب مبلغًا أكبر من صفر"); return; }
+            final String code = Db.CURRENCIES[currency.getSelectedItemPosition()];
+            // المبلغ يُحوَّل إلى الريال اليمني قبل المقارنة والحفظ.
+            final double value = db.toYer(entered, code);
             String direction = kind.getSelectedItemPosition() == 0 ? "IN" : "OUT";
             if ("OUT".equals(direction) && opening < value) {
                 new AlertDialog.Builder(this).setTitle("رصيد غير كافٍ")
                         .setMessage("رصيد الصندوق " + money(opening) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
                         .setPositiveButton("سجّل", (d, w) -> {
-                            db.addCashboxEntry(boxId, direction, value, note.getText().toString(), date[0]);
+                            db.addCashboxEntry(boxId, direction, entered, note.getText().toString(), date[0], code);
                             db.rememberName("CASH", note.getText().toString());
                             dialog.dismiss();
                             refresh();
@@ -470,7 +608,7 @@ public class CashboxActivity extends Activity {
                 return;
             }
             try {
-                db.addCashboxEntry(boxId, direction, value, note.getText().toString(), date[0]);
+                db.addCashboxEntry(boxId, direction, entered, note.getText().toString(), date[0], code);
                 db.rememberName("CASH", note.getText().toString());
             } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
             dialog.dismiss();
