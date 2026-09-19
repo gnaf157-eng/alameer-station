@@ -528,6 +528,86 @@ public class Db extends SQLiteOpenHelper {
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
+    // ==================== تعديل الحركات ====================
+
+    /** بيانات حركة صندوق: 0=direction,1=amount,2=note,3=entry_date,4=source_shift,5=currency,6=orig_amount */
+    public Cursor cashboxEntry(long id){
+        return getReadableDatabase().rawQuery(
+            "SELECT direction,amount,note,entry_date,source_shift,"+
+            "COALESCE(currency,'YER'),COALESCE(NULLIF(orig_amount,0),amount) "+
+            "FROM cashbox_entries WHERE id=?",new String[]{String.valueOf(id)});
+    }
+
+    /**
+     * يعدّل حركة صندوق: يعكس قيدها القديم ويكتب الجديد،
+     * ويسجّل القيمة قبل وبعد في سجل التدقيق.
+     */
+    public void updateCashboxEntry(long id,String direction,double amount,String note,
+                                   String date,String currency){
+        if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        String before="";long boxId=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT box_id,direction,amount,note,source_shift FROM cashbox_entries WHERE id=?",
+                new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
+            if(c.getLong(4)>0)throw new IllegalStateException("حركة مرحّلة من وردية ولا تُعدَّل يدويًا");
+            boxId=c.getLong(0);
+            before=("IN".equals(c.getString(1))?"وارد ":"صادر ")+Calc.money(c.getDouble(2))+" — "+c.getString(3);
+        }
+        String code=currency==null||currency.trim().isEmpty()?"YER":currency.trim();
+        double rate=rate(code);
+        double yer=amount*rate;
+        String label=note==null?"":note.trim();
+        if(!"YER".equals(code))
+            label=(label.isEmpty()?"":label+" — ")+Calc.money(amount)+" "+currencyName(code)
+                    +" × "+Calc.money(rate);
+
+        reverseManual("CASHBOX",id);
+        ContentValues v=new ContentValues();
+        v.put("direction",direction);v.put("amount",yer);v.put("note",label);
+        v.put("entry_date",date);v.put("currency",code);v.put("orig_amount",amount);v.put("rate",rate);
+        getWritableDatabase().update("cashbox_entries",v,"id=?",new String[]{String.valueOf(id)});
+        journalManual("cashbox",id,date,label,yer,
+                "IN".equals(direction)?Journal.CASH:Journal.SUSPENSE,
+                "IN".equals(direction)?Journal.SUSPENSE:Journal.CASH);
+        audit("cashbox",id,"EDIT_ENTRY",before,
+                ("IN".equals(direction)?"وارد ":"صادر ")+Calc.money(yer)+" — "+label,"تعديل حركة صندوق");
+    }
+
+    /** بيانات حركة دين: 0=direction,1=amount,2=note,3=entry_date,4=source_shift,5=debtor_id */
+    public Cursor debtEntry(long id){
+        return getReadableDatabase().rawQuery(
+            "SELECT direction,amount,note,entry_date,source_shift,debtor_id "+
+            "FROM debt_entries WHERE id=?",new String[]{String.valueOf(id)});
+    }
+
+    /** يعدّل حركة دين بنفس القاعدة: عكس القيد القديم وكتابة الجديد. */
+    public void updateDebtEntry(long id,String direction,double amount,String note,String date){
+        if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
+        if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
+        String before="";long debtorId=0;
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT debtor_id,direction,amount,note,source_shift FROM debt_entries WHERE id=?",
+                new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
+            if(c.getLong(4)>0)throw new IllegalStateException("حركة مرحّلة من وردية ولا تُعدَّل يدويًا");
+            debtorId=c.getLong(0);
+            before=("DEBT".equals(c.getString(1))?"دين ":"سداد ")+Calc.money(c.getDouble(2))+" — "+c.getString(3);
+        }
+        String clean=note==null?"":note.trim();
+        reverseManual("DEBT",id);
+        ContentValues v=new ContentValues();
+        v.put("direction",direction);v.put("amount",amount);v.put("note",clean);v.put("entry_date",date);
+        getWritableDatabase().update("debt_entries",v,"id=?",new String[]{String.valueOf(id)});
+        String who=debtorName(debtorId);
+        journalManual("debt",id,date,("DEBT".equals(direction)?"دين على ":"سداد من ")+who,amount,
+                "DEBT".equals(direction)?Journal.RECEIVABLE:Journal.SUSPENSE,
+                "DEBT".equals(direction)?Journal.SUSPENSE:Journal.RECEIVABLE);
+        audit("debt",id,"EDIT_ENTRY",before,
+                ("DEBT".equals(direction)?"دين ":"سداد ")+Calc.money(amount)+" — "+clean,"تعديل حركة دين");
+    }
+
     // ==================== العملات وأسعار الصرف ====================
 
     /** العملات المتاحة في إدخال حركة الصندوق. */

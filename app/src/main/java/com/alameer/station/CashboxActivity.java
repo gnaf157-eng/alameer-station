@@ -100,6 +100,107 @@ public class CashboxActivity extends Activity {
     }
 
     /** بطاقة الإجمالي العام أعلى الشاشة. */
+    /** تعديل الحركة أو حذفها. */
+    private void entryOptions(final long id) {
+        new AlertDialog.Builder(this).setTitle("الحركة")
+                .setItems(new String[]{"تعديل الحركة", "حذف الحركة"}, (d, which) -> {
+                    if (which == 0) editEntryDialog(id);
+                    else new AlertDialog.Builder(this).setTitle("حذف الحركة")
+                            .setMessage("سيُحذف هذا السطر ويتغيّر رصيد الصندوق.")
+                            .setPositiveButton("حذف", (a, b) -> { db.deleteCashboxEntry(id); refresh(); })
+                            .setNegativeButton("إلغاء", null).show();
+                }).show();
+    }
+
+    /** نافذة تعديل حركة صندوق مسجّلة. */
+    private void editEntryDialog(final long id) {
+        String dir = "IN", note = "", when = ShiftDates.today(), code = "YER";
+        double orig = 0;
+        try (Cursor c = db.cashboxEntry(id)) {
+            if (!c.moveToFirst()) { Toast.makeText(this, "الحركة غير موجودة", Toast.LENGTH_SHORT).show(); return; }
+            dir = c.getString(0); note = c.getString(2); when = c.getString(3);
+            code = c.getString(5); orig = c.getDouble(6);
+            if (c.getLong(4) > 0) {
+                new AlertDialog.Builder(this).setTitle("حركة مرتبطة بوردية")
+                        .setMessage("رُحّلت تلقائيًا من وردية ولا تُعدَّل يدويًا.")
+                        .setPositiveButton("حسنًا", null).show();
+                return;
+            }
+        }
+
+        final Spinner kind = new Spinner(this);
+        kind.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"وارد (دخول نقد)", "صادر (خروج نقد)"}));
+        kind.setSelection("IN".equals(dir) ? 0 : 1);
+
+        final Spinner currency = new Spinner(this);
+        currency.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                Db.CURRENCY_NAMES));
+        for (int i = 0; i < Db.CURRENCIES.length; i++)
+            if (Db.CURRENCIES[i].equals(code)) currency.setSelection(i);
+
+        // البيان يُنظَّف من لاحقة التحويل حتى لا تتكرّر عند الحفظ.
+        String clean = note == null ? "" : note;
+        int cut = clean.indexOf(" — ");
+        if (cut > 0 && !"YER".equals(code)) clean = clean.substring(0, cut);
+        final AutoCompleteTextView noteInput = new AutoCompleteTextView(this);
+        styleInput(noteInput);
+        noteInput.setHint("الاسم أو البيان");
+        noteInput.setText(clean);
+        noteInput.setThreshold(1);
+        noteInput.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, db.allNames()));
+
+        final EditText amount = new EditText(this);
+        styleInput(amount);
+        amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        amount.setText(money(orig).replace(",", ""));
+        amount.setSelectAllOnFocus(true);
+
+        final String[] date = {when};
+        final Button dateButton = action("التاريخ: " + date[0], false);
+        dateButton.setOnClickListener(v -> {
+            String[] parts = date[0].split("-");
+            new android.app.DatePickerDialog(this, (picker, y, m, d) -> {
+                date[0] = String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d);
+                dateButton.setText("التاريخ: " + date[0]);
+            }, Integer.parseInt(parts[0]), Integer.parseInt(parts[1]) - 1, Integer.parseInt(parts[2])).show();
+        });
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(8), dp(22), 0);
+        box.addView(text("نوع الحركة", 13, 0xff7c8186, false));
+        box.addView(kind);
+        box.addView(text("العملة", 13, 0xff7c8186, false));
+        box.addView(currency);
+        box.addView(text("الاسم", 13, 0xff7c8186, false));
+        box.addView(noteInput);
+        box.addView(text("المبلغ", 13, 0xff7c8186, false));
+        box.addView(amount);
+        box.addView(dateButton);
+        ScrollView form = new ScrollView(this);
+        form.addView(box);
+
+        new AlertDialog.Builder(this).setTitle("تعديل الحركة")
+                .setView(form)
+                .setPositiveButton("حفظ", (d, w) -> {
+                    try {
+                        db.updateCashboxEntry(id,
+                                kind.getSelectedItemPosition() == 0 ? "IN" : "OUT",
+                                Calc.number(amount.getText().toString()),
+                                noteInput.getText().toString(), date[0],
+                                Db.CURRENCIES[currency.getSelectedItemPosition()]);
+                        db.rememberName("CASH", noteInput.getText().toString());
+                        refresh();
+                        Toast.makeText(this, "عُدّلت الحركة", Toast.LENGTH_SHORT).show();
+                    } catch (Exception e) {
+                        Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("إلغاء", null).show();
+    }
+
     /** ضبط سعر صرف كل عملة أجنبية إلى الريال اليمني. */
     private void ratesDialog() {
         LinearLayout box = new LinearLayout(this);
@@ -387,10 +488,7 @@ public class CashboxActivity extends Activity {
                                 .setPositiveButton("حسنًا", null).show();
                         return true;
                     }
-                    new AlertDialog.Builder(this).setTitle("حذف الحركة")
-                            .setMessage("سيُحذف هذا السطر ويتغيّر رصيد الصندوق.")
-                            .setPositiveButton("حذف", (d, w) -> { db.deleteCashboxEntry(id); refresh(); })
-                            .setNegativeButton("إلغاء", null).show();
+                    entryOptions(id);
                     return true;
                 });
                 entriesBox.addView(row);
@@ -400,7 +498,7 @@ public class CashboxActivity extends Activity {
             }
         }
         if (count == 0) entriesBox.addView(text("لا توجد حركات مسجّلة بعد.", 15, 0xff777d84, false));
-        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لحذفها", 11, 0xff8b9097, false), space());
+        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لتعديلها أو حذفها", 11, 0xff8b9097, false), space());
     }
 
     /** إضافة صندوق أو تعديله. */
@@ -896,10 +994,7 @@ public class CashboxActivity extends Activity {
                                     .setPositiveButton("حسنًا", null).show();
                             return true;
                         }
-                        new AlertDialog.Builder(this).setTitle("حذف الحركة")
-                                .setMessage("سيُحذف هذا السطر نهائيًا ويتغيّر الرصيد.")
-                                .setPositiveButton("حذف", (d, w) -> { deleteEntry(entryId); refresh(); })
-                                .setNegativeButton("إلغاء", null).show();
+                        entryOptions(entryId);
                         return true;
                     });
                 }
@@ -912,7 +1007,7 @@ public class CashboxActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(box);
         new AlertDialog.Builder(this).setTitle(title).setView(scroll)
-                .setMessage(lines.isEmpty() ? null : "اضغط مطوّلًا على أي حركة لحذفها")
+                .setMessage(lines.isEmpty() ? null : "اضغط مطوّلًا على أي حركة لتعديلها أو حذفها")
                 .setPositiveButton("إغلاق", null).show();
     }
 
