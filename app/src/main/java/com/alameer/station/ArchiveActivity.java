@@ -36,7 +36,7 @@ public class ArchiveActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("الأرشيف", 19, Color.WHITE, true));
-        words.addView(text("الورديات المرحّلة — تقارير PDF و Excel", 11, 0xffCFE2FA, false));
+        words.addView(text("الورديات المرحّلة — فتح PDF أو مشاركة Excel", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -139,68 +139,28 @@ public class ArchiveActivity extends Activity {
                 .setNegativeButton("إلغاء", null)
                 .create();
 
-        String[] labels = {"فتح PDF", "مشاركة PDF", "مشاركة Excel", "حفظ Excel في التنزيلات"};
+        // خياران فقط: قراءة التقرير، أو مشاركته كملف إكسل.
+        String[] labels = {"فتح PDF", "مشاركة Excel"};
         for (int i = 0; i < labels.length; i++) {
             final int which = i;
             Button b = new Button(this);
             b.setText(labels[i]);
             b.setAllCaps(false);
             b.setTextSize(16);
-            b.setTextColor(which == 3 ? Color.WHITE : Util.NAVY);
+            b.setTextColor(which == 1 ? Color.WHITE : Util.NAVY);
             b.setStateListAnimator(null);
-            b.setBackground(Util.round(which == 3 ? Util.ACCENT : Util.ACCENT_SOFT, dp(12)));
+            b.setBackground(Util.round(which == 1 ? Util.ACCENT : Util.ACCENT_SOFT, dp(12)));
             b.setPadding(dp(12), dp(12), dp(12), dp(12));
             b.setOnClickListener(v -> {
                 dialog.dismiss();
                 if (which == 0) share(id, true, false);
-                else if (which == 1) share(id, false, false);
-                else if (which == 2) share(id, false, true);
-                else saveToDownloads(id);
+                else share(id, false, true);
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.setMargins(0, dp(8), 0, 0);
             box.addView(b, lp);
         }
         dialog.show();
-    }
-
-    /**
-     * يحفظ ملف الإكسل في مجلد التنزيلات مباشرة.
-     * لا يعتمد على قبول التطبيقات الأخرى للملف، فيعمل دائمًا.
-     */
-    private void saveToDownloads(final long id) {
-        Toast.makeText(this, "جارٍ تجهيز الملف...", Toast.LENGTH_SHORT).show();
-        new Thread(() -> {
-            String message;
-            try {
-                java.io.File file = new ExcelReport(this, db).build(id);
-                String name = file.getName();
-
-                android.content.ContentValues values = new android.content.ContentValues();
-                values.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name);
-                values.put(android.provider.MediaStore.Downloads.MIME_TYPE,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                android.net.Uri target = getContentResolver().insert(
-                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                if (target == null) throw new java.io.IOException("تعذر إنشاء الملف في التنزيلات");
-
-                try (java.io.InputStream in = new java.io.FileInputStream(file);
-                     java.io.OutputStream out = getContentResolver().openOutputStream(target)) {
-                    byte[] buffer = new byte[8192];
-                    int n;
-                    while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
-                }
-                message = "حُفظ الملف في التنزيلات باسم:\n" + name;
-            } catch (Exception e) {
-                message = "تعذر الحفظ: " + e.getMessage();
-            }
-            final String shown = message;
-            runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                new AlertDialog.Builder(this).setTitle("حفظ Excel")
-                        .setMessage(shown).setPositiveButton("حسنًا", null).show();
-            });
-        }).start();
     }
 
     /**
