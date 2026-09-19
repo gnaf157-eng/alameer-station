@@ -213,7 +213,7 @@ public class ExpenseActivity extends Activity {
                     }
                     new AlertDialog.Builder(this).setTitle("حذف المخرج")
                             .setMessage("سيُحذف هذا السطر من سجل المخاريج.\nإن كان مدفوعًا من صندوق فاحذف حركة الصندوق يدويًا.")
-                            .setPositiveButton("حذف", (d, w) -> { db.deleteExpense(id); refresh(); })
+                            .setPositiveButton("حذف", (d, w) -> { try{db.deleteExpense(id); refresh();}catch(Exception e){new AlertDialog.Builder(this).setTitle("تعذّر الحذف").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();} })
                             .setNegativeButton("إلغاء", null).show();
                     return true;
                 });

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 41066)
-Total output lines: 2505
-
 package com.alameer.station.shifts;
 
 import android.content.*;
@@ -272,7 +269,7 @@ public class Db extends SQLiteOpenHelper {
     }
     /** يسحب أسعار الطرمبات المحدّثة إلى وردية مفتوحة ويعيد حساب مبيعاتها. */
     public void refreshShiftPrices(long shiftId){
-        if(isHistorical(shiftId))return;
+        if(isHistorical(shiftId)||!isOpen(shiftId))return;
         SQLiteDatabase db=getWritableDatabase();
         db.execSQL("UPDATE readings SET price=(SELECT p.price FROM pumps p WHERE p.id=readings.pump_id) WHERE shift_id=?",new Object[]{shiftId});
         db.execSQL("UPDATE readings SET sales=(current-previous)*price WHERE shift_id=? AND current IS NOT NULL",new Object[]{shiftId});
@@ -283,7 +280,7 @@ public class Db extends SQLiteOpenHelper {
      * لا نلمس طرمبة أدخل لها العامل قراءة حالية، حتى لا تضيع مبيعاته.
      */
     public void refreshShiftPrevious(long shiftId){
-        if(isHistorical(shiftId))return;
+        if(isHistorical(shiftId)||!isOpen(shiftId))return;
         getWritableDatabase().execSQL(
             "UPDATE readings SET previous=(SELECT p.last_reading FROM pumps p WHERE p.id=readings.pump_id) "+
             "WHERE shift_id=? AND current IS NULL",new Object[]{shiftId});
@@ -291,14 +288,14 @@ public class Db extends SQLiteOpenHelper {
 
     /** يزامن الوردية المفتوحة مع أي تغيير في الإعدادات: طرمبات جديدة، أسعار، وعدّادات. */
     public void syncShiftWithSettings(long shiftId){
-        if(isHistorical(shiftId))return;
+        if(isHistorical(shiftId)||!isOpen(shiftId))return;
         syncShiftPumps(shiftId);
         refreshShiftPrevious(shiftId);
         refreshShiftPrices(shiftId);
     }
     /** يضمّ أي طرمبة نشطة أُضيفت بعد فتح الوردية. */
     public int syncShiftPumps(long shiftId){
-        if(isHistorical(shiftId))return 0;
+        if(isHistorical(shiftId)||!isOpen(shiftId))return 0;
         SQLiteDatabase db=getWritableDatabase();int added=0;
         try(Cursor c=db.rawQuery("SELECT id,last_reading,price FROM pumps WHERE active=1 AND id NOT IN (SELECT pump_id FROM readings WHERE shift_id=?) ORDER BY id",new String[]{String.valueOf(shiftId)})){
             while(c.moveToNext()){
@@ -367,14 +364,14 @@ public class Db extends SQLiteOpenHelper {
      */
     /** ترتيب موحّد للمواد: بترول ثم ديزل ثم غاز. */
     static final String FUEL_ORDER="CASE TRIM(p.fuel) WHEN 'بترول' THEN 0 WHEN 'البترول' THEN 0 WHEN 'بنزين' THEN 0 WHEN 'البنزين' THEN 0 WHEN 'ديزل' THEN 1 WHEN 'الديزل' THEN 1 WHEN 'غاز' THEN 2 WHEN 'الغاز' THEN 2 ELSE 3 END";
-    private static final String LIVE_PUMP = "(p.active=1 OR r.current IS NOT NULL)";
+    private static final String LIVE_PUMP = "(r.current IS NOT NULL OR (p.active=1 AND EXISTS(SELECT 1 FROM shifts live WHERE live.id=r.shift_id AND live.status IN ('OPEN','RETURNED'))))";
     public Cursor shiftReadings(long shiftId){return getReadableDatabase().rawQuery("SELECT r.id,p.name,p.fuel,r.previous,r.current,r.price,r.sales,p.active FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP+" ORDER BY CASE TRIM(p.fuel) WHEN 'بترول' THEN 0 WHEN 'البترول' THEN 0 WHEN 'بنزين' THEN 0 WHEN 'البنزين' THEN 0 WHEN 'ديزل' THEN 1 WHEN 'الديزل' THEN 1 WHEN 'غاز' THEN 2 WHEN 'الغاز' THEN 2 ELSE 3 END,p.id",new String[]{String.valueOf(shiftId)});}
-    public boolean saveReading(long readingId,double current){SQLiteDatabase db=getWritableDatabase();try(Cursor c=db.rawQuery("SELECT previous,price FROM readings WHERE id=?",new String[]{String.valueOf(readingId)})){if(c.moveToFirst()){double previous=c.getDouble(0),price=c.getDouble(1);if(current<previous)return false;ContentValues v=new ContentValues();v.put("current",current);v.put("sales",Calc.pumpSales(previous,current,price));db.update("readings",v,"id=?",new String[]{String.valueOf(readingId)});return true;}}return false;}
+    public boolean saveReading(long readingId,double current){SQLiteDatabase db=getWritableDatabase();try(Cursor c=db.rawQuery("SELECT previous,price FROM readings WHERE id=? AND EXISTS(SELECT 1 FROM shifts s WHERE s.id=readings.shift_id AND s.status IN ('OPEN','RETURNED'))",new String[]{String.valueOf(readingId)})){if(c.moveToFirst()){double previous=c.getDouble(0),price=c.getDouble(1);if(!Double.isFinite(current)||!Double.isFinite(previous)||!Double.isFinite(price)||price<=0||current<previous||!Double.isFinite(Calc.pumpSales(previous,current,price)))return false;ContentValues v=new ContentValues();v.put("current",current);v.put("sales",Calc.pumpSales(previous,current,price));db.update("readings",v,"id=?",new String[]{String.valueOf(readingId)});return true;}}return false;}
     /** تعديل القراءة السابقة يدويًا، مع إعادة حساب المبيعات إن كانت الحالية مُدخلة. */
     public boolean savePrevious(long readingId,double previous){
-        if(previous<0)return false;
+        if(!Double.isFinite(previous)||previous<0)return false;
         SQLiteDatabase db=getWritableDatabase();
-        try(Cursor c=db.rawQuery("SELECT current,price FROM readings WHERE id=?",new String[]{String.valueOf(readingId)})){
+        try(Cursor c=db.rawQuery("SELECT current,price FROM readings WHERE id=? AND EXISTS(SELECT 1 FROM shifts s WHERE s.id=readings.shift_id AND s.status IN ('OPEN','RETURNED'))",new String[]{String.valueOf(readingId)})){
             if(!c.moveToFirst())return false;
             boolean hasCurrent=!c.isNull(0);
             double current=c.getDouble(0),price=c.getDouble(1);
@@ -437,6 +434,25 @@ public class Db extends SQLiteOpenHelper {
     }
     public double sales(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(CASE WHEN r.current IS NOT NULL AND r.current>=r.previous AND r.price>0 THEN (r.current-r.previous)*r.price ELSE 0 END),0) FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP,new String[]{String.valueOf(shiftId)})){c.moveToFirst();return c.getDouble(0);}}
     public double balance(long shiftId){return Calc.balance(sales(shiftId),total(shiftId,"COLLECTION"),total(shiftId,"CASH"),total(shiftId,"DEBT"),total(shiftId,"EXPENSE"));}
+    /** Status, pump handover, ledgers and journal commit together. */
+    public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){
+        return atomic(()->{
+            if(!isOpen(shiftId))throw new IllegalStateException("الوردية مغلقة بالفعل");
+            requireDate(shiftDate(shiftId));
+            String error=validateShift(shiftId);
+            if(!error.isEmpty())throw new IllegalStateException(error);
+            double difference=balance(shiftId);
+            if(!Double.isFinite(difference))throw new IllegalStateException("توجد قيمة غير صالحة في الوردية");
+            String why=reason==null?"":reason.trim();
+            boolean matched=Calc.matched(difference);
+            if(!matched&&why.isEmpty())throw new IllegalStateException("اكتب سبب الفرق قبل الإغلاق");
+            submit(shiftId,workerId,why);
+            if(matched)approve(shiftId);else closeUnmatched(shiftId);
+            String result=postShift(shiftId,cashboxId);
+            journalShift(shiftId);
+            return result;
+        });
+    }
     public void submit(long shiftId,int workerId,String reason){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("sales",sales(shiftId));v.put("collections",total(shiftId,"COLLECTION"));v.put("cash_delivered",total(shiftId,"CASH"));v.put("debts",total(shiftId,"DEBT"));v.put("expenses",total(shiftId,"EXPENSE"));v.put("balance",balance(shiftId));v.put("difference_reason",reason);v.put("manager_note","");v.put("status","SUBMITTED");v.put("closed_at",Util.now());v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,workerId,"SUBMIT","إرسال/تعديل الوردية؛ السبب: "+reason);}
     public Cursor archive(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.status,s.sales,s.balance,s.sync_state,COALESCE(s.manager_note,''),COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
     public Cursor submitted(){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.sales,s.balance,s.difference_reason FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.status='SUBMITTED' ORDER BY s.id",null);}
@@ -1031,7 +1047,79 @@ public class Db extends SQLiteOpenHelper {
             if(payers>0)log.append("• سُدّد ").append(Calc.money(paidTotal)).append(" ر.ي من ").append(payers).append(" حساب\n");
             int expenses=0;double expenseTotal=0;
             try(Cursor c=db.rawQuery("SELECT name,SUM(amount) FROM movements WHERE shift_id=? AND type='EXPENSE' GROUP BY name",
-                    new String[]{String.val…1066 tokens truncated…فل فترة: لا قيد جديد فيها بعد الإقفال. */
+                    new String[]{String.valueOf(shiftId)})){
+                while(c.moveToNext()){
+                    String name=c.getString(0).trim();
+                    double amount=c.getDouble(1);
+                    if(name.isEmpty()||!(amount>0))continue;
+                    ContentValues v=new ContentValues();
+                    v.put("category",name);v.put("amount",amount);v.put("note","وردية "+tag);
+                    v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",shiftId);v.put("box_id",0);
+                    db.insertOrThrow("expense_entries",null,v);
+                    expenses++;expenseTotal+=amount;
+                }
+            }
+            if(expenses>0)log.append("• سُجّل ").append(Calc.money(expenseTotal)).append(" ر.ي مخاريج\n");
+            if(debtors>0)log.append("• قُيّد ").append(Calc.money(debtTotal)).append(" ر.ي على ").append(debtors).append(" مدين\n");
+            int materials=0;
+            try(Cursor c=db.rawQuery(
+                "SELECT TRIM(p.fuel),SUM(r.current-r.previous) FROM readings r JOIN pumps p ON p.id=r.pump_id "+
+                "WHERE r.shift_id=? AND r.current IS NOT NULL AND r.current>=r.previous GROUP BY TRIM(p.fuel)",
+                new String[]{String.valueOf(shiftId)})){
+                while(c.moveToNext()){
+                    String fuel=normalizeFuel(c.getString(0));
+                    double litres=c.getDouble(1);
+                    if(!(litres>0))continue;
+                    ContentValues v=new ContentValues();
+                    v.put("material",fuel);v.put("direction","OUT");v.put("litres",litres);
+                    v.put("note","وردية "+tag+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
+                    v.put("source_shift",shiftId);
+                    db.insertOrThrow("material_entries",null,v);
+                    materials++;
+                }
+            }
+            if(materials>0)log.append("• خُصمت لترات المبيعات من المخزون\n");
+            audit(db,shiftId,0,"POST_SHIFT","ترحيل الوردية إلى الصناديق والديون والمواد");
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        return log.toString().trim();
+    }
+    // ==================== دفتر القيد المزدوج ====================
+
+    /** المستخدم الحالي، يُكتب في كل قيد وكل سطر تدقيق. */
+    private static String actor="النظام";
+    public static void signIn(String name){actor=name==null||name.trim().isEmpty()?"النظام":name.trim();}
+    public static String actor(){return actor;}
+
+    /** سطر تدقيق كامل: من، وماذا، ومتى، والقيمة قبل وبعد، والسبب. */
+    void audit(SQLiteDatabase db,String entity,long entityId,String action,String oldValue,String newValue,String reason){
+        ContentValues v=new ContentValues();
+        v.put("created_at",Util.now());v.put("actor",actor);v.put("action",action);
+        v.put("entity",entity);v.put("entity_id",entityId);
+        v.put("old_value",oldValue==null?"":oldValue);
+        v.put("new_value",newValue==null?"":newValue);
+        v.put("reason",reason==null?"":reason);
+        db.insert("ledger_audit",null,v);
+    }
+    public void audit(String entity,long entityId,String action,String oldValue,String newValue,String reason){
+        audit(getWritableDatabase(),entity,entityId,action,oldValue,newValue,reason);
+    }
+    /** 0=id,1=وقت,2=من,3=عملية,4=السجل,5=قبل,6=بعد,7=سبب */
+    public Cursor auditLog(int limit){
+        return getReadableDatabase().rawQuery(
+            "SELECT id,created_at,COALESCE(NULLIF(actor,''),'النظام'),action,entity||' #'||entity_id,"+
+            "old_value,new_value,reason FROM ledger_audit ORDER BY id DESC LIMIT ?",
+            new String[]{String.valueOf(limit)});
+    }
+
+    public boolean periodLocked(String date){
+        String period=Journal.periodOf(date);
+        if(period.isEmpty())return false;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM period_locks WHERE period=?",new String[]{period})){
+            return c.moveToFirst();
+        }
+    }
+    /** يقفل فترة: لا قيد جديد فيها بعد الإقفال. */
     public void lockPeriod(String period,String note){
         if(period==null||period.trim().length()<7)throw new IllegalArgumentException("اكتب الفترة بصيغة 2026-09");
         period=period.trim();
@@ -1481,7 +1569,7 @@ public class Db extends SQLiteOpenHelper {
             db.delete("material_entries","source_shift=? OR note LIKE ?",
                 new String[]{String.valueOf(shiftId),"وردية #"+shiftId+" —%"});
             ContentValues v=new ContentValues();
-            v.put("status","OPEN");v.put("closed_at","");v.put("sync_state","PENDING");
+            v.put("historical",1);v.put("status","OPEN");v.put("closed_at","");v.put("sync_state","PENDING");
             db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});
             audit(db,"shift",shiftId,"REOPEN_SHIFT",before,"OPEN",why);
             db.setTransactionSuccessful();

@@ -1666,19 +1666,15 @@ public class ShiftActivity extends Activity {
     private void finishShift(String reason){
         final long closed=shiftId;
         final boolean historical=db.isHistorical(closed);
-        final boolean matched=reason.isEmpty();
-        db.submit(closed,workerId,reason);
-        // الإغلاق يعتمد ويرحّل مباشرة: لا مرحلة انتظار في الواجهة الواحدة.
-        String posted="",journalNote="";
-        if(matched)db.approve(closed);else db.closeUnmatched(closed);
-        posted=db.postShift(closed,db.defaultCashbox());
-        try{ db.journalShift(closed); }
-        catch(Exception e){ journalNote="\n\n⚠ لم يُسجَّل القيد المحاسبي: "+e.getMessage(); }
+        String posted;
+        try{ posted=db.closeAndPostShift(closed,workerId,reason,db.defaultCashbox()); }
+        catch(Exception e){new AlertDialog.Builder(this).setTitle("لم تُغلق الوردية")
+            .setMessage("لم يُحفظ ترحيل جزئي. راجع السبب وحاول مجددًا:\n"+e.getMessage())
+            .setPositiveButton("حسنًا",null).show();return;}
         shiftId=db.openSoloShift(workerId);
         loadReadings();loadMovements();refreshTotals();showPage(0);
         String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
-        base=base+journalNote;
         final String code=db.shiftCode(closed);
         new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code)
             .setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")

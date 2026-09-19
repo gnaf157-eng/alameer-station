@@ -12,7 +12,17 @@ public final class Calc {
     /** يحوّل نصًا إلى رقم، ويرجع صفرًا عند أي إدخال غير صالح. */
     public static double number(String value){
         if (value == null) return 0;
-        try { return Double.parseDouble(value.trim()); } catch (Exception e) { return 0; }
+        try {
+            StringBuilder normalized=new StringBuilder();
+            for(char ch:value.trim().toCharArray()){
+                if(ch>='٠'&&ch<='٩')normalized.append((char)('0'+ch-'٠'));
+                else if(ch>='۰'&&ch<='۹')normalized.append((char)('0'+ch-'۰'));
+                else if(ch=='٫')normalized.append('.');
+                else if(ch!=','&&ch!='٬')normalized.append(ch);
+            }
+            double result=Double.parseDouble(normalized.toString());
+            return Double.isFinite(result)?result:0;
+        } catch (Exception e) { return 0; }
     }
 
     /** الباقي = المبيعات + المقبوضات − النقد المسلّم − الديون − المخاريج. */
@@ -88,3 +98,4 @@ public final class Calc {
         return String.format(java.util.Locale.US,value==Math.rint(value)?"%,.0f":"%,.2f",value);
     }
 }
+

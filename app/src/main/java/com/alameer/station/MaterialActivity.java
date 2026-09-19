@@ -432,7 +432,7 @@ public class MaterialActivity extends Activity {
                     }
                     new AlertDialog.Builder(this).setTitle("حذف الحركة")
                             .setMessage("سيُحذف هذا السطر ويتغيّر رصيد المخزون.")
-                            .setPositiveButton("حذف", (d, w) -> { db.deleteMaterialEntry(id); refresh(); })
+                            .setPositiveButton("حذف", (d, w) -> { try{db.deleteMaterialEntry(id); refresh();}catch(Exception e){new AlertDialog.Builder(this).setTitle("تعذّر الحذف").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();} })
                             .setNegativeButton("إلغاء", null).show();
                     return true;
                 });
