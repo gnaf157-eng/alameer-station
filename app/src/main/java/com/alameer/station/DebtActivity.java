@@ -65,13 +65,14 @@ public class DebtActivity extends Activity {
         });
         content.addView(searchInput, space());
 
-        listBox = new LinearLayout(this);
-        listBox.setOrientation(LinearLayout.VERTICAL);
-        content.addView(listBox, space());
-
+        // زرّ الإضافة مباشرة تحت البحث، قبل القائمة.
         Button newDebtor = action("＋  إضافة عميل", true);
         newDebtor.setOnClickListener(v -> debtorDialog(0, "", "", 0));
         content.addView(newDebtor, space());
+
+        listBox = new LinearLayout(this);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        content.addView(listBox, space());
 
         entriesBox = panel();
         entriesBox.setVisibility(View.GONE);
