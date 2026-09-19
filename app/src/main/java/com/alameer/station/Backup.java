@@ -84,7 +84,12 @@ public final class Backup {
                 return;
             }
             if (database.exists()) copy(database, rollback);
-            new Db(activity).close();
+            // تُدمج الكتابات المعلّقة ثم يُغلق الاتصال، وإلا كتب فوق الملف الجديد.
+            Db open = new Db(activity);
+            try {
+                open.getWritableDatabase().rawQuery("PRAGMA wal_checkpoint(FULL)", null).close();
+            } catch (Exception ignored) {}
+            open.close();
             deleteSideFiles(database);
             copy(staging, database);
             staging.delete();

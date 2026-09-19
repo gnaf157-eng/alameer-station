@@ -326,9 +326,16 @@ public class ShiftActivity extends Activity {
             buildThresholdSettings();
 
             LinearLayout backupSection=section("النسخة الاحتياطية");
-            Button backupBtn=action("حفظ نسخة احتياطية",false);
+            backupSection.addView(text("النسخة ملف واحد يحمل كل البيانات والإعدادات."
+                    +" احفظه في درايف أو أرسله لنفسك.",13,0xff7c8186,false));
+            Button backupBtn=action("حفظ نسخة احتياطية",true);
             backupBtn.setOnClickListener(v->new Backup(this).export());
             backupSection.addView(backupBtn,space());
+            Button restoreBtn=action("استعادة نسخة احتياطية",false);
+            restoreBtn.setOnClickListener(v->new Backup(this).pickForRestore());
+            backupSection.addView(restoreBtn,space());
+            backupSection.addView(text("الاستعادة تستبدل كل البيانات الحالية ولا يمكن التراجع عنها.",
+                    12,Util.RED,true));
 
             buildFreshStartSettings();
         }
@@ -643,6 +650,12 @@ public class ShiftActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        // استعادة نسخة احتياطية مختارة من الملفات.
+        if(request==Backup.REQUEST_RESTORE){
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null)
+                new Backup(this).restoreFrom(data.getData());
+            return;
+        }
         if(request!=PICK_STATION_LOGO||result!=RESULT_OK||data==null||data.getData()==null)return;
         android.net.Uri uri=data.getData();
         new Thread(()->{
