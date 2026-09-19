@@ -122,10 +122,30 @@ public class ControlPanelActivity extends Activity {
         sb.append("\n• نقد الصناديق\n   ").append(whole(cash)).append(" ر.ي\n");
         sb.append("\n• صافي الديون\n   ").append(whole(netDebt)).append(" ر.ي");
         double gross = db.debtsTotal(), owedUs = db.creditsTotal();
-        if (owedUs > 0.009)
-            sb.append("\n   لنا ").append(whole(gross)).append("  •  علينا ").append(whole(owedUs));
+        sb.append("\n   لنا ").append(whole(gross));
+        if (owedUs > 0.009) sb.append("  •  علينا ").append(whole(owedUs));
         sb.append("\n");
-        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي\n");
+        // أكبر الأرصدة، لتُطابق بندًا ببند مع أي سجل خارجي.
+        int shown = 0;
+        try (Cursor c = db.debtors(false)) {
+            while (c.moveToNext() && shown < 12) {
+                double bal = c.getDouble(7);
+                if (Math.abs(bal) < 0.01) continue;
+                shown++;
+                sb.append("\n   ").append(c.getString(1)).append("  ").append(whole(bal));
+            }
+        }
+        if (shown > 0) sb.append("\n");
+        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي");
+        // تفصيل كل مادة: اللترات وتكلفتها، ليسهل مطابقتها بجدولك.
+        for (String m : Db.MATERIALS) {
+            double litres = Math.max(0, db.materialSummary(m)[3]);
+            double each = db.stockValue(m);
+            if (litres < 0.01 && each < 0.01) continue;
+            sb.append("\n   ").append(m).append("  ").append(whole(litres)).append(" لتر");
+            sb.append("  =  ").append(whole(each));
+        }
+        sb.append("\n");
         // كل مورّد في جانبه: الموجب موجودات والسالب مطلوبات.
         double oil = db.supplierBalance("OIL"), gas = db.supplierBalance("GAS");
         double assetSide = cash + netDebt + stock + Math.max(0, oil) + Math.max(0, gas);
