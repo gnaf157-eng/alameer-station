@@ -74,11 +74,72 @@ public class ControlPanelActivity extends Activity {
     private void build() {
         content.removeAllViews();
         int delay = 0;
+        delay = add(capitalCard(), delay);
         delay = add(auditBoard(), delay);
         delay = add(statusRow(), delay);
         delay = add(stockSection(), delay);
         delay = add(cashSection(), delay);
         add(debtSection(), delay);
+    }
+
+    /** رأس المال: بطاقة بارزة، والضغط عليها يكشف مكوّناته. */
+    private View capitalCard() {
+        final double cash = db.cashboxesTotal();
+        final double debts = db.debtsTotal();
+        final double credits = db.creditsTotal();
+        final double netDebt = debts - credits;
+        final double stock = db.stockValueTotal();
+        final double owed = db.supplierBalance();
+        final double capital = cash + netDebt + stock - owed;
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(16), dp(18), dp(16));
+        box.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
+                Util.round(Util.NAVY, dp(18)), null));
+        box.setElevation(dp(3));
+        box.setClickable(true);
+        box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
+
+        box.addView(text("رأس المال", 13, 0xffCFE2FA, false));
+        TextView grand = text(money(capital) + "  ر.ي", 30,
+                capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
+        grand.setTextDirection(View.TEXT_DIRECTION_LTR);
+        grand.setPadding(0, dp(4), 0, dp(8));
+        box.addView(grand);
+        box.addView(text("الصناديق + الديون + المخزون − شركة النفط  •  اضغط للتفصيل",
+                11, 0xffCFE2FA, false));
+        return box;
+    }
+
+    /** تفصيل رأس المال: كل بند بقيمته وأثره. */
+    private void showCapitalDetail(double cash, double netDebt, double stock,
+                                   double owed, double capital) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("الموجودات\n");
+        sb.append("\n• نقد الصناديق\n   ").append(money(cash)).append(" ر.ي\n");
+        sb.append("\n• صافي الديون\n   ").append(money(netDebt)).append(" ر.ي");
+        double gross = db.debtsTotal(), owedUs = db.creditsTotal();
+        if (owedUs > 0.009)
+            sb.append("\n   لنا ").append(money(gross)).append("  •  علينا ").append(money(owedUs));
+        sb.append("\n");
+        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(money(stock)).append(" ر.ي\n");
+        sb.append("\n   مجموع الموجودات ").append(money(cash + netDebt + stock)).append(" ر.ي\n");
+
+        sb.append("\n\nالمطلوبات\n");
+        sb.append("\n• مستحق لشركة النفط\n   ").append(money(owed)).append(" ر.ي\n");
+
+        sb.append("\n\nرأس المال = الموجودات − المطلوبات\n");
+        sb.append("   ").append(money(capital)).append(" ر.ي");
+        if (capital < -0.009)
+            sb.append("\n\n⚠ المطلوبات تتجاوز الموجودات.");
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تفصيل رأس المال")
+                .setMessage(sb.toString())
+                .setPositiveButton("حسنًا", null)
+                .show();
     }
 
     private int add(View section, int delay) {
