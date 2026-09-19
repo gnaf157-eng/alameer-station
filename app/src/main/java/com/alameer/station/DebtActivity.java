@@ -49,11 +49,27 @@ public class DebtActivity extends Activity {
         summaryBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(summaryBox, space());
 
+        // خانة البحث فوق القائمة: تُرشّح الأسماء مع كل حرف.
+        searchInput = new EditText(this);
+        styleInput(searchInput);
+        searchInput.setHint("ابحث عن عميل بالاسم أو الرقم");
+        searchInput.setSingleLine(true);
+        searchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        searchInput.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
+            public void onTextChanged(CharSequence t, int a, int b, int c) {}
+            public void afterTextChanged(android.text.Editable e) {
+                query = e.toString().trim();
+                refreshDebtors();
+            }
+        });
+        content.addView(searchInput, space());
+
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
         content.addView(listBox, space());
 
-        Button newDebtor = action("＋  إضافة مدين جديد", false);
+        Button newDebtor = action("＋  إضافة عميل", true);
         newDebtor.setOnClickListener(v -> debtorDialog(0, "", "", 0));
         content.addView(newDebtor, space());
 
@@ -113,9 +129,24 @@ public class DebtActivity extends Activity {
     }
 
     /** بطاقة لكل مدين: الضغط عليها يسجّل حركة، والضغط المطوّل يفتح خياراته. */
+    private EditText searchInput;
+    private String query = "";
+
+    /** هل يطابق العميل نص البحث؟ يبحث في الاسم وفي الرقم. */
+    private boolean matches(String name, String phone) {
+        if (query.isEmpty()) return true;
+        String q = query.toLowerCase(java.util.Locale.ROOT);
+        if (name != null && name.toLowerCase(java.util.Locale.ROOT).contains(q)) return true;
+        String digits = query.replaceAll("[^0-9]", "");
+        if (digits.isEmpty() || phone == null) return false;
+        return phone.replaceAll("[^0-9]", "").contains(digits);
+    }
+
     private void refreshDebtors() {
         listBox.removeAllViews();
-        listBox.addView(sectionTitle("المدينون — اضغط على المدين لتسجيل حركة"));
+        listBox.addView(sectionTitle(query.isEmpty()
+                ? "المدينون — اضغط على المدين لتسجيل حركة"
+                : "نتائج البحث عن: " + query));
         int count = 0;
         boolean creditHeaderShown = false;
         // جولتان: 0 للمستحق عليهم والمقفلة حساباتهم، 1 لأصحاب الرصيد الدائن مجموعين.
@@ -124,6 +155,7 @@ public class DebtActivity extends Activity {
             while (c.moveToNext()) {
                 boolean isCredit = c.getDouble(7) < -0.009;
                 if (isCredit != (pass == 1)) continue;
+                if (!matches(c.getString(1), c.getString(2))) continue;
                 if (isCredit && !creditHeaderShown) {
                     creditHeaderShown = true;
                     listBox.addView(sectionTitle("أرصدة لهم عندنا"));
@@ -195,7 +227,9 @@ public class DebtActivity extends Activity {
         }
         if (count == 0) {
             LinearLayout empty = panel();
-            empty.addView(text("لم يُضف مدينون بعد. أضف مدينًا لتبدأ تسجيل الديون والسداد.", 15, 0xff777d84, false));
+            empty.addView(text(query.isEmpty()
+                    ? "لم يُضف مدينون بعد. أضف عميلًا لتبدأ تسجيل الديون والسداد."
+                    : "لا يوجد عميل يطابق «" + query + "».", 15, 0xff777d84, false));
             listBox.addView(empty, space());
         } else {
             listBox.addView(text("اضغط مطوّلًا على المدين لتعديله أو إيقافه", 11, 0xff8b9097, false));
@@ -262,10 +296,17 @@ public class DebtActivity extends Activity {
     /** إضافة مدين أو تعديله. */
     private void debtorDialog(long id, String name, String phone, double opening) {
         final boolean isNew = id == 0;
-        EditText nameInput = new EditText(this);
+        // خانة الاسم تقترح العملاء المسجّلين، فلا يُضاف الاسم مرتين.
+        final AutoCompleteTextView nameInput = new AutoCompleteTextView(this);
         styleInput(nameInput);
-        nameInput.setHint("اسم المدين");
+        nameInput.setHint("اسم العميل");
         nameInput.setText(name);
+        nameInput.setThreshold(1);
+        nameInput.setSingleLine(true);
+        final java.util.ArrayList<String> existing = db.allNames();
+        nameInput.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, existing));
+        final TextView duplicate = text("", 12, Util.RED, true);
         EditText phoneInput = new EditText(this);
         styleInput(phoneInput);
         phoneInput.setInputType(InputType.TYPE_CLASS_PHONE);
@@ -280,8 +321,21 @@ public class DebtActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), 0);
-        box.addView(text("اسم المدين", 13, 0xff7c8186, false));
+        box.addView(text("اسم العميل", 13, 0xff7c8186, false));
         box.addView(nameInput);
+        box.addView(duplicate);
+        if (isNew) {
+            // تنبيه فوري إن كان الاسم مسجّلًا سلفًا.
+            nameInput.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
+                public void onTextChanged(CharSequence t, int a, int b, int c) {}
+                public void afterTextChanged(android.text.Editable e) {
+                    String typed = e.toString().trim();
+                    boolean taken = !typed.isEmpty() && db.findDebtor(typed) > 0;
+                    duplicate.setText(taken ? "⚠ هذا العميل مسجّل بالفعل" : "");
+                }
+            });
+        }
         box.addView(text("رقم الهاتف", 13, 0xff7c8186, false), space());
         box.addView(phoneInput);
         // اختيار من جهات الاتصال: يفتح دفتر الهاتف ويعيد الرقم المختار
@@ -300,7 +354,7 @@ public class DebtActivity extends Activity {
         form.addView(box);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(isNew ? "مدين جديد" : "تعديل المدين")
+                .setTitle(isNew ? "عميل جديد" : "تعديل المدين")
                 .setView(form)
                 .setPositiveButton("حفظ", null)
                 .setNegativeButton("إلغاء", null)
