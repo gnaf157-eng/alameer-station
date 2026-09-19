@@ -1588,6 +1588,108 @@ public class Db extends SQLiteOpenHelper {
     public int lowStockPercent(){try{return Integer.parseInt(setting("threshold_low_stock","25"));}catch(Exception e){return 25;}}
     public void setLowStockPercent(int v){setSetting("threshold_low_stock",String.valueOf(v));}
 
+    // ==================== بداية جديدة ====================
+
+    /**
+     * يفرّغ كل الحركات ويبقي البنية والإعدادات:
+     * الطرمبات وأسعارها، والصناديق وأسماؤها، والعملاء، والمواد وتكلفتها،
+     * والحدود والسعات، والأسماء المحفوظة.
+     * الأرصدة الافتتاحية تُصفَّر ليُعاد إدخالها، ولا تُمسّ كلمات السر.
+     */
+    public String freshStart(boolean keepOpenings){
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try{
+            // الحركات كلها.
+            for(String t:new String[]{"movements","readings","shifts","cashbox_entries",
+                    "debt_entries","expense_entries","material_entries","dip_readings",
+                    "supplier_entries","journal_lines","journal","posted_shifts",
+                    "period_locks","ledger_audit","audit_log"}){
+                try{db.delete(t,null,null);}catch(Exception ignored){}
+            }
+            if(!keepOpenings){
+                ContentValues zero=new ContentValues();
+                zero.put("opening",0);
+                try{db.update("cashboxes",zero,null,null);}catch(Exception ignored){}
+                try{db.update("debtors",zero,null,null);}catch(Exception ignored){}
+            }
+            // العدّادات تبدأ من قراءتها الحالية، فلا تُحتسب مبيعات وهمية.
+            try{db.execSQL("DELETE FROM sqlite_sequence WHERE name IN "+
+                "('movements','readings','shifts','cashbox_entries','debt_entries',"+
+                "'expense_entries','material_entries','dip_readings','supplier_entries',"+
+                "'journal','journal_lines','ledger_audit','audit_log')");}catch(Exception ignored){}
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+        setSetting("fresh_start_at",Util.now());
+        audit("device",0,"FRESH_START","بيانات سابقة",
+                keepOpenings?"بداية جديدة مع الاحتفاظ بالافتتاحيات":"بداية جديدة بأرصدة صفرية",
+                "تفريغ الحركات");
+        return "أُفرغت الحركات. الإعدادات والأسماء والطرمبات كما هي.";
+    }
+
+    /** ملخّص ما سيُحذف وما سيبقى، يُعرض قبل التنفيذ. */
+    public String freshStartPreview(){
+        int shifts=count("shifts"),cash=count("cashbox_entries"),debt=count("debt_entries"),
+            exp=count("expense_entries"),mat=count("material_entries"),sup=count("supplier_entries"),
+            entries=count("journal");
+        int boxes=count("cashboxes"),debtors=count("debtors"),pumps=count("pumps"),names=count("remembered_names");
+        return "سيُحذف:\n"
+            +"• "+shifts+" وردية\n"
+            +"• "+cash+" حركة صندوق\n"
+            +"• "+debt+" حركة دين\n"
+            +"• "+exp+" حركة مخاريج\n"
+            +"• "+mat+" حركة مواد\n"
+            +"• "+sup+" حركة مع شركة النفط\n"
+            +"• "+entries+" قيدًا محاسبيًا\n\n"
+            +"سيبقى:\n"
+            +"• "+pumps+" طرمبة بأسعارها وعدّاداتها\n"
+            +"• "+boxes+" صندوقًا بأسمائها\n"
+            +"• "+debtors+" عميلًا بأسمائهم\n"
+            +"• "+names+" اسمًا محفوظًا\n"
+            +"• أسعار الشراء والبيع والتوصيل والسعات والحدود";
+    }
+
+    private int count(String table){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM "+table,null)){
+            return c.moveToFirst()?c.getInt(0):0;
+        }catch(Exception e){return 0;}
+    }
+
+    /**
+     * يقيّد الأرصدة الافتتاحية في الدفتر المزدوج دفعةً واحدة.
+     * الصناديق والمدينون والمخزون مدينة، ورأس المال دائن.
+     */
+    public String postOpeningBalances(String date){
+        double cash=0,debts=0,stock=0;
+        try(Cursor c=cashboxes(false)){while(c.moveToNext())cash+=c.getDouble(2);}
+        try(Cursor c=debtors(false)){while(c.moveToNext())debts+=c.getDouble(3);}
+        for(String m:MATERIALS)stock+=Math.max(0,materialSummary(m)[3])*unitCost(m);
+        double owed=supplierBalance();
+        double total=cash+debts+stock-owed;
+        if(Math.abs(total)<0.01&&cash<0.01&&debts<0.01&&stock<0.01)
+            throw new IllegalStateException("لا توجد أرصدة افتتاحية لتقييدها");
+
+        Journal.Entry e=new Journal.Entry("أرصدة افتتاحية",date,"OPENING",0);
+        if(cash>0.009)e.debit(Journal.CASH,cash,"");
+        if(debts>0.009)e.debit(Journal.RECEIVABLE,debts,"");
+        if(stock>0.009)e.debit(Journal.INVENTORY,stock,"");
+        if(owed>0.009)e.credit(Journal.SUPPLIER,owed,"");
+        double capital=cash+debts+stock-owed;
+        if(capital>0.009)e.credit(Journal.EQUITY,capital,"");
+        else if(capital<-0.009)e.debit(Journal.EQUITY,-capital,"");
+        postEntry(e);
+        audit("journal",0,"OPENING_BALANCES","",Calc.money(total)+" ر.ي","تقييد الأرصدة الافتتاحية");
+        return "قُيّدت الأرصدة الافتتاحية: "+Calc.money(total)+" ر.ي";
+    }
+
+    /** هل سبق تقييد أرصدة افتتاحية؟ */
+    public boolean openingPosted(){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT 1 FROM journal WHERE source='OPENING' AND reversed_by=0 LIMIT 1",null)){
+            return c.moveToFirst();
+        }
+    }
+
     // ==================== حساب شركة النفط ====================
 
     /** ما علينا لشركة النفط: المشتريات ناقص ما وُرِّد. */

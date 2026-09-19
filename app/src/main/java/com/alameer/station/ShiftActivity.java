@@ -322,6 +322,8 @@ public class ShiftActivity extends Activity {
             Button backupBtn=action("نسخة احتياطية",false);
             backupBtn.setOnClickListener(v->new Backup(this).export());
             pages[4].addView(backupBtn,space());
+
+            buildFreshStartSettings();
         }
         pages[4].addView(sectionTitle("حول التطبيق"));
         LinearLayout about=panel(Color.WHITE);
@@ -331,6 +333,86 @@ public class ShiftActivity extends Activity {
         Button call=action("تواصل مع المطوّر",false);
         call.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_DIAL,android.net.Uri.parse("tel:777808020")));}catch(ActivityNotFoundException e){Toast.makeText(this,"رقم التواصل: 777808020",Toast.LENGTH_LONG).show();}});
         about.addView(call,space());pages[4].addView(about,space());
+    }
+
+    /** بداية جديدة: تفريغ الحركات ثم تقييد الأرصدة الافتتاحية. */
+    private void buildFreshStartSettings(){
+        pages[4].addView(sectionTitle("بداية جديدة"));
+        LinearLayout box=panel(Color.WHITE);
+        box.addView(text("تُفرَّغ كل الحركات وتبقى الطرمبات والصناديق والعملاء والأسعار.",
+                13,0xff7c8186,false));
+
+        Button reset=action("تفريغ الحركات والبدء من جديد",false);
+        reset.setOnClickListener(v->freshStartDialog());
+        box.addView(reset,space());
+
+        Button opening=action("تقييد الأرصدة الافتتاحية",false);
+        opening.setOnClickListener(v->openingDialog());
+        box.addView(opening,space());
+        if(db.openingPosted())
+            box.addView(text("✓ سبق تقييد أرصدة افتتاحية",12,Util.GREEN,true));
+        pages[4].addView(box,space());
+    }
+
+    /** تفريغ الحركات بعد تأكيد مكتوب، فالعملية لا رجعة فيها. */
+    private void freshStartDialog(){
+        final boolean[] keep={false};
+        LinearLayout box=column();
+        box.setPadding(dp(22),dp(8),dp(22),0);
+        box.addView(text(db.freshStartPreview(),13,Util.NAVY,false));
+
+        final CheckBox keepBox=new CheckBox(this);
+        keepBox.setText("الاحتفاظ بالأرصدة الافتتاحية الحالية");
+        keepBox.setTextSize(14);
+        keepBox.setOnCheckedChangeListener((b,checked)->keep[0]=checked);
+        box.addView(keepBox);
+
+        box.addView(text("اكتب «تفريغ» للتأكيد:",13,Util.RED,true));
+        final EditText confirm=new EditText(this);styleInput(confirm);
+        confirm.setHint("تفريغ");
+        box.addView(confirm);
+
+        ScrollView form=new ScrollView(this);form.addView(box);
+        new AlertDialog.Builder(this).setTitle("تفريغ الحركات")
+            .setView(form)
+            .setPositiveButton("تفريغ",(d,w)->{
+                if(!"تفريغ".equals(confirm.getText().toString().trim())){
+                    Toast.makeText(this,"لم تكتب كلمة التأكيد",Toast.LENGTH_LONG).show();
+                    return;
+                }
+                // نسخة احتياطية قبل أي تفريغ، حمايةً من الندم.
+                try{ new Backup(this).export(); }catch(Exception ignored){}
+                try{
+                    String done=db.freshStart(keep[0]);
+                    shiftId=db.openSoloShift(workerId);
+                    loadReadings();loadMovements();refreshTotals();buildSettingsPage();
+                    new AlertDialog.Builder(this).setTitle("تمّت البداية الجديدة")
+                        .setMessage(done+"\n\nأدخل الأرصدة الافتتاحية للصناديق والعملاء والمخزون،"
+                                +" ثم اضغط «تقييد الأرصدة الافتتاحية».")
+                        .setPositiveButton("حسنًا",null).show();
+                }catch(Exception e){
+                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("إلغاء",null).show();
+    }
+
+    /** يقيّد الأرصدة الافتتاحية المدخلة في الدفتر المزدوج. */
+    private void openingDialog(){
+        new AlertDialog.Builder(this).setTitle("تقييد الأرصدة الافتتاحية")
+            .setMessage("يُنشأ قيد واحد يجمع أرصدة الصناديق والعملاء وقيمة المخزون"
+                    +" مقابل رأس المال، فيبدأ الدفتر متوازنًا.\n\n"
+                    +"أدخل الأرصدة أولًا من: الصناديق، والديون، وحركة المواد.")
+            .setPositiveButton("تقييد",(d,w)->{
+                try{
+                    String done=db.postOpeningBalances(ShiftDates.today());
+                    buildSettingsPage();
+                    Toast.makeText(this,done,Toast.LENGTH_LONG).show();
+                }catch(Exception e){
+                    Toast.makeText(this,String.valueOf(e.getMessage()),Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("إلغاء",null).show();
     }
 
     /** سعات الخزانات ومطابقة العجز بالمقياس اليدوي. */
