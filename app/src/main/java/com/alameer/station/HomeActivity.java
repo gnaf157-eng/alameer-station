@@ -113,9 +113,9 @@ public class HomeActivity extends Activity {
         LinearLayout row3 = new LinearLayout(this);
         row3.setGravity(Gravity.CENTER);
         double owed = db.supplierBalance();
-        row3.addView(balanceTile("حساب شركة النفط",
+        row3.addView(balanceTile("حسابات الموردين",
                 (owed > 0.009 ? money(owed) : "0") + " ر.ي",
-                owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد",
+                owed > 0.009 ? "النفط والغاز" : "الحسابات مسدّدة",
                 owed > 0.009 ? Util.RED : Util.GREEN, 9,
                 v -> startActivity(new Intent(this, SupplierActivity.class))), cell());
         supplierValue = lastAmount; supplierNote = lastNote;
@@ -187,7 +187,7 @@ public class HomeActivity extends Activity {
         double owed = db.supplierBalance();
         supplierValue.setText((owed > 0.009 ? money(owed) : "0") + " ر.ي");
         supplierValue.setTextColor(owed > 0.009 ? Util.RED : Util.GREEN);
-        supplierNote.setText(owed > 0.009 ? "مستحق للشركة" : "الحساب مسدّد");
+        supplierNote.setText(owed > 0.009 ? "النفط والغاز" : "الحسابات مسدّدة");
     }
 
     private TextView cashValue, debtValue, debtNote, stockText, stockNote, supplierValue, supplierNote;

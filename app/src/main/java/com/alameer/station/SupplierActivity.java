@@ -19,7 +19,9 @@ import java.util.Locale;
  */
 public class SupplierActivity extends Activity {
     private Db db;
-    private LinearLayout summaryBox, listBox;
+    private LinearLayout summaryBox, listBox, tabsRow;
+    /** المورّد المعروض حاليًا. */
+    private String supplier = "OIL";
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -36,7 +38,7 @@ public class SupplierActivity extends Activity {
         header.setBackgroundColor(Util.NAVY);
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.addView(text("حساب شركة النفط", 19, Color.WHITE, true));
+        words.addView(text("حسابات الموردين", 19, Color.WHITE, true));
         words.addView(text("مشتريات المواد وما وُرِّد من الصناديق", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
@@ -44,6 +46,11 @@ public class SupplierActivity extends Activity {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(14), dp(12), dp(14), dp(24));
+
+        // تبويبا المورّدين.
+        tabsRow = new LinearLayout(this);
+        tabsRow.setPadding(0, 0, 0, dp(10));
+        content.addView(tabsRow);
 
         summaryBox = new LinearLayout(this);
         summaryBox.setOrientation(LinearLayout.VERTICAL);
@@ -75,15 +82,36 @@ public class SupplierActivity extends Activity {
         if (listBox != null) refresh();
     }
 
+    /** تبويبان: شركة النفط وشركة الغاز، وكل واحد بحسابه المستقل. */
+    private void refreshTabs() {
+        tabsRow.removeAllViews();
+        for (int i = 0; i < Db.SUPPLIERS.length; i++) {
+            final String code = Db.SUPPLIERS[i];
+            boolean on = code.equals(supplier);
+            TextView tab = text(Db.SUPPLIER_NAMES[i], 15, on ? Color.WHITE : Util.NAVY, true);
+            tab.setGravity(Gravity.CENTER);
+            tab.setPadding(dp(10), dp(11), dp(10), dp(11));
+            tab.setBackground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x22000000),
+                    Util.round(on ? Util.NAVY : Util.ACCENT_SOFT, dp(12)), null));
+            tab.setClickable(true);
+            tab.setOnClickListener(v -> { supplier = code; refresh(); });
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1);
+            p.setMargins(dp(3), 0, dp(3), 0);
+            tabsRow.addView(tab, p);
+        }
+    }
+
     private void refresh() {
+        refreshTabs();
         summaryBox.removeAllViews();
-        double owed = db.supplierBalance();
+        double owed = db.supplierBalance(supplier);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(Util.round(Util.NAVY, dp(18)));
-        card.addView(text(owed > 0.009 ? "المستحق لشركة النفط"
+        card.addView(text(owed > 0.009 ? "المستحق لـ" + Db.supplierName(supplier)
                 : owed < -0.009 ? "رصيد لنا عند الشركة" : "الحساب مسدّد", 13, 0xffCFE2FA, false));
         TextView grand = text(money(Math.abs(owed)) + "  ر.ي", 30,
                 owed > 0.009 ? 0xffFFB3BC : Color.WHITE, true);
@@ -92,15 +120,15 @@ public class SupplierActivity extends Activity {
         card.addView(grand);
 
         LinearLayout stats = new LinearLayout(this);
-        stats.addView(stat("إجمالي المشتريات", money(db.supplierBought())), cell());
-        stats.addView(stat("إجمالي المورّد", money(db.supplierPaid())), cell());
+        stats.addView(stat("إجمالي المشتريات", money(db.supplierBought(supplier))), cell());
+        stats.addView(stat("إجمالي المورّد", money(db.supplierPaid(supplier))), cell());
         card.addView(stats);
         summaryBox.addView(card);
 
         listBox.removeAllViews();
         listBox.addView(sectionTitle("آخر الحركات"));
         int count = 0;
-        try (Cursor c = db.supplierEntries(80)) {
+        try (Cursor c = db.supplierEntries(supplier, 80)) {
             while (c.moveToNext()) {
                 count++;
                 final long id = c.getLong(0);
@@ -156,9 +184,11 @@ public class SupplierActivity extends Activity {
 
     /** شراء مواد: اللترات وسعر اللتر، والقيمة تُحسب تلقائيًا. */
     private void buyDialog() {
+        // كل مورّد ومواده: النفط للبترول والديزل، والغاز للغاز.
+        final String[] materials = Db.materialsOf(supplier);
         final Spinner picker = new Spinner(this);
         picker.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, Db.MATERIALS));
+                android.R.layout.simple_spinner_dropdown_item, materials));
 
         final EditText litres = new EditText(this);
         styleInput(litres);
@@ -169,7 +199,7 @@ public class SupplierActivity extends Activity {
         styleInput(unit);
         unit.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         unit.setHint("سعر شراء اللتر");
-        double suggested = db.buyPrice(Db.MATERIALS[0]);
+        double suggested = db.buyPrice(materials[0]);
         if (suggested > 0) unit.setText(fmt(suggested));
 
         final EditText note = new EditText(this);
@@ -195,7 +225,7 @@ public class SupplierActivity extends Activity {
         // تغيير المادة يقترح سعر شرائها المحفوظ.
         picker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-                double price = db.buyPrice(Db.MATERIALS[pos]);
+                double price = db.buyPrice(materials[pos]);
                 if (price > 0) unit.setText(fmt(price));
             }
             public void onNothingSelected(AdapterView<?> p) {}
@@ -220,12 +250,12 @@ public class SupplierActivity extends Activity {
         ScrollView form = new ScrollView(this);
         form.addView(box);
 
-        new AlertDialog.Builder(this).setTitle("شراء من شركة النفط")
+        new AlertDialog.Builder(this).setTitle("شراء من " + Db.supplierName(supplier))
                 .setMessage("تدخل المواد للمخزون، وقيمتها تُسجَّل دَينًا علينا للشركة.")
                 .setView(form)
                 .setPositiveButton("حفظ", (d, w) -> {
                     try {
-                        db.buyFromSupplier(Db.MATERIALS[picker.getSelectedItemPosition()],
+                        db.buyFromSupplier(materials[picker.getSelectedItemPosition()],
                                 Calc.number(litres.getText().toString()),
                                 Calc.number(unit.getText().toString()),
                                 note.getText().toString(), date[0]);
@@ -261,7 +291,7 @@ public class SupplierActivity extends Activity {
         styleInput(amount);
         amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         amount.setHint("المبلغ المورّد");
-        double owed = db.supplierBalance();
+        double owed = db.supplierBalance(supplier);
         if (owed > 0) amount.setText(fmt(owed));
 
         final EditText note = new EditText(this);
@@ -285,12 +315,12 @@ public class SupplierActivity extends Activity {
         ScrollView form = new ScrollView(this);
         form.addView(box);
 
-        new AlertDialog.Builder(this).setTitle("توريد لشركة النفط")
+        new AlertDialog.Builder(this).setTitle("توريد لـ" + Db.supplierName(supplier))
                 .setMessage("يخرج المبلغ من الصندوق وينقص ما علينا للشركة.")
                 .setView(form)
                 .setPositiveButton("حفظ", (d, w) -> {
                     try {
-                        db.paySupplier(ids.get(picker.getSelectedItemPosition()),
+                        db.paySupplier(supplier, ids.get(picker.getSelectedItemPosition()),
                                 Calc.number(amount.getText().toString()),
                                 note.getText().toString(), date[0]);
                         Toast.makeText(this, "سُجّل التوريد", Toast.LENGTH_SHORT).show();

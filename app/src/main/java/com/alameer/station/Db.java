@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 18;
+    private static final int DB_VERSION = 19;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -85,9 +85,14 @@ public class Db extends SQLiteOpenHelper {
         "litres REAL NOT NULL DEFAULT 0,unit_cost REAL NOT NULL DEFAULT 0,amount REAL NOT NULL,"+
         "box_id INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,"+
         "created_at TEXT NOT NULL,material_entry INTEGER NOT NULL DEFAULT 0,"+
-        "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0)";
+        "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL')";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<19){
+            try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
+            // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
+            try{db.execSQL("UPDATE supplier_entries SET supplier='GAS' WHERE material='غاز'");}catch(Exception ignored){}
+        }
         if(oldVersion<18){
             for(String col:new String[]{"currency TEXT NOT NULL DEFAULT 'YER'",
                     "orig_amount REAL NOT NULL DEFAULT 0","rate REAL NOT NULL DEFAULT 1"})
@@ -1936,13 +1941,63 @@ public class Db extends SQLiteOpenHelper {
         }
     }
 
-    // ==================== حساب شركة النفط ====================
+    // ==================== حسابات الموردين ====================
 
-    /** ما علينا لشركة النفط: المشتريات ناقص ما وُرِّد. */
+    /** الموردان: شركة النفط للبترول والديزل، وشركة الغاز للغاز. */
+    public static final String[] SUPPLIERS={"OIL","GAS"};
+    public static final String[] SUPPLIER_NAMES={"شركة النفط","شركة الغاز"};
+
+    public static String supplierName(String code){
+        return "GAS".equals(code)?"شركة الغاز":"شركة النفط";
+    }
+
+    /** المادة تحدّد موردها: الغاز لشركة الغاز وما عداه لشركة النفط. */
+    public static String supplierOf(String material){
+        return "غاز".equals(material)?"GAS":"OIL";
+    }
+
+    /** المواد التي يوردها كل مورّد. */
+    public static String[] materialsOf(String supplier){
+        return "GAS".equals(supplier)?new String[]{"غاز"}:new String[]{"بترول","ديزل"};
+    }
+
+    static String supplierAccount(String code){
+        return "GAS".equals(code)?Journal.SUPPLIER_GAS:Journal.SUPPLIER;
+    }
+
+    /** ما علينا لمورّد بعينه: المشتريات ناقص ما وُرِّد. */
+    public double supplierBalance(String supplier){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "FROM supplier_entries WHERE voided=0 AND COALESCE(supplier,'OIL')=?",
+                new String[]{supplier})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    /** ما علينا للموردين جميعًا. */
     public double supplierBalance(){
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0",null)){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    public double supplierBought(String supplier){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(amount),0) FROM supplier_entries "+
+                "WHERE voided=0 AND kind='BUY' AND COALESCE(supplier,'OIL')=?",
+                new String[]{supplier})){
+            return c.moveToFirst()?c.getDouble(0):0;
+        }
+    }
+
+    public double supplierPaid(String supplier){
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(amount),0) FROM supplier_entries "+
+                "WHERE voided=0 AND kind='PAY' AND COALESCE(supplier,'OIL')=?",
+                new String[]{supplier})){
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
@@ -1962,12 +2017,13 @@ public class Db extends SQLiteOpenHelper {
     }
 
     /** 0=id,1=نوع,2=مادة,3=لترات,4=سعر اللتر,5=مبلغ,6=صندوق,7=بيان,8=تاريخ */
-    public Cursor supplierEntries(int limit){
+    public Cursor supplierEntries(String supplier,int limit){
         return getReadableDatabase().rawQuery(
             "SELECT e.id,e.kind,e.material,e.litres,e.unit_cost,e.amount,"+
             "COALESCE((SELECT b.name FROM cashboxes b WHERE b.id=e.box_id),''),e.note,e.entry_date "+
-            "FROM supplier_entries e WHERE e.voided=0 "+
-            "ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),null);
+            "FROM supplier_entries e WHERE e.voided=0 AND COALESCE(e.supplier,'OIL')=? "+
+            "ORDER BY e.entry_date DESC,e.id DESC LIMIT "+Math.max(1,limit),
+            new String[]{supplier});
     }
 
     /**
@@ -1985,7 +2041,7 @@ public class Db extends SQLiteOpenHelper {
             // الوارد يُسجَّل في حركة المواد بلا قيد مستقل، فالقيد هنا يشمله.
             ContentValues m=new ContentValues();
             m.put("material",material);m.put("direction","IN");m.put("litres",litres);
-            m.put("note","شراء من شركة النفط"+(note.trim().isEmpty()?"":" — "+note.trim()));
+            m.put("note","شراء من "+supplierName(supplierOf(material))+(note.trim().isEmpty()?"":" — "+note.trim()));
             m.put("entry_date",date);m.put("created_at",Util.now());
             long materialEntry=db.insertOrThrow("material_entries",null,m);
 
@@ -1994,12 +2050,13 @@ public class Db extends SQLiteOpenHelper {
             v.put("unit_cost",unitCost);v.put("amount",amount);v.put("note",note.trim());
             v.put("entry_date",date);v.put("created_at",Util.now());
             v.put("material_entry",materialEntry);
+            v.put("supplier",supplierOf(material));
             id=db.insertOrThrow("supplier_entries",null,v);
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
         journalManual("supplier",id,date,
-                "شراء "+Calc.money(litres)+" لتر "+material+" من شركة النفط",amount,
-                Journal.INVENTORY,Journal.SUPPLIER);
+                "شراء "+Calc.money(litres)+" لتر "+material+" من "+supplierName(supplierOf(material)),amount,
+                Journal.INVENTORY,supplierAccount(supplierOf(material)));
         audit("supplier",id,"BUY_FUEL","",Calc.money(litres)+" لتر "+material+" بـ "+Calc.money(amount),note);
         return id;
     }
@@ -2008,9 +2065,10 @@ public class Db extends SQLiteOpenHelper {
      * توريد مبلغ لشركة النفط من أحد الصناديق.
      * القيد: شركة النفط مدينة، والصندوق دائن.
      */
-    public long paySupplier(long boxId,double amount,String note,String date){
+    public long paySupplier(String supplier,long boxId,double amount,String note,String date){
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         if(boxId<=0)throw new IllegalArgumentException("اختر الصندوق");
+        final String who=supplierName(supplier);
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
         long id;
@@ -2019,19 +2077,20 @@ public class Db extends SQLiteOpenHelper {
             long cashEntry;
             try{
                 cashEntry=addCashboxEntry(boxId,"OUT",amount,
-                        "توريد لشركة النفط"+(note.trim().isEmpty()?"":" — "+note.trim()),date);
+                        "توريد لـ"+who+(note.trim().isEmpty()?"":" — "+note.trim()),date);
             }finally{suppressJournal=false;}
 
             ContentValues v=new ContentValues();
             v.put("kind","PAY");v.put("amount",amount);v.put("box_id",boxId);
             v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());
             v.put("cashbox_entry",cashEntry);
+            v.put("supplier",supplier);
             id=db.insertOrThrow("supplier_entries",null,v);
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
-        journalManual("supplier",id,date,"توريد لشركة النفط",amount,
-                Journal.SUPPLIER,Journal.CASH);
-        audit("supplier",id,"PAY_SUPPLIER","",Calc.money(amount)+" ر.ي",note);
+        journalManual("supplier",id,date,"توريد لـ"+who,amount,
+                supplierAccount(supplier),Journal.CASH);
+        audit("supplier",id,"PAY_SUPPLIER",who,Calc.money(amount)+" ر.ي",note);
         return id;
     }
 

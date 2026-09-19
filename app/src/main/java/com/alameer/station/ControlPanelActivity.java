@@ -108,7 +108,7 @@ public class ControlPanelActivity extends Activity {
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
         box.addView(grand);
-        box.addView(text("الصناديق + الديون + المخزون − شركة النفط  •  اضغط للتفصيل",
+        box.addView(text("الصناديق + الديون + المخزون − الموردين  •  اضغط للتفصيل",
                 11, 0xffCFE2FA, false));
         return box;
     }
@@ -128,7 +128,9 @@ public class ControlPanelActivity extends Activity {
         sb.append("\n   مجموع الموجودات ").append(whole(cash + netDebt + stock)).append(" ر.ي\n");
 
         sb.append("\n\nالمطلوبات\n");
-        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(owed)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(db.supplierBalance("OIL"))).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة الغاز\n   ").append(whole(db.supplierBalance("GAS"))).append(" ر.ي\n");
+        sb.append("\n   مجموع المطلوبات ").append(whole(owed)).append(" ر.ي\n");
 
         sb.append("\n\nرأس المال = الموجودات − المطلوبات\n");
         sb.append("   ").append(whole(capital)).append(" ر.ي");
