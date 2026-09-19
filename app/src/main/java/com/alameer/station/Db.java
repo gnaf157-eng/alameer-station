@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 41066)
+Total output lines: 2505
+
 package com.alameer.station.shifts;
 
 import android.content.*;
@@ -7,7 +10,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 19;
+    private static final int DB_VERSION = 20;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
@@ -53,11 +56,11 @@ public class Db extends SQLiteOpenHelper {
     public static String hash(String pin){ return Calc.hash(pin); }
 
     static final String CASHBOXES_SQL="CREATE TABLE IF NOT EXISTS cashboxes(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '')";
-    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,currency TEXT NOT NULL DEFAULT 'YER',orig_amount REAL NOT NULL DEFAULT 0,rate REAL NOT NULL DEFAULT 1)";
+    static final String CASHBOX_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS cashbox_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,box_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,currency TEXT NOT NULL DEFAULT 'YER',orig_amount REAL NOT NULL DEFAULT 0,rate REAL NOT NULL DEFAULT 1,managed INTEGER NOT NULL DEFAULT 0)";
     static final String MATERIAL_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS material_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,material TEXT NOT NULL,direction TEXT NOT NULL,litres REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
     static final String DEBTORS_SQL="CREATE TABLE IF NOT EXISTS debtors(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,phone TEXT NOT NULL DEFAULT '',opening REAL NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT '',telegram TEXT NOT NULL DEFAULT '')";
-    static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0)";
-    static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0)";
+    static final String DEBT_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS debt_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,debtor_id INTEGER NOT NULL,direction TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,managed INTEGER NOT NULL DEFAULT 0)";
+    static final String EXPENSE_ENTRIES_SQL="CREATE TABLE IF NOT EXISTS expense_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,amount REAL NOT NULL,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,created_at TEXT NOT NULL,source_shift INTEGER NOT NULL DEFAULT 0,box_id INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0)";
     /** دفتر القيود: رأس القيد وأطرافه، وسجل التدقيق، وإقفال الفترات. */
     static final String JOURNAL_SQL="CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY AUTOINCREMENT,"+
         "memo TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',source_id INTEGER NOT NULL DEFAULT 0,"+
@@ -85,7 +88,7 @@ public class Db extends SQLiteOpenHelper {
         "litres REAL NOT NULL DEFAULT 0,unit_cost REAL NOT NULL DEFAULT 0,amount REAL NOT NULL,"+
         "box_id INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',entry_date TEXT NOT NULL,"+
         "created_at TEXT NOT NULL,material_entry INTEGER NOT NULL DEFAULT 0,"+
-        "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL')";
+        "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if(oldVersion<19){
@@ -172,6 +175,59 @@ public class Db extends SQLiteOpenHelper {
                         db.execSQL("UPDATE workers SET pin_hash=? WHERE id=?", new Object[]{hash(c.getString(1)), c.getLong(0)});
                 }
             } catch (Exception ignored) {}
+        }
+        if(oldVersion<20){
+            ensureColumn(db,"cashbox_entries","managed","INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(db,"debt_entries","managed","INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(db,"expense_entries","cashbox_entry","INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(db,"supplier_entries","debt_entry","INTEGER NOT NULL DEFAULT 0");
+        }
+    }
+
+    private static void ensureColumn(SQLiteDatabase db,String table,String column,String definition){
+        try(Cursor c=db.rawQuery("PRAGMA table_info("+table+")",null)){
+            while(c.moveToNext())if(column.equals(c.getString(1)))return;
+        }
+        db.execSQL("ALTER TABLE "+table+" ADD COLUMN "+column+" "+definition);
+    }
+    private interface Write<T>{ T run(); }
+    private final ThreadLocal<java.util.List<Runnable>> pendingNotifications=new ThreadLocal<>();
+    private <T> T atomic(Write<T> action){
+        SQLiteDatabase db=getWritableDatabase();boolean outer=!db.inTransaction();
+        if(outer)pendingNotifications.set(new java.util.ArrayList<>());
+        db.beginTransaction();boolean success=false;
+        try{T result=action.run();db.setTransactionSuccessful();success=true;return result;}
+        finally{
+            db.endTransaction();
+            if(outer){java.util.List<Runnable> callbacks=pendingNotifications.get();pendingNotifications.remove();
+                if(success&&callbacks!=null)for(Runnable callback:callbacks)try{callback.run();}catch(Exception ignored){}
+            }
+        }
+    }
+    private void afterCommit(Runnable callback){
+        java.util.List<Runnable> callbacks=pendingNotifications.get();
+        if(callbacks==null)callback.run();else callbacks.add(callback);
+    }
+    private void requireDate(String date){
+        try{java.time.LocalDate.parse(date);}catch(Exception e){throw new IllegalArgumentException("اكتب تاريخًا صحيحًا بصيغة YYYY-MM-DD");}
+        if(periodLocked(date))throw new IllegalStateException("الفترة مقفلة؛ لم تُحفظ أي تغييرات.");
+    }
+    private void requireEntity(String table,long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM "+table+" WHERE id=?",new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحساب غير موجود");
+        }
+    }
+    private void requireStandalone(String table,long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT entry_date,source_shift"+
+                ((table.equals("cashbox_entries")||table.equals("debt_entries"))?",managed":",0")+
+                " FROM "+table+" WHERE id=?",new String[]{String.valueOf(id)})){
+            if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
+            requireDate(c.getString(0));
+            if(c.getLong(1)>0||c.getInt(2)>0)throw new IllegalStateException("هذه الحركة مرتبطة بعملية أصلية؛ صحّحها من مصدرها.");
+        }
+        String link=table.equals("cashbox_entries")?"cashbox_entry":table.equals("material_entries")?"material_entry":table.equals("debt_entries")?"debt_entry":"";
+        if(!link.isEmpty())try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM supplier_entries WHERE voided=0 AND "+link+"=?",new String[]{String.valueOf(id)})){
+            if(c.moveToFirst())throw new IllegalStateException("هذه الحركة مرتبطة بالمورّد؛ صحّحها من حساب المورّد.");
         }
     }
 
@@ -474,6 +530,10 @@ public class Db extends SQLiteOpenHelper {
     }
     // ==================== الصناديق ====================
     public long addCashbox(String name,double opening){
+        return atomic(()->addCashboxAtomic(name,opening));
+    }
+    private long addCashboxAtomic(String name,double opening){
+        if(opening!=0&&openingPosted())throw new IllegalStateException("الأرصدة الافتتاحية معتمدة؛ افتح الحساب بصفر ثم سجّل حركته.");
         String clean=name.trim();
         if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم الصندوق");
         if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
@@ -490,6 +550,10 @@ public class Db extends SQLiteOpenHelper {
             throw new IllegalArgumentException("يوجد صندوق بهذا الاسم");
     }
     public void setCashboxOpening(long id,double opening){
+        atomic(()->{setCashboxOpeningAtomic(id,opening);return null;});
+    }
+    private void setCashboxOpeningAtomic(long id,double opening){
+        if(openingPosted())throw new IllegalStateException("الأرصدة الافتتاحية معتمدة؛ سجّل حركة تصحيح بدل تغيير الأصل.");
         if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
         ContentValues v=new ContentValues();v.put("opening",opening);
         getWritableDatabase().update("cashboxes",v,"id=?",new String[]{String.valueOf(id)});
@@ -529,7 +593,7 @@ public class Db extends SQLiteOpenHelper {
     /** إجمالي أرصدة الصناديق النشطة. */
     public double cashboxesTotal(){
         try(Cursor c=getReadableDatabase().rawQuery(
-            "SELECT COALESCE(SUM(b.opening),0)+COALESCE((SELECT SUM(CASE WHEN e.direction='IN' THEN e.amount ELSE -e.amount END) FROM cashbox_entries e JOIN cashboxes x ON x.id=e.box_id WHERE x.active=1),0) FROM cashboxes b WHERE b.active=1",null)){
+            "SELECT COALESCE(SUM(b.opening),0)+COALESCE((SELECT SUM(CASE WHEN e.direction='IN' THEN e.amount ELSE -e.amount END) FROM cashbox_entries e JOIN cashboxes x ON x.id=e.box_id),0) FROM cashboxes b",null)){
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
@@ -549,6 +613,11 @@ public class Db extends SQLiteOpenHelper {
      */
     public void updateCashboxEntry(long id,String direction,double amount,String note,
                                    String date,String currency){
+        atomic(()->{updateCashboxEntryAtomic(id,direction,amount,note,date,currency);return null;});
+    }
+    private void updateCashboxEntryAtomic(long id,String direction,double amount,String note,
+                                   String date,String currency){
+        requireDate(date);requireStandalone("cashbox_entries",id);
         if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String before="";long boxId=0;
@@ -562,7 +631,11 @@ public class Db extends SQLiteOpenHelper {
         }
         String code=currency==null||currency.trim().isEmpty()?"YER":currency.trim();
         double rate=rate(code);
+        try(Cursor old=getReadableDatabase().rawQuery("SELECT currency,rate FROM cashbox_entries WHERE id=?",new String[]{String.valueOf(id)})){
+            if(old.moveToFirst()&&code.equals(old.getString(0)))rate=old.getDouble(1);
+        }
         double yer=amount*rate;
+        if(!Double.isFinite(yer)||!Double.isFinite(rate)||rate<=0)throw new IllegalArgumentException("سعر الصرف أو المبلغ غير صالح");
         String label=note==null?"":note.trim();
         if(!"YER".equals(code))
             label=(label.isEmpty()?"":label+" — ")+Calc.money(amount)+" "+currencyName(code)
@@ -589,6 +662,10 @@ public class Db extends SQLiteOpenHelper {
 
     /** يعدّل حركة دين بنفس القاعدة: عكس القيد القديم وكتابة الجديد. */
     public void updateDebtEntry(long id,String direction,double amount,String note,String date){
+        atomic(()->{updateDebtEntryAtomic(id,direction,amount,note,date);return null;});
+    }
+    private void updateDebtEntryAtomic(long id,String direction,double amount,String note,String date){
+        requireDate(date);requireStandalone("debt_entries",id);
         if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String before="";long debtorId=0;
@@ -627,15 +704,16 @@ public class Db extends SQLiteOpenHelper {
     /** سعر صرف العملة إلى الريال اليمني. اليمني دائمًا واحد. */
     public double rate(String code){
         if(code==null||"YER".equals(code))return 1;
+        if(!java.util.Arrays.asList(CURRENCIES).contains(code))throw new IllegalArgumentException("عملة غير معروفة");
         try{
             double v=Double.parseDouble(setting("rate_"+code,defaultRate(code)));
-            return v>0?v:Double.parseDouble(defaultRate(code));
+            return Double.isFinite(v)&&v>0?v:Double.parseDouble(defaultRate(code));
         }catch(Exception e){return Double.parseDouble(defaultRate(code));}
     }
 
     public void setRate(String code,double value){
         if("YER".equals(code))throw new IllegalArgumentException("الريال اليمني هو عملة الأساس");
-        if(!(value>0))throw new IllegalArgumentException("اكتب سعر صرف أكبر من صفر");
+        if(!java.util.Arrays.asList(CURRENCIES).contains(code)||!Double.isFinite(value)||!(value>0))throw new IllegalArgumentException("سعر الصرف أو العملة غير صالح");
         setSetting("rate_"+code,String.valueOf(value));
         audit("device",0,"SET_RATE",code,Calc.money(value)+" ريال يمني","سعر الصرف");
     }
@@ -657,6 +735,10 @@ public class Db extends SQLiteOpenHelper {
      */
     public long addCashboxEntry(long boxId,String direction,double amount,String note,
                                 String date,String currency){
+        return atomic(()->addCashboxEntryAtomic(boxId,direction,amount,note,date,currency));
+    }
+    private long addCashboxEntryAtomic(long boxId,String direction,double amount,String note,
+                                String date,String currency){
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String code=currency==null||currency.trim().isEmpty()?"YER":currency.trim();
         double rate=rate(code);
@@ -674,14 +756,21 @@ public class Db extends SQLiteOpenHelper {
     }
 
     public long addCashboxEntry(long boxId,String direction,double amount,String note,String date){
+        return atomic(()->addCashboxEntryAtomic(boxId,direction,amount,note,date));
+    }
+    private long addCashboxEntryAtomic(long boxId,String direction,double amount,String note,String date){
         return addCashboxEntry(boxId,direction,amount,note,date,0);
     }
     public long addCashboxEntry(long boxId,String direction,double amount,String note,String date,long sourceShift){
+        return atomic(()->addCashboxEntryAtomic(boxId,direction,amount,note,date,sourceShift));
+    }
+    private long addCashboxEntryAtomic(long boxId,String direction,double amount,String note,String date,long sourceShift){
+        requireDate(date);requireEntity("cashboxes",boxId);
         if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         ContentValues v=new ContentValues();
         v.put("box_id",boxId);v.put("direction",direction);v.put("amount",amount);
-        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);v.put("managed",suppressJournal?1:0);
         long id=getWritableDatabase().insertOrThrow("cashbox_entries",null,v);
         // الحركة اليدوية تُقيَّد مزدوجة فورًا؛ حركات الورديات تُقيَّد مع قيد الوردية.
         if(sourceShift==0)journalManual("cashbox",id,date,note.trim(),amount,
@@ -690,6 +779,10 @@ public class Db extends SQLiteOpenHelper {
         return id;
     }
     public boolean deleteCashboxEntry(long id){
+        return atomic(()->deleteCashboxEntryAtomic(id));
+    }
+    private boolean deleteCashboxEntryAtomic(long id){
+        requireStandalone("cashbox_entries",id);
         reverseManual("CASHBOX",id);
         return getWritableDatabase().delete("cashbox_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
@@ -727,6 +820,10 @@ public class Db extends SQLiteOpenHelper {
 
     // ==================== حركة المخاريج ====================
     public long addExpense(String category,double amount,String note,String date,long boxId,long sourceShift){
+        return atomic(()->addExpenseAtomic(category,amount,note,date,boxId,sourceShift));
+    }
+    private long addExpenseAtomic(String category,double amount,String note,String date,long boxId,long sourceShift){
+        requireDate(date);if(boxId>0)requireEntity("cashboxes",boxId);
         String clean=category.trim();
         if(clean.isEmpty())throw new IllegalArgumentException("اكتب باب المصروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
@@ -742,7 +839,8 @@ public class Db extends SQLiteOpenHelper {
             if(boxId>0){
                 suppressJournal=true;
                 try{
-                    addCashboxEntry(boxId,"OUT",amount,"مخاريج: "+clean+(note.trim().isEmpty()?"":" — "+note.trim()),date,sourceShift);
+                    long cashId=addCashboxEntry(boxId,"OUT",amount,"مخاريج: "+clean+(note.trim().isEmpty()?"":" — "+note.trim()),date,sourceShift);
+                    db.execSQL("UPDATE expense_entries SET cashbox_entry=? WHERE id=?",new Object[]{cashId,id});
                 }finally{suppressJournal=false;}
             }
             ContentValues n=new ContentValues();n.put("type","EXPENSE");n.put("name",clean);
@@ -755,7 +853,16 @@ public class Db extends SQLiteOpenHelper {
         return id;
     }
     public boolean deleteExpense(long id){
+        return atomic(()->deleteExpenseAtomic(id));
+    }
+    private boolean deleteExpenseAtomic(long id){
+        requireStandalone("expense_entries",id);
+        long cashId=0;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT box_id,cashbox_entry FROM expense_entries WHERE id=?",new String[]{String.valueOf(id)})){
+            if(c.moveToFirst()){cashId=c.getLong(1);if(c.getLong(0)>0&&cashId==0)throw new IllegalStateException("مصروف قديم مرتبط بصندوق؛ يلزم مراجعة الربط قبل الإلغاء.");}
+        }
         reverseManual("EXPENSE",id);
+        if(cashId>0)getWritableDatabase().delete("cashbox_entries","id=?",new String[]{String.valueOf(cashId)});
         return getWritableDatabase().delete("expense_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** category,total,count — أبواب المصروف مرتّبة بالأكبر. */
@@ -829,9 +936,12 @@ public class Db extends SQLiteOpenHelper {
      * القيود المزدوجة تُعكس ولا تُحذف، فيبقى الأثر في سجل التدقيق.
      */
     public String repostShift(long shiftId){
+        return atomic(()->repostShiftAtomic(shiftId));
+    }
+    private String repostShiftAtomic(long shiftId){
         java.util.List<Long> entries=new java.util.ArrayList<>();
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0",
+                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0 AND reverses=0",
                 new String[]{String.valueOf(shiftId)})){
             while(c.moveToNext())entries.add(c.getLong(0));
         }
@@ -839,12 +949,15 @@ public class Db extends SQLiteOpenHelper {
         unpostShift(shiftId);
         audit("shift",shiftId,"REPAIR_DOUBLE_POST","ترحيل مكرّر","أُعيد الترحيل مرة واحدة","إصلاح");
         String posted=postShift(shiftId,defaultCashbox());
-        try{ journalShift(shiftId); }catch(Exception ignored){}
+        journalShift(shiftId);
         return posted;
     }
 
     /** يلغي ترحيل وردية (عند حذفها أو إعادة ترحيلها). */
     public void unpostShift(long shiftId){
+        atomic(()->{unpostShiftAtomic(shiftId);return null;});
+    }
+    private void unpostShiftAtomic(long shiftId){
         SQLiteDatabase db=getWritableDatabase();
         // يُحرَّر حجز الكود ليجوز إعادة الترحيل بعد المراجعة.
         db.delete("posted_shifts","shift_id=?",new String[]{String.valueOf(shiftId)});
@@ -861,6 +974,10 @@ public class Db extends SQLiteOpenHelper {
      * يعيد سطر ملخّص لما جرى.
      */
     public String postShift(long shiftId,long cashboxId){
+        return atomic(()->postShiftAtomic(shiftId,cashboxId));
+    }
+    private String postShiftAtomic(long shiftId,long cashboxId){
+        requireDate(shiftDate(shiftId));if(isOpen(shiftId))throw new IllegalStateException("أغلق الوردية قبل الترحيل");if(total(shiftId,"CASH")>0)requireEntity("cashboxes",cashboxId);
         if(shiftPosted(shiftId))return "";
         // كود الوردية هو الحارس: يُحجز داخل المعاملة نفسها، فإن كان محجوزًا
         // فالوردية مُرحّلة سلفًا ويُلغى كل شيء. لا اعتماد على عدّ السجلات.
@@ -914,79 +1031,7 @@ public class Db extends SQLiteOpenHelper {
             if(payers>0)log.append("• سُدّد ").append(Calc.money(paidTotal)).append(" ر.ي من ").append(payers).append(" حساب\n");
             int expenses=0;double expenseTotal=0;
             try(Cursor c=db.rawQuery("SELECT name,SUM(amount) FROM movements WHERE shift_id=? AND type='EXPENSE' GROUP BY name",
-                    new String[]{String.valueOf(shiftId)})){
-                while(c.moveToNext()){
-                    String name=c.getString(0).trim();
-                    double amount=c.getDouble(1);
-                    if(name.isEmpty()||!(amount>0))continue;
-                    ContentValues v=new ContentValues();
-                    v.put("category",name);v.put("amount",amount);v.put("note","وردية "+tag);
-                    v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",shiftId);v.put("box_id",0);
-                    db.insertOrThrow("expense_entries",null,v);
-                    expenses++;expenseTotal+=amount;
-                }
-            }
-            if(expenses>0)log.append("• سُجّل ").append(Calc.money(expenseTotal)).append(" ر.ي مخاريج\n");
-            if(debtors>0)log.append("• قُيّد ").append(Calc.money(debtTotal)).append(" ر.ي على ").append(debtors).append(" مدين\n");
-            int materials=0;
-            try(Cursor c=db.rawQuery(
-                "SELECT TRIM(p.fuel),SUM(r.current-r.previous) FROM readings r JOIN pumps p ON p.id=r.pump_id "+
-                "WHERE r.shift_id=? AND r.current IS NOT NULL AND r.current>=r.previous GROUP BY TRIM(p.fuel)",
-                new String[]{String.valueOf(shiftId)})){
-                while(c.moveToNext()){
-                    String fuel=normalizeFuel(c.getString(0));
-                    double litres=c.getDouble(1);
-                    if(!(litres>0))continue;
-                    ContentValues v=new ContentValues();
-                    v.put("material",fuel);v.put("direction","OUT");v.put("litres",litres);
-                    v.put("note","وردية "+tag+" — مبيعات");v.put("entry_date",date);v.put("created_at",Util.now());
-                    v.put("source_shift",shiftId);
-                    db.insertOrThrow("material_entries",null,v);
-                    materials++;
-                }
-            }
-            if(materials>0)log.append("• خُصمت لترات المبيعات من المخزون\n");
-            audit(db,shiftId,0,"POST_SHIFT","ترحيل الوردية إلى الصناديق والديون والمواد");
-            db.setTransactionSuccessful();
-        }finally{db.endTransaction();}
-        return log.toString().trim();
-    }
-    // ==================== دفتر القيد المزدوج ====================
-
-    /** المستخدم الحالي، يُكتب في كل قيد وكل سطر تدقيق. */
-    private static String actor="النظام";
-    public static void signIn(String name){actor=name==null||name.trim().isEmpty()?"النظام":name.trim();}
-    public static String actor(){return actor;}
-
-    /** سطر تدقيق كامل: من، وماذا، ومتى، والقيمة قبل وبعد، والسبب. */
-    void audit(SQLiteDatabase db,String entity,long entityId,String action,String oldValue,String newValue,String reason){
-        ContentValues v=new ContentValues();
-        v.put("created_at",Util.now());v.put("actor",actor);v.put("action",action);
-        v.put("entity",entity);v.put("entity_id",entityId);
-        v.put("old_value",oldValue==null?"":oldValue);
-        v.put("new_value",newValue==null?"":newValue);
-        v.put("reason",reason==null?"":reason);
-        db.insert("ledger_audit",null,v);
-    }
-    public void audit(String entity,long entityId,String action,String oldValue,String newValue,String reason){
-        audit(getWritableDatabase(),entity,entityId,action,oldValue,newValue,reason);
-    }
-    /** 0=id,1=وقت,2=من,3=عملية,4=السجل,5=قبل,6=بعد,7=سبب */
-    public Cursor auditLog(int limit){
-        return getReadableDatabase().rawQuery(
-            "SELECT id,created_at,COALESCE(NULLIF(actor,''),'النظام'),action,entity||' #'||entity_id,"+
-            "old_value,new_value,reason FROM ledger_audit ORDER BY id DESC LIMIT ?",
-            new String[]{String.valueOf(limit)});
-    }
-
-    public boolean periodLocked(String date){
-        String period=Journal.periodOf(date);
-        if(period.isEmpty())return false;
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM period_locks WHERE period=?",new String[]{period})){
-            return c.moveToFirst();
-        }
-    }
-    /** يقفل فترة: لا قيد جديد فيها بعد الإقفال. */
+                    new String[]{String.val…1066 tokens truncated…فل فترة: لا قيد جديد فيها بعد الإقفال. */
     public void lockPeriod(String period,String note){
         if(period==null||period.trim().length()<7)throw new IllegalArgumentException("اكتب الفترة بصيغة 2026-09");
         period=period.trim();
@@ -994,7 +1039,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM shifts s WHERE s.status<>'OPEN' "+
                 "AND substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7)=? "+
-                "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id)",
+                "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0)",
                 new String[]{period})){
             if(c.moveToFirst()&&c.getInt(0)>0)
                 throw new IllegalStateException("لا يمكن إقفال "+period+": فيها "+c.getInt(0)+" وردية لم تُرحّل بعد. رحّلها أولًا.");
@@ -1077,6 +1122,7 @@ public class Db extends SQLiteOpenHelper {
                 if(!c.moveToFirst())throw new IllegalStateException("القيد غير موجود");
                 memo=c.getString(0);date=c.getString(1);source=c.getString(2);sourceId=c.getLong(3);reversedBy=c.getInt(4);
             }
+            try(Cursor original=db.rawQuery("SELECT reverses FROM journal WHERE id=?",new String[]{String.valueOf(entryId)})){if(original.moveToFirst()&&original.getLong(0)>0)throw new IllegalStateException("لا يُعكس قيد عكسي؛ راجع العملية الأصلية.");}
             if(reversedBy>0)throw new IllegalStateException("سبق عكس هذا القيد بالقيد #"+reversedBy);
             if(periodLocked(date))throw new IllegalStateException("فترة القيد مقفلة. افتحها بصلاحية المدير أولًا.");
 
@@ -1206,6 +1252,9 @@ public class Db extends SQLiteOpenHelper {
      * وإن كان الحساب «ذمم المدينين» واسم المدين معروف، يُخصم من رصيده فعليًا.
      */
     public void settleSuspense(long entryId,String targetAccount,String party,String reason){
+        atomic(()->{settleSuspenseAtomic(entryId,targetAccount,party,reason);return null;});
+    }
+    private void settleSuspenseAtomic(long entryId,String targetAccount,String party,String reason){
         if(targetAccount==null||targetAccount.trim().isEmpty())
             throw new IllegalArgumentException("اختر الحساب الصحيح");
         String memo="",date="",source="";long sourceId=0;
@@ -1260,46 +1309,7 @@ public class Db extends SQLiteOpenHelper {
      * يعيد عدد ما نُظّف.
      */
     public int cleanSuspenseMess(){
-        int cleaned=0;
-        // 1) قيود ديون كرّرها التصريف المتكرّر: يُبقى الأقدم ويُحذف ما بعده.
-        try{
-            int removed=getWritableDatabase().delete("debt_entries",
-                "note LIKE '%تصريف حركة #%' AND id NOT IN ("+
-                "SELECT MIN(id) FROM debt_entries WHERE note LIKE '%تصريف حركة #%' "+
-                "GROUP BY debtor_id,direction,amount,entry_date,note)",null);
-            cleaned+=removed;
-        }catch(Exception ignored){}
-
-        // 2) قيود وسيطة ناتجة عن تصريف سابق: بيانها يحمل «تصريف إلى» وما زالت معلّقة.
-        java.util.List<Long> stale=new java.util.ArrayList<>();
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT DISTINCT j.id FROM journal j JOIN journal_lines l ON l.entry_id=j.id "+
-                "WHERE l.account=? AND j.reversed_by=0 AND j.reverses=0 "+
-                "AND (j.memo LIKE '%تصريف إلى%' OR j.memo LIKE '%عكس القيد%')",
-                new String[]{Journal.SUSPENSE})){
-            while(c.moveToNext())stale.add(c.getLong(0));
-        }
-        for(long id:stale){
-            try{ reverseEntry(id,"تنظيف تصريف مكرّر"); cleaned++; }catch(Exception ignored){}
-        }
-
-        // 3) رصيد متبقٍّ بلا حركة معلّقة تقابله: أثر تصريفات قديمة معطوبة.
-        //    يُقفل بقيد تسوية متوازن، فيصير الوسيط صفرًا دون المساس بالحسابات الأخرى.
-        double left=suspenseResidual();
-        if(Math.abs(left)>=0.01&&suspenseCount()==0){
-            try{
-                String today=ShiftDates.today();
-                Journal.Entry fix=left>0
-                    ? Journal.simple("تسوية إقفال الحساب الوسيط",today,"FIXSUSPENSE",0,
-                            Journal.EQUITY,Journal.SUSPENSE,Math.abs(left),"")
-                    : Journal.simple("تسوية إقفال الحساب الوسيط",today,"FIXSUSPENSE",0,
-                            Journal.SUSPENSE,Journal.EQUITY,Math.abs(left),"");
-                postEntry(fix);
-                audit("journal",0,"CLOSE_SUSPENSE",Calc.money(left),"صفر","إقفال رصيد وسيط بلا حركات");
-                cleaned++;
-            }catch(Exception ignored){}
-        }
-        return cleaned;
+        throw new IllegalStateException("لا يُحذف دين ولا يُصفّر الحساب الوسيط آليًا. راجع الحركة الأصلية وحدّد سبب التصحيح.");
     }
 
     /** الرصيد الحقيقي للوسيط في الدفتر كله، شاملًا القيود العكسية. */
@@ -1333,13 +1343,13 @@ public class Db extends SQLiteOpenHelper {
         return getReadableDatabase().rawQuery(
             "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
             "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
-            "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+            "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
             "ORDER BY s.id DESC",null);
     }
 
     /** هل للوردية قيد مسجّل؟ */
     public boolean shiftJournalled(long shiftId){
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='SHIFT' AND source_id=?",
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0 AND reverses=0",
                 new String[]{String.valueOf(shiftId)})){
             return c.moveToFirst();
         }
@@ -1347,6 +1357,10 @@ public class Db extends SQLiteOpenHelper {
 
     /** يسجّل قيد الوردية المُغلقة. يرفض الترحيل إذا كان هناك فرق غير مسوّى. */
     public long journalShift(long shiftId){
+        return atomic(()->journalShiftAtomic(shiftId));
+    }
+    private long journalShiftAtomic(long shiftId){
+        requireDate(shiftDate(shiftId));if(isOpen(shiftId))throw new IllegalStateException("أغلق الوردية قبل الترحيل");
         if(shiftJournalled(shiftId))return 0;
         String date="",reason="";double sales=0,collections=0,cash=0,debts=0,expenses=0,balance=0;
         try(Cursor c=getReadableDatabase().rawQuery(
@@ -1390,7 +1404,7 @@ public class Db extends SQLiteOpenHelper {
             "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
             "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
             "WHERE s.status<>'OPEN' AND ABS(s.balance)>=0.01 AND TRIM(COALESCE(s.difference_reason,''))='' "+
-            "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+            "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
             "ORDER BY s.id",null);
     }
 
@@ -1399,7 +1413,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT DISTINCT p.period FROM period_locks p JOIN shifts s "+
                 "ON p.period=substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7) "+
-                "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id) "+
+                "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
                 "ORDER BY p.period LIMIT 1",null)){
             return c.moveToFirst()?c.getString(0):"";
         }
@@ -1435,6 +1449,10 @@ public class Db extends SQLiteOpenHelper {
      * حتى تُراجَع في نفس خانات الطرمبات والحركات ثم تُعتمد من جديد.
      */
     public void reopenShift(long shiftId,String reason){
+        atomic(()->{reopenShiftAtomic(shiftId,reason);return null;});
+    }
+    private void reopenShiftAtomic(long shiftId,String reason){
+        requireDate(shiftDate(shiftId));
         String why=reason==null||reason.trim().isEmpty()?"فتح الوردية للتعديل":reason.trim();
         String before="";
         try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",
@@ -1447,7 +1465,7 @@ public class Db extends SQLiteOpenHelper {
         // القيود تُعكس أولًا خارج المعاملة، فلكل عكس معاملته المستقلة.
         java.util.List<Long> entries=new java.util.ArrayList<>();
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0",
+                "SELECT id FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0 AND reverses=0",
                 new String[]{String.valueOf(shiftId)})){
             while(c.moveToNext())entries.add(c.getLong(0));
         }
@@ -1456,6 +1474,7 @@ public class Db extends SQLiteOpenHelper {
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
         try{
+            db.delete("posted_shifts","shift_id=?",new String[]{String.valueOf(shiftId)});
             db.delete("cashbox_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
             db.delete("debt_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
             db.delete("expense_entries","source_shift=?",new String[]{String.valueOf(shiftId)});
@@ -1563,6 +1582,10 @@ public class Db extends SQLiteOpenHelper {
     }
     // ==================== حركة الديون ====================
     public long addDebtor(String name,String phone,double opening){
+        return atomic(()->addDebtorAtomic(name,phone,opening));
+    }
+    private long addDebtorAtomic(String name,String phone,double opening){
+        if(opening!=0&&openingPosted())throw new IllegalStateException("الأرصدة الافتتاحية معتمدة؛ افتح الحساب بصفر ثم سجّل حركته.");
         String clean=name.trim();
         if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم المدين");
         if(!Double.isFinite(opening)||opening<0)throw new IllegalArgumentException("الدين الافتتاحي غير صالح");
@@ -1573,6 +1596,12 @@ public class Db extends SQLiteOpenHelper {
         return id;
     }
     public void updateDebtor(long id,String name,String phone,double opening){
+        atomic(()->{updateDebtorAtomic(id,name,phone,opening);return null;});
+    }
+    private void updateDebtorAtomic(long id,String name,String phone,double opening){
+        if(openingPosted())try(Cursor c=getReadableDatabase().rawQuery("SELECT opening FROM debtors WHERE id=?",new String[]{String.valueOf(id)})){
+            if(c.moveToFirst()&&Math.abs(c.getDouble(0)-opening)>0.000001)throw new IllegalStateException("الرصيد الافتتاحي معتمد؛ سجّل حركة تصحيح.");
+        }
         String clean=name.trim();
         if(clean.isEmpty())throw new IllegalArgumentException("اكتب اسم المدين");
         if(!Double.isFinite(opening)||opening<0)throw new IllegalArgumentException("الدين الافتتاحي غير صالح");
@@ -1688,26 +1717,33 @@ public class Db extends SQLiteOpenHelper {
     /** الديون المستحقة فقط؛ الأرصدة الدائنة لا تُطرح منها. */
     public double debtsTotal(){
         double total=0;
-        try(Cursor c=debtors(true)){while(c.moveToNext()){double b=c.getDouble(7);if(b>0.009)total+=b;}}
+        try(Cursor c=debtors(false)){while(c.moveToNext()){double b=c.getDouble(7);if(b>0.009)total+=b;}}
         return total;
     }
     /** مجموع ما للزبائن علينا (الأرصدة السالبة) كقيمة موجبة. */
     public double creditsTotal(){
         double total=0;
-        try(Cursor c=debtors(true)){while(c.moveToNext()){double b=c.getDouble(7);if(b<-0.009)total-=b;}}
+        try(Cursor c=debtors(false)){while(c.moveToNext()){double b=c.getDouble(7);if(b<-0.009)total-=b;}}
         return total;
     }
     public long addDebtEntry(long debtorId,String direction,double amount,String note,String date){
+        return atomic(()->addDebtEntryAtomic(debtorId,direction,amount,note,date));
+    }
+    private long addDebtEntryAtomic(long debtorId,String direction,double amount,String note,String date){
         return addDebtEntry(debtorId,direction,amount,note,date,0);
     }
     public long addDebtEntry(long debtorId,String direction,double amount,String note,String date,long sourceShift){
+        return atomic(()->addDebtEntryAtomic(debtorId,direction,amount,note,date,sourceShift));
+    }
+    private long addDebtEntryAtomic(long debtorId,String direction,double amount,String note,String date,long sourceShift){
+        requireDate(date);requireEntity("debtors",debtorId);
         if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         ContentValues v=new ContentValues();
         v.put("debtor_id",debtorId);v.put("direction",direction);v.put("amount",amount);
-        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);
+        v.put("note",note.trim());v.put("entry_date",date);v.put("created_at",Util.now());v.put("source_shift",sourceShift);v.put("managed",suppressJournal?1:0);
         long id=getWritableDatabase().insertOrThrow("debt_entries",null,v);
-        notifyDebtor(debtorId,"DEBT".equals(direction),amount,note,date);
+        afterCommit(()->notifyDebtor(debtorId,"DEBT".equals(direction),amount,note,date));
         if(sourceShift==0){
             String who=debtorName(debtorId);
             // الدين يزيد ذمة المدين، والسداد ينقصها.
@@ -1757,75 +1793,36 @@ public class Db extends SQLiteOpenHelper {
      * يعيد عدد ما قُيّد.
      */
     public int journalManualBacklog(){
-        int done=0;
-        // الصناديق
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT e.id,e.direction,e.amount,e.note,e.entry_date FROM cashbox_entries e "+
-                "WHERE e.source_shift=0 AND NOT EXISTS("+
-                "SELECT 1 FROM journal j WHERE j.source='CASHBOX' AND j.source_id=e.id) ORDER BY e.id",null)){
-            while(c.moveToNext()){
-                boolean in="IN".equals(c.getString(1));
-                journalManual("cashbox",c.getLong(0),c.getString(4),c.getString(3),c.getDouble(2),
-                        in?Journal.CASH:Journal.SUSPENSE,in?Journal.SUSPENSE:Journal.CASH);
-                done++;
-            }
-        }
-        // الديون
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT e.id,e.direction,e.amount,e.entry_date,d.name FROM debt_entries e "+
-                "JOIN debtors d ON d.id=e.debtor_id WHERE e.source_shift=0 AND NOT EXISTS("+
-                "SELECT 1 FROM journal j WHERE j.source='DEBT' AND j.source_id=e.id) ORDER BY e.id",null)){
-            while(c.moveToNext()){
-                boolean debt="DEBT".equals(c.getString(1));
-                journalManual("debt",c.getLong(0),c.getString(3),
-                        (debt?"دين على ":"سداد من ")+c.getString(4),c.getDouble(2),
-                        debt?Journal.RECEIVABLE:Journal.SUSPENSE,
-                        debt?Journal.SUSPENSE:Journal.RECEIVABLE);
-                done++;
-            }
-        }
-        // المخاريج
-        try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT e.id,e.category,e.amount,e.entry_date,e.box_id FROM expense_entries e "+
-                "WHERE e.source_shift=0 AND NOT EXISTS("+
-                "SELECT 1 FROM journal j WHERE j.source='EXPENSE' AND j.source_id=e.id) ORDER BY e.id",null)){
-            while(c.moveToNext()){
-                journalManual("expense",c.getLong(0),c.getString(3),"مخاريج: "+c.getString(1),c.getDouble(2),
-                        Journal.EXPENSE,c.getLong(4)>0?Journal.CASH:Journal.SUSPENSE);
-                done++;
-            }
-        }
-        return done;
+        throw new IllegalStateException("الحركات القديمة تحتاج مراجعة مصادرها قبل الترحيل؛ لن تُنشأ قيود تقديرية تلقائيًا.");
     }
 
     /** يعكس قيد حركة يدوية عند حذفها، فلا يبقى أثر بلا مقابل. */
     void reverseManual(String source,long id){
-        try{
-            java.util.List<Long> entries=new java.util.ArrayList<>();
-            try(Cursor c=getReadableDatabase().rawQuery(
-                    "SELECT id FROM journal WHERE source=? AND source_id=? AND reversed_by=0",
-                    new String[]{source,String.valueOf(id)})){
-                while(c.moveToNext())entries.add(c.getLong(0));
-            }
-            for(long entry:entries)reverseEntry(entry,"حذف الحركة");
-        }catch(Exception ignored){}
+        atomic(()->{reverseManualAtomic(source,id);return null;});
     }
-
+    private void reverseManualAtomic(String source,long id){
+        java.util.List<Long> entries=new java.util.ArrayList<>();
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT id FROM journal WHERE source=? AND source_id=? AND reversed_by=0 AND reverses=0",
+                new String[]{source,String.valueOf(id)})){
+            while(c.moveToNext())entries.add(c.getLong(0));
+        }
+        for(long entry:entries)reverseEntry(entry,"تصحيح الحركة");
+    }
     private boolean suppressJournal=false;
-
     void journalManual(String source,long id,String date,String memo,double amount,
                        String debitAccount,String creditAccount){
-        try{
-            if(suppressJournal)return;
-            if(!(amount>0))return;
-            String when=date==null||date.trim().isEmpty()?ShiftDates.today():date.trim();
-            if(periodLocked(when))return;
-            String label=memo==null||memo.trim().isEmpty()?source:memo.trim();
-            postEntry(Journal.simple(label,when,source.toUpperCase(java.util.Locale.US),id,
-                    debitAccount,creditAccount,amount,label));
-        }catch(Exception ignored){}
+        if(suppressJournal)return;
+        requireDate(date);
+        String label=memo==null||memo.trim().isEmpty()?source:memo.trim();
+        postEntry(Journal.simple(label,date,source.toUpperCase(java.util.Locale.US),id,
+                debitAccount,creditAccount,amount,label));
     }
     public boolean deleteDebtEntry(long id){
+        return atomic(()->deleteDebtEntryAtomic(id));
+    }
+    private boolean deleteDebtEntryAtomic(long id){
+        requireStandalone("debt_entries",id);
         reverseManual("DEBT",id);
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
@@ -1911,32 +1908,30 @@ public class Db extends SQLiteOpenHelper {
      * الصناديق والمدينون والمخزون مدينة، ورأس المال دائن.
      */
     public String postOpeningBalances(String date){
-        double cash=0,debts=0,stock=0;
-        try(Cursor c=cashboxes(false)){while(c.moveToNext())cash+=c.getDouble(2);}
-        try(Cursor c=debtors(false)){while(c.moveToNext())debts+=c.getDouble(3);}
-        for(String m:MATERIALS)stock+=Math.max(0,materialSummary(m)[3])*unitCost(m);
-        double owed=supplierBalance();
-        double total=cash+debts+stock-owed;
-        if(Math.abs(total)<0.01&&cash<0.01&&debts<0.01&&stock<0.01)
-            throw new IllegalStateException("لا توجد أرصدة افتتاحية لتقييدها");
-
-        Journal.Entry e=new Journal.Entry("أرصدة افتتاحية",date,"OPENING",0);
-        if(cash>0.009)e.debit(Journal.CASH,cash,"");
-        if(debts>0.009)e.debit(Journal.RECEIVABLE,debts,"");
-        if(stock>0.009)e.debit(Journal.INVENTORY,stock,"");
-        if(owed>0.009)e.credit(Journal.SUPPLIER,owed,"");
-        double capital=cash+debts+stock-owed;
-        if(capital>0.009)e.credit(Journal.EQUITY,capital,"");
-        else if(capital<-0.009)e.debit(Journal.EQUITY,-capital,"");
-        postEntry(e);
-        audit("journal",0,"OPENING_BALANCES","",Calc.money(total)+" ر.ي","تقييد الأرصدة الافتتاحية");
-        return "قُيّدت الأرصدة الافتتاحية: "+Calc.money(total)+" ر.ي";
+        return atomic(()->postOpeningBalancesAtomic(date));
+    }
+    private String postOpeningBalancesAtomic(String date){
+        requireDate(date);
+        if(openingPosted())throw new IllegalStateException("سبق تقييد الأرصدة الافتتاحية");
+        Journal.Entry e=new Journal.Entry("أرصدة افتتاحية للصناديق والعملاء",date,"OPENING",0);
+        double net=0;
+        try(Cursor c=cashboxes(false)){while(c.moveToNext()){
+            double v=c.getDouble(2);net+=v;
+            if(v>0)e.debit(Journal.CASH,v,c.getString(1));else if(v<0)e.credit(Journal.CASH,-v,c.getString(1));
+        }}
+        try(Cursor c=debtors(false)){while(c.moveToNext()){
+            double v=c.getDouble(3);net+=v;
+            if(v>0)e.debit(Journal.RECEIVABLE,v,c.getString(1));else if(v<0)e.credit(Journal.RECEIVABLE,-v,c.getString(1));
+        }}
+        if(net>0)e.credit(Journal.EQUITY,net,"");else if(net<0)e.debit(Journal.EQUITY,-net,"");
+        if(e.lines.isEmpty())throw new IllegalStateException("لا توجد أرصدة افتتاحية للصناديق أو العملاء");
+        postEntry(e);return "قُيّدت الأرصدة الافتتاحية للصناديق والعملاء فقط: "+Calc.money(net)+" ر.ي";
     }
 
     /** هل سبق تقييد أرصدة افتتاحية؟ */
     public boolean openingPosted(){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT 1 FROM journal WHERE source='OPENING' AND reversed_by=0 LIMIT 1",null)){
+                "SELECT 1 FROM journal WHERE source='OPENING' AND reversed_by=0 AND reverses=0 LIMIT 1",null)){
             return c.moveToFirst();
         }
     }
@@ -2031,6 +2026,10 @@ public class Db extends SQLiteOpenHelper {
      * القيد: مخزون الوقود مدين، وشركة النفط دائنة.
      */
     public long buyFromSupplier(String material,double litres,double unitCost,String note,String date){
+        return atomic(()->buyFromSupplierAtomic(material,litres,unitCost,note,date));
+    }
+    private long buyFromSupplierAtomic(String material,double litres,double unitCost,String note,String date){
+        requireDate(date);
         if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
         if(!Double.isFinite(unitCost)||unitCost<=0)throw new IllegalArgumentException("اكتب سعر اللتر");
         double amount=litres*unitCost;
@@ -2071,6 +2070,10 @@ public class Db extends SQLiteOpenHelper {
      * القيد: حساب المورّد مدين، وذمم المدينين دائنة.
      */
     public long moveDebtorToSupplier(long debtorId,String supplier,String note,String date){
+        return atomic(()->moveDebtorToSupplierAtomic(debtorId,supplier,note,date));
+    }
+    private long moveDebtorToSupplierAtomic(long debtorId,String supplier,String note,String date){
+        requireDate(date);
         double balance=debtorBalance(debtorId);
         double amount=Math.abs(balance);
         if(amount<0.01)throw new IllegalStateException("رصيد الحساب صفر، لا شيء يُنقل");
@@ -2083,17 +2086,17 @@ public class Db extends SQLiteOpenHelper {
 
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
-        long id;
+        long id;long debtId;
         try{
             // قيد معاكس في الديون يصفّر الحساب هناك بلا حذف.
             suppressJournal=true;
             try{
-                addDebtEntry(debtorId,credit?"DEBT":"PAID",amount,
+                debtId=addDebtEntry(debtorId,credit?"DEBT":"PAID",amount,
                         "نقل الرصيد إلى حساب "+to,date);
             }finally{suppressJournal=false;}
 
             ContentValues v=new ContentValues();
-            v.put("kind",credit?"BUY":"PAY");
+            v.put("kind",credit?"BUY":"PAY");v.put("debt_entry",debtId);
             v.put("amount",amount);v.put("note",label);
             v.put("entry_date",date);v.put("created_at",Util.now());
             v.put("supplier",supplier);
@@ -2115,6 +2118,10 @@ public class Db extends SQLiteOpenHelper {
      * القيد: المورّد مدين، ومخزون الوقود دائن.
      */
     public long paySupplierInKind(String supplier,String material,double litres,
+                                  double unitCost,String note,String date){
+        return atomic(()->paySupplierInKindAtomic(supplier,material,litres,unitCost,note,date));
+    }
+    private long paySupplierInKindAtomic(String supplier,String material,double litres,
                                   double unitCost,String note,String date){
         if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
         if(!Double.isFinite(unitCost)||unitCost<=0)throw new IllegalArgumentException("اكتب سعر اللتر");
@@ -2159,6 +2166,10 @@ public class Db extends SQLiteOpenHelper {
     }
 
     public long paySupplier(String supplier,long boxId,double amount,String note,String date){
+        return atomic(()->paySupplierAtomic(supplier,boxId,amount,note,date));
+    }
+    private long paySupplierAtomic(String supplier,long boxId,double amount,String note,String date){
+        requireDate(date);
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         if(boxId<=0)throw new IllegalArgumentException("اختر الصندوق");
         final String who=supplierName(supplier);
@@ -2189,17 +2200,22 @@ public class Db extends SQLiteOpenHelper {
 
     /** يلغي حركة مورّد بعكس قيدها وإزالة أثرها، ويبقى السجل محفوظًا. */
     public void voidSupplierEntry(long id){
-        String kind="";long materialEntry=0,cashEntry=0;
+        atomic(()->{voidSupplierEntryAtomic(id);return null;});
+    }
+    private void voidSupplierEntryAtomic(long id){
+        String kind="";long materialEntry=0,cashEntry=0,debtEntry=0;
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT kind,material_entry,cashbox_entry FROM supplier_entries WHERE id=? AND voided=0",
+                "SELECT kind,material_entry,cashbox_entry,debt_entry,entry_date FROM supplier_entries WHERE id=? AND voided=0",
                 new String[]{String.valueOf(id)})){
             if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
-            kind=c.getString(0);materialEntry=c.getLong(1);cashEntry=c.getLong(2);
+            kind=c.getString(0);materialEntry=c.getLong(1);cashEntry=c.getLong(2);debtEntry=c.getLong(3);requireDate(c.getString(4));
+            if(materialEntry==0&&cashEntry==0&&debtEntry==0)throw new IllegalStateException("حركة مورّد قديمة غير مربوطة بمصدرها؛ يلزم مراجعتها قبل الإلغاء.");
         }
         reverseManual("SUPPLIER",id);
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
         try{
+            if(debtEntry>0)db.delete("debt_entries","id=?",new String[]{String.valueOf(debtEntry)});
             if(materialEntry>0)db.delete("material_entries","id=?",new String[]{String.valueOf(materialEntry)});
             if(cashEntry>0)db.delete("cashbox_entries","id=?",new String[]{String.valueOf(cashEntry)});
             ContentValues v=new ContentValues();v.put("voided",1);
@@ -2302,6 +2318,10 @@ public class Db extends SQLiteOpenHelper {
     // ==================== حركة المواد ====================
     public static final String[] MATERIALS={"بترول","ديزل","غاز"};
     public long addMaterialEntry(String material,String direction,double litres,String note,String date){
+        return atomic(()->addMaterialEntryAtomic(material,direction,litres,note,date));
+    }
+    private long addMaterialEntryAtomic(String material,String direction,double litres,String note,String date){
+        requireDate(date);
         if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(litres)||litres<=0)throw new IllegalArgumentException("اكتب كمية أكبر من صفر");
         ContentValues v=new ContentValues();
@@ -2310,12 +2330,20 @@ public class Db extends SQLiteOpenHelper {
         return getWritableDatabase().insertOrThrow("material_entries",null,v);
     }
     public boolean deleteMaterialEntry(long id){
+        return atomic(()->deleteMaterialEntryAtomic(id));
+    }
+    private boolean deleteMaterialEntryAtomic(long id){
+        requireStandalone("material_entries",id);
         return getWritableDatabase().delete("material_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     // ==================== مطابقة العجز بالمقياس ====================
 
     /** يسجّل قياس خزان يدويًا ويصحّح المخزون بحركة فرق، كل ذلك في معاملة واحدة. */
     public long recordDip(String material,double measured,String reason,String date){
+        return atomic(()->recordDipAtomic(material,measured,reason,date));
+    }
+    private long recordDipAtomic(String material,double measured,String reason,String date){
+        requireDate(date);
         if(!Double.isFinite(measured)||measured<0)throw new IllegalArgumentException("اكتب القياس باللترات");
         double book=materialSummary(material)[3];
         double gap=Dip.gap(book,measured);
@@ -2405,3 +2433,4 @@ public class Db extends SQLiteOpenHelper {
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }
+

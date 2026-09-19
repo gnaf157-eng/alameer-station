@@ -57,28 +57,8 @@ public class SuspenseActivity extends Activity {
         card.addView(stateText);
         content.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
-        Button clean = new Button(this);
-        clean.setText("تنظيف التصريفات المكرّرة");
-        clean.setAllCaps(false);
-        clean.setTextSize(14);
-        clean.setTextColor(Util.NAVY);
-        clean.setBackground(Util.round(Util.ACCENT_SOFT, dp(12)));
-        clean.setPadding(dp(14), dp(11), dp(14), dp(11));
-        clean.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("تنظيف التصريفات المكرّرة")
-                .setMessage("يُلغى أثر التصريفات التي تكرّرت بالخطأ، وتُحذف قيود الديون المكرّرة الناتجة عنها.\n\n"
-                        + "القيود الأصلية تبقى، والأثر محفوظ في سجل التدقيق.")
-                .setPositiveButton("تنظيف", (d, w) -> {
-                    int n = 0;
-                    try { n = db.cleanSuspenseMess(); }
-                    catch (Exception e) { Toast.makeText(this, String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show(); }
-                    Toast.makeText(this, "نُظّف " + n + " سطرًا", Toast.LENGTH_LONG).show();
-                    refresh();
-                })
-                .setNegativeButton("إلغاء", null).show());
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(0, dp(10), 0, 0);
-        content.addView(clean, cp);
+        TextView guidance=text("راجع مصدر كل حركة قبل تصريفها. لا يُحذف دين ولا يُصفّر فرق تلقائيًا.",14,Util.NAVY,false);
+        guidance.setPadding(0,dp(12),0,dp(8));content.addView(guidance);
 
         listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
@@ -296,7 +276,7 @@ public class SuspenseActivity extends Activity {
     private TextView text(String value, int size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(size);
+        t.setTextSize(Math.max(12,size));
         t.setTextColor(color);
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         t.setPadding(0, dp(2), 0, dp(2));
@@ -310,3 +290,4 @@ public class SuspenseActivity extends Activity {
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 }
+

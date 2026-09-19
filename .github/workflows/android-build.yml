@@ -57,6 +57,7 @@ jobs:
           echo "code=$(grep -oP 'versionCode \K\d+' app/build.gradle)" >> "$GITHUB_OUTPUT"
 
       - name: Decode release keystore
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         id: keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -70,6 +71,7 @@ jobs:
           fi
 
       - name: Build signed release APK
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         env:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -91,12 +93,14 @@ jobs:
              "Tabiq-v${{ steps.version.outputs.name }}.apk"
 
       - name: Verify the APK is signed
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         run: |
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "Tabiq-v${{ steps.version.outputs.name }}.apk" | tee certs.txt
           grep -q "SHA-256 digest" certs.txt
 
       - name: Generate update manifest
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         run: |
           FILE="Tabiq-v${{ steps.version.outputs.name }}.apk"
           SIZE=$(stat -c%s "$FILE")
@@ -152,6 +156,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload installable APK
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
         uses: actions/upload-artifact@v4
         with:
           name: Alameer-Station-Shifts-APK
@@ -159,4 +164,15 @@ jobs:
             Tabiq-v*.apk
             update-manifest.json
           if-no-files-found: error
+          retention-days: 30
+
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accounting-test-results
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
           retention-days: 30

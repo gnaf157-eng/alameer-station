@@ -272,7 +272,7 @@ public class HomeActivity extends Activity {
     private TextView text(String value, int size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(size);
+        t.setTextSize(Math.max(12,size));
         t.setTextColor(color);
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
@@ -462,3 +462,4 @@ public class HomeActivity extends Activity {
         public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 }
+

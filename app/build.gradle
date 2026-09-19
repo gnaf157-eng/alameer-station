@@ -11,9 +11,8 @@ ext.prop = { String name ->
     def value = secrets.getProperty(name) ?: System.getenv(name) ?: project.findProperty(name)
     value == null ? '' : value.toString()
 }
-/** مفتاح التوقيع الثابت المرافق للمشروع: يضمن أن كل نسخة تُثبَّت فوق سابقتها بلا فقدان بيانات. */
-ext.bundledKeystore = rootProject.file('signing/release.p12')
-ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() } || bundledKeystore.exists()
+// Signing credentials must be provided by CI secrets or local keystore.properties.
+ext.signingReady = ['KEYSTORE_FILE', 'KEYSTORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'].every { !prop(it).isEmpty() }
 
 android {
     namespace 'com.alameer.station.shifts'
@@ -22,8 +21,8 @@ android {
         applicationId 'com.alameer.station.shifts.v2'
         minSdk 26
         targetSdk 35
-        versionCode 150
-        versionName '2.64.0'
+        versionCode 151
+        versionName '2.64.1'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://github.com/gnaf157-eng/alameer-station/releases/latest/download/update-manifest.json'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""
@@ -37,12 +36,6 @@ android {
                 storePassword prop('KEYSTORE_PASSWORD')
                 keyAlias prop('KEY_ALIAS')
                 keyPassword prop('KEY_PASSWORD')
-            } else if (bundledKeystore.exists()) {
-                storeFile bundledKeystore
-                storeType 'PKCS12'
-                storePassword 'tabiq2216'
-                keyAlias 'tabiq'
-                keyPassword 'tabiq2216'
             }
         }
     }
@@ -53,6 +46,7 @@ android {
             minifyEnabled false
         }
     }
+    testOptions { unitTests.includeAndroidResources = true }
     buildFeatures { buildConfig true }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -63,4 +57,6 @@ android {
 dependencies {
     implementation 'androidx.core:core:1.13.1'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
 }
+

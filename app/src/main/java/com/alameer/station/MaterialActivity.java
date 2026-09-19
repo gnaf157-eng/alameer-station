@@ -630,7 +630,7 @@ public class MaterialActivity extends Activity {
     private TextView text(String value, int size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(size);
+        t.setTextSize(Math.max(12,size));
         t.setTextColor(color);
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         t.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
@@ -760,3 +760,4 @@ public class MaterialActivity extends Activity {
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 }
+

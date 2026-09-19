@@ -64,7 +64,7 @@ public class ControlPanelActivity extends Activity {
         super.onResume();
         if (isFinishing() || content == null) return;
         // كل حركة يدوية تدخل الدفتر، فيعبّر التوازن عن كل الأموال لا الورديات وحدها.
-        try { db.journalManualBacklog(); } catch (Exception ignored) { }
+        // Opening a dashboard must never create or alter accounting entries.
         LOW_CASH = db.lowCash();
         STALE_DAYS = db.staleDays();
         LOW_STOCK = db.lowStockPercent();
@@ -102,7 +102,7 @@ public class ControlPanelActivity extends Activity {
         box.setClickable(true);
         box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
 
-        box.addView(text("رأس المال", 13, 0xffCFE2FA, false));
+        box.addView(text("صافي الأصول التقديري", 13, 0xffCFE2FA, false));
         TextView grand = text(whole(capital) + "  ر.ي", 30,
                 capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -138,7 +138,7 @@ public class ControlPanelActivity extends Activity {
             sb.append("\n\n⚠ المطلوبات تتجاوز الموجودات.");
 
         new android.app.AlertDialog.Builder(this)
-                .setTitle("تفصيل رأس المال")
+                .setTitle("تفصيل صافي الأصول التقديري")
                 .setMessage(sb.toString())
                 .setPositiveButton("حسنًا", null)
                 .show();
@@ -988,7 +988,7 @@ public class ControlPanelActivity extends Activity {
     private TextView text(String value, int size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(size);
+        t.setTextSize(Math.max(12,size));
         t.setTextColor(color);
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
         if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
@@ -1006,3 +1006,4 @@ public class ControlPanelActivity extends Activity {
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 }
+
