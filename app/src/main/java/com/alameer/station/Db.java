@@ -1442,6 +1442,47 @@ public class Db extends SQLiteOpenHelper {
         return getWritableDatabase().delete("debtors","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** id,name,phone,opening,active,debt,paid,balance */
+    // ==================== قفل التطبيق ====================
+
+    /** الجلسة الحالية: فُتح القفل أم لا، ومتى غادر التطبيق. */
+    private static boolean unlocked=false;
+    private static long leftAt=0;
+    public static void markUnlocked(){ unlocked=true; leftAt=0; }
+    public static void markLeft(){ leftAt=System.currentTimeMillis(); }
+    public static void forgetUnlock(){ unlocked=false; leftAt=0; }
+
+    public boolean lockOn(){ return "1".equals(setting("lock_on","0")); }
+    public void setLockOn(boolean on){
+        setSetting("lock_on",on?"1":"0");
+        audit("device",0,"SET_LOCK",on?"مغلق":"مفتوح",on?"مفعّل":"معطّل","قفل التطبيق");
+    }
+
+    /** ملح خاص بالجهاز لتجزئة رمز القفل. */
+    private String lockSalt(){
+        String v=setting("lock_salt","");
+        if(v.isEmpty()){
+            v=Lock.newSalt(new java.security.SecureRandom());
+            setSetting("lock_salt",v);
+        }
+        return v;
+    }
+
+    public boolean lockPinSet(){ return !setting("lock_pin","").isEmpty(); }
+
+    public void setLockPin(String pin){
+        setSetting("lock_pin",Lock.hash(pin,lockSalt()));
+        audit("device",0,"SET_LOCK_PIN","","رمز جديد","قفل التطبيق");
+    }
+
+    public boolean checkLockPin(String pin){
+        return Lock.same(Lock.hash(pin,lockSalt()),setting("lock_pin",""));
+    }
+
+    /** هل تُطلب البصمة أو الرمز الآن؟ */
+    public boolean shouldAskLock(){
+        return Lock.shouldAsk(lockOn(),unlocked,leftAt,System.currentTimeMillis());
+    }
+
     // ==================== إشعار تلغرام ====================
 
     public String telegramToken(){ return setting("telegram_token",""); }

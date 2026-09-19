@@ -337,6 +337,7 @@ public class ShiftActivity extends Activity {
             backupSection.addView(text("الاستعادة تستبدل كل البيانات الحالية ولا يمكن التراجع عنها.",
                     12,Util.RED,true));
 
+            buildLockSettings();
             buildTelegramSettings();
             buildFreshStartSettings();
         }
@@ -379,6 +380,59 @@ public class ShiftActivity extends Activity {
         pages[4].addView(head,hp);
         pages[4].addView(body);
         return body;
+    }
+
+    /** قفل التطبيق بالبصمة أو الرمز. */
+    private void buildLockSettings(){
+        LinearLayout box=section("قفل التطبيق");
+        LinearLayout card=panel(Color.WHITE);
+        final boolean on=db.lockOn();
+        card.addView(text(on?"القفل مفعّل":"القفل معطّل",17,on?Util.GREEN:0xff7c8186,true));
+        card.addView(text("تُطلب البصمة عند فتح التطبيق، والرمز بديل عنها دائمًا.",
+                13,0xff7c8186,false));
+
+        Button pin=action(db.lockPinSet()?"تغيير الرمز":"ضبط الرمز",!db.lockPinSet());
+        pin.setOnClickListener(v->lockPinDialog());
+        card.addView(pin,space());
+
+        final CheckBox toggle=new CheckBox(this);
+        toggle.setText("تفعيل القفل عند فتح التطبيق");
+        toggle.setTextSize(15);
+        toggle.setChecked(on);
+        toggle.setOnCheckedChangeListener((b,checked)->{
+            if(checked&&!db.lockPinSet()){
+                toggle.setChecked(false);
+                Toast.makeText(this,"اضبط الرمز أولًا",Toast.LENGTH_LONG).show();
+                return;
+            }
+            db.setLockOn(checked);
+        });
+        card.addView(toggle);
+        card.addView(text("الرمز ضروري: البصمة قد لا تعمل على كل جهاز.",12,0xff8b9097,false));
+        box.addView(card,space());
+    }
+
+    private void lockPinDialog(){
+        final EditText first=new EditText(this);styleInput(first);
+        first.setHint("الرمز الجديد");
+        first.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        final EditText again=new EditText(this);styleInput(again);
+        again.setHint("أعد كتابته");
+        again.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        LinearLayout form=column();form.setPadding(dp(22),dp(8),dp(22),0);
+        form.addView(first);form.addView(again);
+        new AlertDialog.Builder(this).setTitle("رمز القفل")
+            .setMessage("اختر رمزًا من أربعة رموز فأكثر، واحفظه؛ فبدونه لا يُفتح التطبيق إن تعذّرت البصمة.")
+            .setView(form)
+            .setPositiveButton("حفظ",(d,w)->{
+                String why=Lock.reject(first.getText().toString(),again.getText().toString());
+                if(!why.isEmpty()){Toast.makeText(this,why,Toast.LENGTH_LONG).show();return;}
+                db.setLockPin(first.getText().toString());
+                db.setLockOn(true);
+                buildSettingsPage();
+                Toast.makeText(this,"حُفظ الرمز وفُعّل القفل",Toast.LENGTH_LONG).show();
+            })
+            .setNegativeButton("إلغاء",null).show();
     }
 
     /** إشعارات تلغرام: رمز البوت وتفعيل الإرسال. */

@@ -20,6 +20,10 @@ public class HomeActivity extends Activity {
         super.onCreate(state);
         db = new Db(this);
         Db.signIn(Branding.stationName(db));
+        // القفل قبل أي شيء: لا تُبنى الواجهة قبل تجاوزه.
+        if (db.shouldAskLock()) {
+            startActivity(new Intent(this, LockActivity.class));
+        }
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -132,8 +136,19 @@ public class HomeActivity extends Activity {
         new AppUpdater(this).check(false);
     }
 
+    @Override protected void onPause() {
+        super.onPause();
+        // تُسجَّل لحظة المغادرة فقط عند الخروج من التطبيق كله،
+        // لا عند الانتقال إلى شاشة أخرى داخله.
+        if (!isFinishing()) Db.markLeft();
+    }
+
     @Override protected void onResume() {
         super.onResume();
+        if (db.shouldAskLock()) {
+            startActivity(new Intent(this, LockActivity.class));
+            return;
+        }
         recreateIfBrandChanged();
         refreshBalances();
     }

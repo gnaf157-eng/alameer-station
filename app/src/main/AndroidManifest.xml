@@ -30,6 +30,7 @@
         <activity android:name=".ArchiveActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".SuspenseActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".SupplierActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".LockActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".DashboardActivity" android:screenOrientation="portrait" />
         <activity android:name=".AdminActivity" android:screenOrientation="portrait" />
         <activity android:name=".LoginActivity" android:screenOrientation="portrait" />
