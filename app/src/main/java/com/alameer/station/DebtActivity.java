@@ -284,6 +284,16 @@ public class DebtActivity extends Activity {
         box.addView(nameInput);
         box.addView(text("رقم الهاتف", 13, 0xff7c8186, false), space());
         box.addView(phoneInput);
+        // اختيار من جهات الاتصال: يفتح دفتر الهاتف ويعيد الرقم المختار
+        // دون أن يطلب التطبيق إذن قراءة جهات الاتصال.
+        Button fromContacts = action("اختيار من جهات الاتصال", false);
+        fromContacts.setTextSize(14);
+        fromContacts.setOnClickListener(v -> {
+            pendingName = nameInput;
+            pendingPhone = phoneInput;
+            pickContact();
+        });
+        box.addView(fromContacts, space());
         box.addView(text("الدين الافتتاحي (ريال يمني)", 13, 0xff7c8186, false), space());
         box.addView(openingInput);
         ScrollView form = new ScrollView(this);
@@ -362,6 +372,48 @@ public class DebtActivity extends Activity {
                     else if (pick == 1) share(uri, body);
                     else open(uri);
                 }).show();
+    }
+
+    // خانتا النافذة المفتوحة، تُملآن بعد العودة من جهات الاتصال.
+    private EditText pendingName, pendingPhone;
+    private static final int PICK_CONTACT = 5301;
+
+    /**
+     * يفتح دفتر جهات الاتصال ليختار المستخدم رقمًا.
+     * لا يحتاج إذن READ_CONTACTS لأن النظام هو من يعرض القائمة
+     * ويعيد الرقم المختار وحده.
+     */
+    private void pickContact() {
+        try {
+            android.content.Intent pick = new android.content.Intent(
+                    android.content.Intent.ACTION_PICK,
+                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+            startActivityForResult(pick, PICK_CONTACT);
+        } catch (Exception e) {
+            Toast.makeText(this, "لا يوجد تطبيق لجهات الاتصال", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != PICK_CONTACT || result != RESULT_OK || data == null || data.getData() == null) return;
+        try (android.database.Cursor c = getContentResolver().query(data.getData(),
+                new String[]{
+                        android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER,
+                        android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME},
+                null, null, null)) {
+            if (c == null || !c.moveToFirst()) return;
+            String number = c.getString(0);
+            String who = c.getString(1);
+            if (pendingPhone != null && number != null)
+                pendingPhone.setText(number.replaceAll("[\\s\\-()]", ""));
+            // الاسم يُملأ فقط إن كانت الخانة فارغة، فلا يُطمس ما كتبه المستخدم.
+            if (pendingName != null && who != null
+                    && pendingName.getText().toString().trim().isEmpty())
+                pendingName.setText(who);
+        } catch (Exception e) {
+            Toast.makeText(this, "تعذر قراءة الرقم المختار", Toast.LENGTH_LONG).show();
+        }
     }
 
     /** ربط العميل بمحادثة تلغرام ليصله إشعار بعد كل حركة. */
