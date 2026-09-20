@@ -46,7 +46,7 @@ android {
             minifyEnabled false
         }
     }
-    testOptions { unitTests.includeAndroidResources = true }
+    testOptions { unitTests.includeAndroidResources = true; unitTests.all { testLogging { events "failed", "skipped"; exceptionFormat "full" } } }
     buildFeatures { buildConfig true }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -36,7 +36,7 @@ public class SuspenseActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("الحساب الوسيط", 19, Color.WHITE, true));
-        words.addView(text("حركات لم يُحدَّد طرفها — صرّفها حتى يصير الرصيد صفرًا", 11, 0xffCFE2FA, false));
+        words.addView(text("حركات تحتاج مراجعة المصدر وتحديد الطرف المقابل", 11, 0xffCFE2FA, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -49,11 +49,11 @@ public class SuspenseActivity extends Activity {
         card.setPadding(dp(16), dp(14), dp(16), dp(14));
         card.setBackground(Util.round(Color.WHITE, dp(16)));
         card.setElevation(dp(2));
-        card.addView(text("الرصيد المعلّق", 12, 0xff7c8186, false));
+        card.addView(text("الرصيد المعلّق", 12, 0xff626970, false));
         balanceText = text("", 26, Util.NAVY, true);
         balanceText.setTextDirection(View.TEXT_DIRECTION_LTR);
         card.addView(balanceText);
-        stateText = text("", 13, 0xff7c8186, true);
+        stateText = text("", 13, 0xff626970, true);
         card.addView(stateText);
         content.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
@@ -69,7 +69,7 @@ public class SuspenseActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
     }
 
     @Override protected void onResume() {
@@ -134,9 +134,9 @@ public class SuspenseActivity extends Activity {
                 TextView originText = text(origin, 12, Util.ACCENT, true);
                 lines.addView(originText);
                 lines.addView(text(date + "  •  مقابل " + other
-                        + (actor == null || actor.isEmpty() ? "" : "  •  " + actor), 11, 0xff8b9097, false));
+                        + (actor == null || actor.isEmpty() ? "" : "  •  " + actor), 11, 0xff626970, false));
                 if (recordNote != null && !recordNote.trim().isEmpty() && !recordNote.equals(memo))
-                    lines.addView(text("البيان: " + recordNote.trim(), 11, 0xff8b9097, false));
+                    lines.addView(text("البيان: " + recordNote.trim(), 11, 0xff626970, false));
                 top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(money(amount), 16,
                         suspenseDebit ? Util.RED : Util.GREEN, true);
@@ -221,7 +221,7 @@ public class SuspenseActivity extends Activity {
                 + (recordName == null || recordName.isEmpty() ? "" : " — " + recordName), 13, Util.ACCENT, true));
         wrap.addView(text(suspenseDebit
                 ? "الوسيط مدين: المال خرج، فما وجهته؟"
-                : "الوسيط دائن: المال دخل، فمن أين جاء؟", 13, 0xff7c8186, false));
+                : "الوسيط دائن: المال دخل، فمن أين جاء؟", 13, 0xff626970, false));
 
         final RadioGroup group = new RadioGroup(this);
         for (int i = 0; i < labels.length; i++) {
@@ -235,6 +235,7 @@ public class SuspenseActivity extends Activity {
         group.setOnCheckedChangeListener((g, id) -> chosen[0] = id - 1000);
         wrap.addView(group);
         wrap.addView(party);
+        wrap.addView(text("عند اختيار الصندوق تُسجّل الحركة في الصندوق الافتراضي. تصحيح المصدر يعكس الحركة المرتبطة أيضًا.",13,Util.NAVY,false));
 
         ScrollView form = new ScrollView(this);
         form.addView(wrap);

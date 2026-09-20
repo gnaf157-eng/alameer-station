@@ -71,7 +71,7 @@ public class ExpenseActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         refresh();
     }
 
@@ -136,7 +136,7 @@ public class ExpenseActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(name, 18, Util.NAVY, true));
-                words.addView(text(times + " حركة  •  " + share + "٪ من المخاريج", 11, 0xff8b9097, false));
+                words.addView(text(times + " حركة  •  " + share + "٪ من المخاريج", 11, 0xff626970, false));
                 top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 LinearLayout amountBox = new LinearLayout(this);
                 amountBox.setOrientation(LinearLayout.VERTICAL);
@@ -144,7 +144,7 @@ public class ExpenseActivity extends Activity {
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 amount.setGravity(Gravity.LEFT);
                 amountBox.addView(amount);
-                TextView unit = text("ريال يمني", 10, 0xff8b9097, false);
+                TextView unit = text("ريال يمني", 10, 0xff626970, false);
                 unit.setGravity(Gravity.LEFT);
                 amountBox.addView(unit);
                 top.addView(amountBox);
@@ -173,7 +173,7 @@ public class ExpenseActivity extends Activity {
             empty.addView(text("لا توجد مخاريج بعد. سجّل مخرجًا أو أغلق وردية فيها مخاريج.", 15, 0xff777d84, false));
             listBox.addView(empty, space());
         } else {
-            listBox.addView(text("اضغط أيقونة الساعة بجانب الباب لعرض مخاريجه", 11, 0xff8b9097, false));
+            listBox.addView(text("اضغط أيقونة الساعة بجانب الباب لعرض مخاريجه", 11, 0xff626970, false));
         }
     }
 
@@ -194,7 +194,7 @@ public class ExpenseActivity extends Activity {
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(c.getString(1), 16, Util.NAVY, true));
                 String note = c.getString(3);
-                words.addView(text((note.isEmpty() ? "" : note + "  •  ") + c.getString(4), 12, 0xff7c8186, false));
+                words.addView(text((note.isEmpty() ? "" : note + "  •  ") + c.getString(4), 12, 0xff626970, false));
                 if (auto) {
                     TextView src = text("مُرحّلة تلقائيًا من وردية", 10, Util.ACCENT, false);
                     src.setPadding(0, dp(4), 0, 0);
@@ -212,7 +212,7 @@ public class ExpenseActivity extends Activity {
                         return true;
                     }
                     new AlertDialog.Builder(this).setTitle("حذف المخرج")
-                            .setMessage("سيُحذف هذا السطر من سجل المخاريج.\nإن كان مدفوعًا من صندوق فاحذف حركة الصندوق يدويًا.")
+                            .setMessage("سيُعكس المصروف وحركة الصندوق المرتبطة به معًا. إذا كانت الحركة القديمة بلا رابط موثوق فسيُمنع حذفها.")
                             .setPositiveButton("حذف", (d, w) -> { try{db.deleteExpense(id); refresh();}catch(Exception e){new AlertDialog.Builder(this).setTitle("تعذّر الحذف").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();} })
                             .setNegativeButton("إلغاء", null).show();
                     return true;
@@ -224,7 +224,7 @@ public class ExpenseActivity extends Activity {
             }
         }
         if (count == 0) entriesBox.addView(text("لا توجد مخاريج مسجّلة بعد.", 15, 0xff777d84, false));
-        else entriesBox.addView(text("اضغط مطوّلًا على أي مخرج لحذفه", 11, 0xff8b9097, false), space());
+        else entriesBox.addView(text("اضغط مطوّلًا على أي مخرج لحذفه", 11, 0xff626970, false), space());
     }
 
     /** تسجيل مخرج، مع خيار خصمه من صندوق. */
@@ -278,13 +278,13 @@ public class ExpenseActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(10), dp(24), 0);
-        box.addView(text("باب المصروف", 13, 0xff7c8186, false));
+        box.addView(text("باب المصروف", 13, 0xff626970, false));
         box.addView(category);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
+        box.addView(text("المبلغ", 13, 0xff626970, false), space());
         box.addView(amount);
-        box.addView(text("البيان", 13, 0xff7c8186, false), space());
+        box.addView(text("البيان", 13, 0xff626970, false), space());
         box.addView(note);
-        box.addView(text("يُدفع من", 13, 0xff7c8186, false), space());
+        box.addView(text("يُدفع من", 13, 0xff626970, false), space());
         box.addView(boxPicker);
         box.addView(dateButton, space());
         ScrollView form = new ScrollView(this);
@@ -476,7 +476,7 @@ public class ExpenseActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), dp(8));
         if (lines.isEmpty()) {
-            box.addView(text(empty, 15, 0xff8b9097, false));
+            box.addView(text(empty, 15, 0xff626970, false));
         } else {
             for (String[] line : lines) {
                 LinearLayout row = new LinearLayout(this);
@@ -485,7 +485,7 @@ public class ExpenseActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(line[0], 15, Util.NAVY, true));
-                words.addView(text(line[1], 11, 0xff8b9097, false));
+                words.addView(text(line[1], 11, 0xff626970, false));
                 row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(line[2], 16, Integer.parseInt(line[3]), true);
                 value.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -503,7 +503,7 @@ public class ExpenseActivity extends Activity {
                         }
                         new AlertDialog.Builder(this).setTitle("حذف الحركة")
                                 .setMessage("سيُحذف هذا السطر نهائيًا ويتغيّر الرصيد.")
-                                .setPositiveButton("حذف", (d, w) -> { deleteEntry(entryId); refresh(); })
+                                .setPositiveButton("حذف", (d, w) -> { try{deleteEntry(entryId); refresh();}catch(Exception e){new AlertDialog.Builder(this).setTitle("تعذّر الحذف").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();} })
                                 .setNegativeButton("إلغاء", null).show();
                         return true;
                     });

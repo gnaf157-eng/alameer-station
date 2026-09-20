@@ -124,12 +124,12 @@ public class HomeActivity extends Activity {
         shell.addView(row3, rowWeight(true));
 
 
-        TextView credit = text(Branding.CREDIT, 12, 0xff8b9097, false);
+        TextView credit = text(Branding.CREDIT, 12, 0xff626970, false);
         credit.setGravity(Gravity.CENTER);
         credit.setPadding(0, dp(12), 0, dp(2));
         shell.addView(credit);
 
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         refreshBalances();
         new AppUpdater(this).check(false);
     }
@@ -260,7 +260,7 @@ public class HomeActivity extends Activity {
         name.setMaxLines(1);
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 11, 0xff7c8186, false);
+        TextView caption = text(note, 11, 0xff626970, false);
         caption.setGravity(Gravity.CENTER);
         caption.setMaxLines(2);
         caption.setEllipsize(android.text.TextUtils.TruncateAt.END);

@@ -37,4 +37,46 @@ public class AccountingDbTest {
     }
     @Test public void invalidCurrencyAndRatesAreRejected(){refused(()->db.setRate("SAR",Double.POSITIVE_INFINITY));refused(()->db.addCashboxEntry(box,"IN",1,"",date,"BAD"));assertEquals(0,count("cashbox_entries"));}
     @Test public void upgrade19PreservesEveryExistingRow(){long id=db.addCashboxEntry(box,"IN",123,"keep",date);String before;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){c.moveToFirst();before=c.getString(0);}db.onUpgrade(db.getWritableDatabase(),19,20);try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){assertTrue(c.moveToFirst());assertEquals(before,c.getString(0));}}
+
+    long filledShift(){long id=db.openSoloShift(db.soloWorkerId());db.getWritableDatabase().execSQL("UPDATE readings SET current=previous+1,price=100,sales=100 WHERE shift_id=?",new Object[]{id});db.addMovement(id,"CASH","نقد",db.sales(id));return id;}
+    long sourceJournal(String source,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id FROM journal WHERE source=? AND source_id=? AND reversed_by=0 AND reverses=0",new String[]{source,""+id})){assertTrue(c.moveToFirst());return c.getLong(0);}}
+    @Test public void failedCloseKeepsStatusPumpsAndLedgers(){
+        long shift=filledShift();db.getWritableDatabase().execSQL("CREATE TRIGGER reject_journal BEFORE INSERT ON journal BEGIN SELECT RAISE(ABORT,'test'); END");
+        try{db.closeAndPostShift(shift,db.soloWorkerId(),"",box);fail();}catch(RuntimeException expected){}
+        assertTrue(db.isOpen(shift));assertEquals(0,count("posted_shifts"));assertEquals(0,count("cashbox_entries"));
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT SUM(last_reading) FROM pumps",null)){c.moveToFirst();assertEquals(0,c.getDouble(0),0.001);}
+    }
+    @Test public void reopenedShiftCannotRewindCurrentPumpReadings(){
+        long shift=filledShift();db.closeAndPostShift(shift,db.soloWorkerId(),"",box);
+        db.getWritableDatabase().execSQL("UPDATE pumps SET last_reading=500,price=999");
+        db.reopenShift(shift,"تصحيح");db.syncShiftWithSettings(shift);assertEquals(800,db.sales(shift),0.001);
+        db.closeAndPostShift(shift,db.soloWorkerId(),"",box);
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT MIN(last_reading) FROM pumps",null)){c.moveToFirst();assertEquals(500,c.getDouble(0),0.001);}
+    }
+    @Test public void settlementAndSourceDeletionRestoreBothLedgers(){
+        long debtor=db.addDebtor("عميل","",0);db.addDebtEntry(debtor,"DEBT",100,"بيع",date);
+        long cash=db.addCashboxEntry(box,"IN",100,"سداد",date);
+        db.settleSuspense(sourceJournal("CASHBOX",cash),Journal.RECEIVABLE,"عميل","سداد");assertEquals(0,db.debtorBalance(debtor),0.001);
+        db.deleteCashboxEntry(cash);assertEquals(100,db.debtorBalance(debtor),0.001);assertEquals(100,account(Journal.RECEIVABLE),0.001);assertEquals(0,count("settlement_links"));
+    }
+    @Test public void settlementRequiresExistingDebtor(){long cash=db.addCashboxEntry(box,"IN",100,"سداد",date);refused(()->db.settleSuspense(sourceJournal("CASHBOX",cash),Journal.RECEIVABLE,"غير موجود","سداد"));assertEquals(1,count("journal"));}
+    @Test public void cashSettlementWritesDefaultCashboxAndReversesIt(){
+        db.setDefaultCashbox(box);long debtor=db.addDebtor("عميل","",0);long debt=db.addDebtEntry(debtor,"DEBT",100,"سلفة",date);
+        db.settleSuspense(sourceJournal("DEBT",debt),Journal.CASH,"","سلفة نقدية");assertEquals(-100,db.cashboxBalance(box),0.001);
+        db.deleteDebtEntry(debt);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);
+    }
+    @Test public void backupIncludesCommittedWalAndOpeningData()throws Exception{
+        db.getWritableDatabase().enableWriteAheadLogging();db.setCashboxOpening(box,250);db.addCashboxEntry(box,"IN",123,"حركة أخيرة",date);
+        java.io.File target=new java.io.File(context.getCacheDir(),"snapshot-test.db");Backup.snapshot(db,target);
+        try(android.database.sqlite.SQLiteDatabase copy=android.database.sqlite.SQLiteDatabase.openDatabase(target.getPath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
+            try(Cursor c=copy.rawQuery("SELECT amount,note FROM cashbox_entries",null)){assertTrue(c.moveToFirst());assertEquals(123,c.getDouble(0),0.001);assertEquals("حركة أخيرة",c.getString(1));}
+            assertEquals(20,copy.getVersion());
+        }finally{target.delete();}
+    }
+    @Test public void backupRejectsFutureSchema()throws Exception{
+        java.io.File target=new java.io.File(context.getCacheDir(),"future-test.db");Backup.snapshot(db,target);
+        try(android.database.sqlite.SQLiteDatabase copy=android.database.sqlite.SQLiteDatabase.openDatabase(target.getPath(),null,0)){copy.setVersion(99);}
+        assertFalse(Backup.validDatabase(target));target.delete();
+    }
+    @Test public void parserHandlesArabicAndRejectsNonFinite(){assertEquals(1234.5,Calc.number("١٬٢٣٤٫٥"),0.0001);assertEquals(1234.5,Calc.number("۱٬۲۳۴٫۵"),0.0001);assertEquals(0,Calc.number("NaN"),0);assertEquals(0,Calc.number("Infinity"),0);}
 }

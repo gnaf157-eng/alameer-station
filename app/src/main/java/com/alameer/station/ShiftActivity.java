@@ -128,7 +128,7 @@ public class ShiftActivity extends Activity {
         titleRow.addView(shiftCodeBadge,bp);
         shiftCard.addView(titleRow);
 
-        shiftCard.addView(text("ورديتي  •  محفوظة على الجهاز",12,0xff8b9097,false));
+        shiftCard.addView(text("ورديتي  •  محفوظة على الجهاز",12,0xff626970,false));
 
         shiftDateButton=action("",false);
         shiftDateButton.setTextSize(14);
@@ -214,7 +214,7 @@ public class ShiftActivity extends Activity {
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(70),1);
             lp.setMargins(dp(3),0,dp(3),0);nav.addView(tab,lp);
         }
-        shell.addView(nav);setContentView(shell);
+        shell.addView(nav);setContentView(shell);Util.safeInsets(shell);
         boolean openSettings=getIntent().getBooleanExtra("openSettings",false);
         // الدخول من ترس الواجهة الرئيسية: الرجوع يخرج إليها مباشرة لا إلى الوردية.
         settingsOnly=openSettings;
@@ -232,7 +232,7 @@ public class ShiftActivity extends Activity {
         Button updateTop=action("فحص تحديث التطبيق  ⟳",true);
         updateTop.setOnClickListener(v->new AppUpdater(this).check(true));
         pages[4].addView(updateTop,space());
-        TextView version=text("النسخة الحالية "+BuildConfig.VERSION_NAME,12,0xff7c8186,false);
+        TextView version=text("النسخة الحالية "+BuildConfig.VERSION_NAME,12,0xff626970,false);
         version.setGravity(Gravity.CENTER);
         pages[4].addView(version,space());
         Button back=action("رجوع إلى الوردية",false);
@@ -247,7 +247,7 @@ public class ShiftActivity extends Activity {
         LinearLayout nameRow=new LinearLayout(this);nameRow.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout nameWords=column();
         nameWords.addView(text(workerName,18,Util.NAVY,true));
-        nameWords.addView(text("يظهر في الوردية وفي تقرير PDF",13,0xff7c8186,false));
+        nameWords.addView(text("يظهر في الوردية وفي تقرير PDF",13,0xff626970,false));
         nameRow.addView(nameWords,new LinearLayout.LayoutParams(0,-2,1));
         Button editName=action("تغيير",false);editName.setTextSize(14);
         editName.setOnClickListener(v->nameDialog());
@@ -270,7 +270,7 @@ public class ShiftActivity extends Activity {
                 LinearLayout words=column();
                 words.addView(text(fuel,17,Util.NAVY,true));
                 words.addView(text(missing?"لم يُحدَّد بعد":mixed?"مختلف ("+money(min)+" — "+money(max)+")":money(min)+" ريال/لتر  •  "+count+" طرمبة",
-                        13,(missing||mixed)?Util.RED:0xff7c8186,false));
+                        13,(missing||mixed)?Util.RED:0xff626970,false));
                 row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
                 Button edit=action("تغيير",false);edit.setTextSize(14);
                 edit.setOnClickListener(v->fuelPriceDialog(fuel,mixed?0:min));
@@ -293,7 +293,7 @@ public class ShiftActivity extends Activity {
                 LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
                 LinearLayout words=column();
                 words.addView(text(name+(active?"":"  (موقوفة)"),17,active?Util.NAVY:Util.RED,true));
-                words.addView(text(fuel+"  •  العداد "+money(reading),13,0xff7c8186,false));
+                words.addView(text(fuel+"  •  العداد "+money(reading),13,0xff626970,false));
                 row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
                 Button toggle=action(active?"إيقاف":"تفعيل",false);toggle.setTextSize(14);
                 toggle.setOnClickListener(v->{
@@ -327,7 +327,7 @@ public class ShiftActivity extends Activity {
 
             LinearLayout backupSection=section("النسخة الاحتياطية");
             backupSection.addView(text("النسخة ملف واحد يحمل كل البيانات والإعدادات."
-                    +" احفظه في درايف أو أرسله لنفسك.",13,0xff7c8186,false));
+                    +" احفظه في درايف أو أرسله لنفسك.",13,0xff626970,false));
             Button backupBtn=action("حفظ نسخة احتياطية",true);
             backupBtn.setOnClickListener(v->new Backup(this).export());
             backupSection.addView(backupBtn,space());
@@ -387,8 +387,8 @@ public class ShiftActivity extends Activity {
         LinearLayout box=section("قفل التطبيق");
         LinearLayout card=panel(Color.WHITE);
         final boolean on=db.lockOn();
-        card.addView(text(on?"القفل مفعّل":"القفل معطّل",17,on?Util.GREEN:0xff7c8186,true));
-        card.addView(text("يُطلب الرمز عند فتح التطبيق.",13,0xff7c8186,false));
+        card.addView(text(on?"القفل مفعّل":"القفل معطّل",17,on?Util.GREEN:0xff626970,true));
+        card.addView(text("يُطلب الرمز عند فتح التطبيق.",13,0xff626970,false));
 
         Button pin=action(db.lockPinSet()?"تغيير الرمز":"ضبط الرمز",!db.lockPinSet());
         pin.setOnClickListener(v->lockPinDialog());
@@ -440,8 +440,8 @@ public class ShiftActivity extends Activity {
         LinearLayout card=panel(Color.WHITE);
         boolean ready=!db.telegramToken().isEmpty();
         card.addView(text(ready?"البوت مضبوط":"البوت غير مضبوط",17,ready?Util.GREEN:Util.RED,true));
-        card.addView(text("يصل العميل إشعار فور تسجيل دين أو سداد في حسابه.",13,0xff7c8186,false));
-        card.addView(text(db.telegramLinkedCount()+" عميلًا مربوطًا بتلغرام",12,0xff8b9097,false));
+        card.addView(text("يصل العميل إشعار فور تسجيل دين أو سداد في حسابه.",13,0xff626970,false));
+        card.addView(text(db.telegramLinkedCount()+" عميلًا مربوطًا بتلغرام",12,0xff626970,false));
 
         Button token=action(ready?"تغيير رمز البوت":"إدخال رمز البوت",!ready);
         token.setOnClickListener(v->{
@@ -469,7 +469,7 @@ public class ShiftActivity extends Activity {
         card.addView(on);
 
         card.addView(text("اربط كل عميل برقم محادثته من: حركة الديون ← العميل ← تلغرام.",
-                12,0xff8b9097,false));
+                12,0xff626970,false));
         box.addView(card,space());
     }
 
@@ -478,7 +478,7 @@ public class ShiftActivity extends Activity {
         LinearLayout freshSection=section("بداية جديدة");
         LinearLayout box=panel(Color.WHITE);
         box.addView(text("تُفرَّغ كل الحركات وتبقى الطرمبات والصناديق والعملاء والأسعار.",
-                13,0xff7c8186,false));
+                13,0xff626970,false));
 
         Button reset=action("تفريغ الحركات والبدء من جديد",false);
         reset.setOnClickListener(v->freshStartDialog());
@@ -563,9 +563,9 @@ public class ShiftActivity extends Activity {
             LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
             LinearLayout words=column();
             words.addView(text(material,17,Util.NAVY,true));
-            words.addView(text("السعة "+money(cap)+" لتر  •  الدفتري "+money(book)+" لتر",13,0xff7c8186,false));
+            words.addView(text("السعة "+money(cap)+" لتر  •  الدفتري "+money(book)+" لتر",13,0xff626970,false));
             String last=db.lastDip(material);
-            if(!last.isEmpty())words.addView(text("آخر قياس: "+last,12,0xff8b9097,false));
+            if(!last.isEmpty())words.addView(text("آخر قياس: "+last,12,0xff626970,false));
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
             Button capBtn=action("السعة",false);capBtn.setTextSize(13);
             capBtn.setOnClickListener(v->capacityDialog(material,cap));
@@ -606,14 +606,14 @@ public class ShiftActivity extends Activity {
         measured.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         measured.setHint("القياس الفعلي باللترات");
         final EditText why=new EditText(this);styleInput(why);why.setHint("سبب الفرق (اختياري)");
-        final TextView preview=text("أدخل القياس لعرض الفرق",14,0xff7c8186,false);
+        final TextView preview=text("أدخل القياس لعرض الفرق",14,0xff626970,false);
         preview.setPadding(0,dp(10),0,0);
         measured.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence c,int a,int b,int d){}
             public void onTextChanged(CharSequence c,int a,int b,int d){}
             public void afterTextChanged(android.text.Editable e){
                 String raw=e.toString().trim();
-                if(raw.isEmpty()){preview.setText("أدخل القياس لعرض الفرق");preview.setTextColor(0xff7c8186);return;}
+                if(raw.isEmpty()){preview.setText("أدخل القياس لعرض الفرق");preview.setTextColor(0xff626970);return;}
                 double value=Calc.number(raw);
                 double gap=Dip.gap(book,value);
                 int level=Dip.level(book,value);
@@ -682,7 +682,7 @@ public class ShiftActivity extends Activity {
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(10),0,dp(10));
         LinearLayout words=column();
         words.addView(text(title+"  —  "+value,17,Util.NAVY,true));
-        words.addView(text(note,12,0xff7c8186,false));
+        words.addView(text(note,12,0xff626970,false));
         row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
         Button edit=action("تغيير",false);edit.setTextSize(14);
         edit.setOnClickListener(tap);
@@ -717,7 +717,7 @@ public class ShiftActivity extends Activity {
         LinearLayout stationSection=section("المحطة");
         LinearLayout box=panel(Color.WHITE);
         box.addView(text(Branding.stationName(db),20,Util.NAVY,true));
-        box.addView(text("اسم المحطة وشعارها يظهران في الواجهة والتقرير",13,0xff7c8186,false));
+        box.addView(text("اسم المحطة وشعارها يظهران في الواجهة والتقرير",13,0xff626970,false));
         Button rename=action("تغيير اسم المحطة",false);
         rename.setOnClickListener(v->{
             EditText input=new EditText(this);styleInput(input);input.setSingleLine(true);
@@ -915,7 +915,7 @@ public class ShiftActivity extends Activity {
                 // بعد الإغلاق تُقفل الوردية على العامل نهائيًا.
                 final boolean locked=false;
                 card.addView(text(locked?"عند المدير — لا يمكن تعديلها":"اضغط لفتحها ومراجعتها",
-                        12,locked?0xff8b9097:0xff667078,false));
+                        12,locked?0xff626970:0xff667078,false));
                 card.setClickable(true);
                 card.setOnClickListener(v->{
                     if(locked){
@@ -1049,9 +1049,9 @@ public class ShiftActivity extends Activity {
             top.addView(text(c.getString(1),16,Util.NAVY,true),new LinearLayout.LayoutParams(0,-2,1));
             row.addView(top);
             boolean stopped=c.getInt(7)==0;
-            row.addView(text(c.getString(2)+"  •  سعر اللتر "+money(c.getDouble(5))+(stopped?"  •  أوقفها المدير":""),12,stopped?Util.RED:0xff7c8186,false),space());
+            row.addView(text(c.getString(2)+"  •  سعر اللتر "+money(c.getDouble(5))+(stopped?"  •  أوقفها المدير":""),12,stopped?Util.RED:0xff626970,false),space());
             LinearLayout pair=new LinearLayout(this);pair.setGravity(Gravity.CENTER_VERTICAL);
-            LinearLayout prevBox=column();prevBox.addView(text("القراءة السابقة",12,0xff7c8186,false));
+            LinearLayout prevBox=column();prevBox.addView(text("القراءة السابقة",12,0xff626970,false));
             EditText previous=new EditText(this);styleInput(previous);previous.setHint("السابقة");previous.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);previous.setTextDirection(View.TEXT_DIRECTION_LTR);
             previous.setText(fmt(c.getDouble(3)));
             previous.setKeyListener(null);previous.setFocusable(false);previous.setFocusableInTouchMode(false);
@@ -1065,7 +1065,7 @@ public class ShiftActivity extends Activity {
                 previous.setOnClickListener(v->historicalBaseline(historicalReading,historicalPrevious,historicalPrice));
             }
             prevBox.addView(previous);
-            LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff7c8186,false));
+            LinearLayout currBox=column();currBox.addView(text("القراءة الحالية",12,0xff626970,false));
             EditText current=new EditText(this);styleInput(current);current.setHint("الحالية");current.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);current.setTextDirection(View.TEXT_DIRECTION_LTR);
             if(!c.isNull(4))current.setText(fmt(c.getDouble(4)));currBox.addView(current);
             if(!stopped){
@@ -1201,7 +1201,7 @@ public class ShiftActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22),dp(6),dp(22),0);
 
-        box.addView(text("نوع الحركة",12,0xff7c8186,false));
+        box.addView(text("نوع الحركة",12,0xff626970,false));
         final Spinner picker=new Spinner(this);
         picker.setAdapter(new ArrayAdapter<String>(this,
                 android.R.layout.simple_spinner_dropdown_item,movementLabels));
@@ -1212,7 +1212,7 @@ public class ShiftActivity extends Activity {
         });
         box.addView(picker,space());
 
-        box.addView(text("الاسم أو البيان",12,0xff7c8186,false));
+        box.addView(text("الاسم أو البيان",12,0xff626970,false));
         final AutoCompleteTextView nameInput=new AutoCompleteTextView(this);
         styleInput(nameInput);
         nameInput.setSingleLine(true);
@@ -1222,7 +1222,7 @@ public class ShiftActivity extends Activity {
                 android.R.layout.simple_dropdown_item_1line,rememberedNames(type)));
         box.addView(nameInput,space());
 
-        box.addView(text("المبلغ • ر.ي",12,0xff7c8186,false));
+        box.addView(text("المبلغ • ر.ي",12,0xff626970,false));
         final EditText amountInput=new EditText(this);
         styleInput(amountInput);
         amountInput.setSingleLine(true);
@@ -1266,7 +1266,7 @@ public class ShiftActivity extends Activity {
         running.setBackground(Util.round(typeSoft(type),dp(11)));
         box.addView(running,space());
 
-        box.addView(text("الاسم أو البيان",12,0xff7c8186,false));
+        box.addView(text("الاسم أو البيان",12,0xff626970,false));
         final AutoCompleteTextView name=new AutoCompleteTextView(this);
         styleInput(name);
         name.setHint("اكتب الاسم ثم التالي");
@@ -1276,7 +1276,7 @@ public class ShiftActivity extends Activity {
         name.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_dropdown_item_1line,rememberedNames(type)));
         box.addView(name,space());
 
-        box.addView(text("المبلغ • ر.ي",12,0xff7c8186,false));
+        box.addView(text("المبلغ • ر.ي",12,0xff626970,false));
         final EditText amount=new EditText(this);
         styleInput(amount);
         amount.setHint("0");
@@ -1409,7 +1409,7 @@ public class ShiftActivity extends Activity {
         }}
         if(count==0)movementsBox.addView(text("لا توجد حركات في هذه القائمة",15,0xff777d84,false));
         else if("OPEN".equals(db.shiftStatus(shiftId)))
-            movementsBox.addView(text("اضغط على أي حركة لتعديلها",12,0xff8b9097,false));
+            movementsBox.addView(text("اضغط على أي حركة لتعديلها",12,0xff626970,false));
     }
     private Double visibleCurrent(Cursor c){
         String key=draftKey(c.getLong(0),"current");

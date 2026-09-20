@@ -5,7 +5,7 @@ import android.app.*;import android.content.Intent;import android.os.*;import an
 public class AdminActivity extends Activity {
     Db db;LinearLayout content;
     @Override public void onCreate(Bundle b){super.onCreate(b);db=new Db(this);if("approvals".equals(getIntent().getStringExtra("screen")))approvals();else home();}
-    private void shell(String title){ScrollView scroll=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(18,24,18,50);content.setBackgroundColor(Util.BG);content.addView(Util.title(this,title),Util.spaced());scroll.addView(content);setContentView(scroll);}
+    private void shell(String title){ScrollView scroll=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(18,24,18,50);content.setBackgroundColor(Util.BG);content.addView(Util.title(this,title),Util.spaced());scroll.addView(content);setContentView(scroll);Util.safeInsets(scroll);}
     private void home(){shell("إعدادات المدير");Button workers=Util.button(this,"العمال ورموز الدخول");workers.setOnClickListener(v->workers());content.addView(workers,Util.spaced());Button prices=Util.goldButton(this,"أسعار اللتر");prices.setOnClickListener(v->prices());content.addView(prices,Util.spaced());
         Button pumps=Util.button(this,"الطرمبات والقراءات");pumps.setOnClickListener(v->pumps());content.addView(pumps,Util.spaced());int n=db.pendingCount();Button approvals=Util.goldButton(this,"الورديات بانتظار الاعتماد"+(n>0?" ("+n+")":""));approvals.setOnClickListener(v->approvals());content.addView(approvals,Util.spaced());Button sync=Util.button(this,"مزامنة الآن مع Google Sheets");sync.setOnClickListener(v->{Sync s2=new Sync(this);s2.run(true);s2.pullPrices(true);});content.addView(sync,Util.spaced());
         Button monthly=Util.button(this,"التقرير الشهري");monthly.setOnClickListener(v->monthly());content.addView(monthly,Util.spaced());
@@ -184,3 +184,4 @@ public class AdminActivity extends Activity {
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
     @Override public void onBackPressed(){finish();}
 }
+

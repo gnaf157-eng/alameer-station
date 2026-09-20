@@ -86,7 +86,7 @@ public class DebtActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         refresh();
     }
 
@@ -176,7 +176,7 @@ public class DebtActivity extends Activity {
                 final boolean clear = Math.abs(balance) < 0.01;
                 // سالب = له عندنا رصيد (أخضر)، موجب = عليه دين (أحمر)، صفر = رمادي.
                 final boolean credit = balance < -0.009;
-                final int balanceTint = clear ? 0xff7c8186 : credit ? Util.GREEN : Util.RED;
+                final int balanceTint = clear ? 0xff626970 : credit ? Util.GREEN : Util.RED;
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
@@ -195,7 +195,7 @@ public class DebtActivity extends Activity {
                 String note = !active ? "موقوف — لا تُسجَّل عليه حركات"
                         : clear ? "الحساب مقفل — لا دين ولا رصيد"
                         : credit ? "دفع أكثر مما عليه" : phone.isEmpty() ? "اضغط لتسجيل دين أو سداد" : phone;
-                words.addView(text(note, 11, active && (clear || credit) ? Util.GREEN : 0xff8b9097, false));
+                words.addView(text(note, 11, active && (clear || credit) ? Util.GREEN : 0xff626970, false));
                 top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 LinearLayout amountBox = new LinearLayout(this);
                 amountBox.setOrientation(LinearLayout.VERTICAL);
@@ -203,7 +203,7 @@ public class DebtActivity extends Activity {
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 amount.setGravity(Gravity.LEFT);
                 amountBox.addView(amount);
-                TextView unit = text(clear ? "لا يوجد دين" : credit ? "ريال له" : "ريال عليه", 10, 0xff8b9097, false);
+                TextView unit = text(clear ? "لا يوجد دين" : credit ? "ريال له" : "ريال عليه", 10, 0xff626970, false);
                 unit.setGravity(Gravity.LEFT);
                 amountBox.addView(unit);
                 top.addView(amountBox);
@@ -238,7 +238,7 @@ public class DebtActivity extends Activity {
                     : "لا يوجد عميل يطابق «" + query + "».", 15, 0xff777d84, false));
             listBox.addView(empty, space());
         } else {
-            listBox.addView(text("اضغط مطوّلًا على المدين لتعديله أو إيقافه", 11, 0xff8b9097, false));
+            listBox.addView(text("اضغط مطوّلًا على المدين لتعديله أو إيقافه", 11, 0xff626970, false));
         }
     }
 
@@ -259,7 +259,7 @@ public class DebtActivity extends Activity {
                 words.setOrientation(LinearLayout.VERTICAL);
                 String note = c.getString(3);
                 words.addView(text(note.isEmpty() ? (isDebt ? "دين جديد" : "سداد") : note, 16, Util.NAVY, true));
-                words.addView(text(c.getString(5) + "  •  " + c.getString(4), 12, 0xff7c8186, false));
+                words.addView(text(c.getString(5) + "  •  " + c.getString(4), 12, 0xff626970, false));
                 TextView badge = text(isDebt ? "دين" : "سداد", 11, isDebt ? Util.RED : Util.GREEN, true);
                 badge.setPadding(dp(8), dp(3), dp(8), dp(3));
                 badge.setBackground(Util.round(isDebt ? 0xfffbe9e9 : 0xffe7f1e7, dp(8)));
@@ -293,7 +293,7 @@ public class DebtActivity extends Activity {
             }
         }
         if (count == 0) entriesBox.addView(text("لا توجد حركات مسجّلة بعد.", 15, 0xff777d84, false));
-        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لتعديلها أو حذفها", 11, 0xff8b9097, false), space());
+        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لتعديلها أو حذفها", 11, 0xff626970, false), space());
     }
 
     /** إضافة مدين أو تعديله. */
@@ -324,7 +324,7 @@ public class DebtActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), 0);
-        box.addView(text("اسم العميل", 13, 0xff7c8186, false));
+        box.addView(text("اسم العميل", 13, 0xff626970, false));
         box.addView(nameInput);
         box.addView(duplicate);
         if (isNew) {
@@ -339,7 +339,7 @@ public class DebtActivity extends Activity {
                 }
             });
         }
-        box.addView(text("رقم الهاتف", 13, 0xff7c8186, false), space());
+        box.addView(text("رقم الهاتف", 13, 0xff626970, false), space());
         box.addView(phoneInput);
         // اختيار من جهات الاتصال: يفتح دفتر الهاتف ويعيد الرقم المختار
         // دون أن يطلب التطبيق إذن قراءة جهات الاتصال.
@@ -351,7 +351,7 @@ public class DebtActivity extends Activity {
             pickContact();
         });
         box.addView(fromContacts, space());
-        box.addView(text("الدين الافتتاحي (ريال يمني)", 13, 0xff7c8186, false), space());
+        box.addView(text("الدين الافتتاحي (ريال يمني)", 13, 0xff626970, false), space());
         box.addView(openingInput);
         ScrollView form = new ScrollView(this);
         form.addView(box);
@@ -487,11 +487,11 @@ public class DebtActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("نوع الحركة", 13, 0xff7c8186, false));
+        box.addView(text("نوع الحركة", 13, 0xff626970, false));
         box.addView(kind);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false));
+        box.addView(text("المبلغ", 13, 0xff626970, false));
         box.addView(amount);
-        box.addView(text("البيان", 13, 0xff7c8186, false));
+        box.addView(text("البيان", 13, 0xff626970, false));
         box.addView(noteInput);
         box.addView(dateButton);
         ScrollView form = new ScrollView(this);
@@ -566,10 +566,10 @@ public class DebtActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("يصل " + name + " إشعار فور تسجيل دين أو سداد.", 13, 0xff7c8186, false));
+        box.addView(text("يصل " + name + " إشعار فور تسجيل دين أو سداد.", 13, 0xff626970, false));
         box.addView(input);
         box.addView(text("كيف تحصل عليه: اطلب من العميل مراسلة البوت، ثم افتح"
-                + " @userinfobot في تلغرام ليعطيه رقمه.", 12, 0xff8b9097, false));
+                + " @userinfobot في تلغرام ليعطيه رقمه.", 12, 0xff626970, false));
 
         new AlertDialog.Builder(this).setTitle("تلغرام " + name)
                 .setView(box)
@@ -660,7 +660,7 @@ public class DebtActivity extends Activity {
         balanceCard.setBackground(Util.round(Util.ACCENT_SOFT, dp(14)));
         balanceCard.addView(text((current < -0.009 ? "رصيد له عند " : "الدين الحالي على ") + debtorName, 12, 0xff5a6672, false));
         TextView balanceText = text(money(current) + "  ر.ي", 24,
-                Math.abs(current) < 0.01 ? 0xff7c8186 : current < 0 ? Util.GREEN : Util.RED, true);
+                Math.abs(current) < 0.01 ? 0xff626970 : current < 0 ? Util.GREEN : Util.RED, true);
         balanceText.setTextDirection(View.TEXT_DIRECTION_LTR);
         balanceCard.addView(balanceText);
         final TextView afterText = text("", 13, 0xff5a6672, true);
@@ -695,7 +695,7 @@ public class DebtActivity extends Activity {
             if (!(value > 0)) { afterText.setText(""); return; }
             double after = kind.getSelectedItemPosition() == 0 ? current + value : current - value;
             afterText.setText("الدين بعد الحركة: " + money(after) + " ر.ي");
-            afterText.setTextColor(after > 0.01 ? Util.RED : after < -0.01 ? Util.GREEN : 0xff7c8186);
+            afterText.setTextColor(after > 0.01 ? Util.RED : after < -0.01 ? Util.GREEN : 0xff626970);
         };
         amount.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence t, int a, int b, int c) {}
@@ -711,11 +711,11 @@ public class DebtActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(10), dp(24), 0);
         box.addView(balanceCard);
-        box.addView(text("نوع الحركة", 13, 0xff7c8186, false), space());
+        box.addView(text("نوع الحركة", 13, 0xff626970, false), space());
         box.addView(kind);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
+        box.addView(text("المبلغ", 13, 0xff626970, false), space());
         box.addView(amount);
-        box.addView(text("البيان", 13, 0xff7c8186, false), space());
+        box.addView(text("البيان", 13, 0xff626970, false), space());
         box.addView(note);
         box.addView(dateButton, space());
         ScrollView form = new ScrollView(this);
@@ -781,7 +781,7 @@ public class DebtActivity extends Activity {
         v.setGravity(Gravity.CENTER);
         v.setTextDirection(View.TEXT_DIRECTION_LTR);
         box.addView(v);
-        TextView l = text(label, 10, 0xff8b9097, false);
+        TextView l = text(label, 10, 0xff626970, false);
         l.setGravity(Gravity.CENTER);
         box.addView(l);
         return box;
@@ -924,7 +924,7 @@ public class DebtActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), dp(8));
         if (lines.isEmpty()) {
-            box.addView(text(empty, 15, 0xff8b9097, false));
+            box.addView(text(empty, 15, 0xff626970, false));
         } else {
             for (String[] line : lines) {
                 LinearLayout row = new LinearLayout(this);
@@ -933,7 +933,7 @@ public class DebtActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(line[0], 15, Util.NAVY, true));
-                words.addView(text(line[1], 11, 0xff8b9097, false));
+                words.addView(text(line[1], 11, 0xff626970, false));
                 row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(line[2], 16, Integer.parseInt(line[3]), true);
                 value.setTextDirection(View.TEXT_DIRECTION_LTR);

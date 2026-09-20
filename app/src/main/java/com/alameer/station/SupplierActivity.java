@@ -84,7 +84,7 @@ public class SupplierActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
     }
 
     @Override protected void onResume() {
@@ -174,7 +174,7 @@ public class SupplierActivity extends Activity {
                 lines.addView(text(title, 16, Util.NAVY, true));
                 lines.addView(text(date + (isBuy && unit > 0 ? "  •  " + money(unit) + " ريال/لتر" : "")
                         + (note == null || note.trim().isEmpty() ? "" : "  •  " + note.trim()),
-                        12, 0xff8b9097, false));
+                        12, 0xff626970, false));
                 row.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
 
                 TextView value = text((isBuy ? "+" : "−") + money(amount), 16,
@@ -193,7 +193,7 @@ public class SupplierActivity extends Activity {
             listBox.addView(text("لا توجد حركات بعد.\nسجّل شراء مواد أو توريد مبلغ.",
                     14, 0xff777d84, false));
         else
-            listBox.addView(text("اضغط مطوّلًا على أي حركة لإلغائها", 11, 0xff8b9097, false));
+            listBox.addView(text("اضغط مطوّلًا على أي حركة لإلغائها", 11, 0xff626970, false));
     }
 
     /** شراء مواد: اللترات وسعر اللتر، والقيمة تُحسب تلقائيًا. */
@@ -252,11 +252,11 @@ public class SupplierActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("المادة", 13, 0xff7c8186, false));
+        box.addView(text("المادة", 13, 0xff626970, false));
         box.addView(picker);
-        box.addView(text("الكمية", 13, 0xff7c8186, false));
+        box.addView(text("الكمية", 13, 0xff626970, false));
         box.addView(litres);
-        box.addView(text("سعر اللتر", 13, 0xff7c8186, false));
+        box.addView(text("سعر اللتر", 13, 0xff626970, false));
         box.addView(unit);
         box.addView(note);
         box.addView(dateButton);
@@ -320,9 +320,9 @@ public class SupplierActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
         box.addView(text("المستحق الآن " + money(Math.max(0, owed)) + " ر.ي", 14, Util.NAVY, true));
-        box.addView(text("من صندوق", 13, 0xff7c8186, false));
+        box.addView(text("من صندوق", 13, 0xff626970, false));
         box.addView(picker);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false));
+        box.addView(text("المبلغ", 13, 0xff626970, false));
         box.addView(amount);
         box.addView(note);
         box.addView(dateButton);
@@ -399,11 +399,11 @@ public class SupplierActivity extends Activity {
         box.setPadding(dp(22), dp(8), dp(22), 0);
         box.addView(text("المستحق الآن " + money(Math.max(0, db.supplierBalance(supplier)))
                 + " ر.ي", 14, Util.NAVY, true));
-        box.addView(text("المادة", 13, 0xff7c8186, false));
+        box.addView(text("المادة", 13, 0xff626970, false));
         box.addView(picker);
-        box.addView(text("الكمية", 13, 0xff7c8186, false));
+        box.addView(text("الكمية", 13, 0xff626970, false));
         box.addView(litres);
-        box.addView(text("سعر اللتر", 13, 0xff7c8186, false));
+        box.addView(text("سعر اللتر", 13, 0xff626970, false));
         box.addView(unit);
         box.addView(note);
         box.addView(dateButton);
@@ -453,7 +453,7 @@ public class SupplierActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
         box.addView(text("اختر الحساب المسجّل في الديون وهو في الحقيقة مورّد:",
-                13, 0xff7c8186, false));
+                13, 0xff626970, false));
         box.addView(picker);
 
         new AlertDialog.Builder(this).setTitle("نقل رصيد إلى " + Db.supplierName(supplier))

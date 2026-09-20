@@ -10,7 +10,9 @@ public class Db extends SQLiteOpenHelper {
     private static final int DB_VERSION = 20;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
+    static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
     @Override public void onCreate(SQLiteDatabase db) {
+        db.execSQL(SETTLEMENT_SQL);
         db.execSQL("CREATE TABLE workers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,pin_hash TEXT NOT NULL UNIQUE,role TEXT NOT NULL,shift_kind TEXT NOT NULL DEFAULT 'DAY',active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE pumps(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,fuel TEXT NOT NULL,price REAL NOT NULL DEFAULT 0,last_reading REAL NOT NULL DEFAULT 0,worker_id INTEGER,active INTEGER NOT NULL DEFAULT 1)");
         db.execSQL("CREATE TABLE shifts(id INTEGER PRIMARY KEY AUTOINCREMENT,worker_id INTEGER NOT NULL,opened_at TEXT NOT NULL,shift_date TEXT NOT NULL DEFAULT '',historical INTEGER NOT NULL DEFAULT 0,closed_at TEXT,status TEXT NOT NULL DEFAULT 'OPEN',sales REAL NOT NULL DEFAULT 0,collections REAL NOT NULL DEFAULT 0,cash_delivered REAL NOT NULL DEFAULT 0,debts REAL NOT NULL DEFAULT 0,expenses REAL NOT NULL DEFAULT 0,balance REAL NOT NULL DEFAULT 0,difference_reason TEXT DEFAULT '',manager_note TEXT DEFAULT '',sync_state TEXT NOT NULL DEFAULT 'LOCAL',revision INTEGER NOT NULL DEFAULT 0,shift_code TEXT NOT NULL DEFAULT '')");
@@ -174,6 +176,7 @@ public class Db extends SQLiteOpenHelper {
             } catch (Exception ignored) {}
         }
         if(oldVersion<20){
+            db.execSQL(SETTLEMENT_SQL);
             ensureColumn(db,"cashbox_entries","managed","INTEGER NOT NULL DEFAULT 0");
             ensureColumn(db,"debt_entries","managed","INTEGER NOT NULL DEFAULT 0");
             ensureColumn(db,"expense_entries","cashbox_entry","INTEGER NOT NULL DEFAULT 0");
@@ -221,6 +224,10 @@ public class Db extends SQLiteOpenHelper {
             if(!c.moveToFirst())throw new IllegalStateException("الحركة غير موجودة");
             requireDate(c.getString(0));
             if(c.getLong(1)>0||c.getInt(2)>0)throw new IllegalStateException("هذه الحركة مرتبطة بعملية أصلية؛ صحّحها من مصدرها.");
+        }
+        String settlementColumn=table.equals("cashbox_entries")?"cashbox_entry":table.equals("debt_entries")?"debt_entry":table.equals("expense_entries")?"expense_entry":"";
+        if(!settlementColumn.isEmpty())try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM settlement_links WHERE "+settlementColumn+"=?",new String[]{String.valueOf(id)})){
+            if(c.moveToFirst())throw new IllegalStateException("الحركة مرتبطة بتصريف الحساب الوسيط؛ صحّح العملية الأصلية.");
         }
         String link=table.equals("cashbox_entries")?"cashbox_entry":table.equals("material_entries")?"material_entry":table.equals("debt_entries")?"debt_entry":"";
         if(!link.isEmpty())try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM supplier_entries WHERE voided=0 AND "+link+"=?",new String[]{String.valueOf(id)})){
@@ -930,8 +937,8 @@ public class Db extends SQLiteOpenHelper {
             "SELECT (SELECT COUNT(*) FROM cashbox_entries WHERE source_shift=?)+(SELECT COUNT(*) FROM debt_entries WHERE source_shift=?)"+
             "+(SELECT COUNT(*) FROM expense_entries WHERE source_shift=?)"+
             "+(SELECT COUNT(*) FROM material_entries WHERE source_shift=? OR note LIKE ?)"+
-            "+(SELECT COUNT(*) FROM journal WHERE source='SHIFT' AND source_id=?)",
-            new String[]{id,id,id,id,"وردية #"+shiftId+" —%",id})){
+            "",
+            new String[]{id,id,id,id,"وردية #"+shiftId+" —%"})){
             c.moveToFirst();return c.getInt(0)>0;
         }
     }
@@ -1240,6 +1247,13 @@ public class Db extends SQLiteOpenHelper {
             ContentValues mark=new ContentValues();
             mark.put("reversed_by",newId);
             db.update("journal",mark,"id=?",new String[]{String.valueOf(entryId)});
+            try(Cursor linked=db.rawQuery("SELECT debt_entry,cashbox_entry,expense_entry FROM settlement_links WHERE entry_id=?",new String[]{String.valueOf(entryId)})){
+                if(linked.moveToFirst()){
+                    String[] tables={"debt_entries","cashbox_entries","expense_entries"};
+                    for(int i=0;i<3;i++)if(linked.getLong(i)>0)db.delete(tables[i],"id=?",new String[]{String.valueOf(linked.getLong(i))});
+                }
+            }
+            db.delete("settlement_links","entry_id=?",new String[]{String.valueOf(entryId)});
             audit(db,"journal",entryId,"REVERSE_ENTRY",memo,"مُلغى بالقيد العكسي #"+newId,reason.trim());
             db.setTransactionSuccessful();
             return newId;
@@ -1368,6 +1382,10 @@ public class Db extends SQLiteOpenHelper {
             if(c.moveToFirst())other=c.getString(0);
         }
         if(other.isEmpty())throw new IllegalStateException("القيد ناقص الطرف الآخر");
+        if(!java.util.Arrays.asList(SUSPENSE_TARGETS).contains(targetAccount)||targetAccount.equals(other))throw new IllegalArgumentException("اختر حسابًا مقابلًا مختلفًا وصحيحًا");
+        if(Journal.RECEIVABLE.equals(targetAccount)&&(party==null||findDebtor(party.trim())<=0))throw new IllegalArgumentException("اختر اسم عميل مسجّل");
+        if(Journal.EXPENSE.equals(targetAccount)&&!suspenseIsDebit)throw new IllegalArgumentException("ردّ المصروف يُصحّح من حركته الأصلية");
+        if(Journal.CASH.equals(targetAccount))requireEntity("cashboxes",defaultCashbox());
 
         String why=reason==null||reason.trim().isEmpty()?"تصريف الحساب الوسيط":reason.trim();
         reverseEntry(entryId,why);
@@ -1378,17 +1396,21 @@ public class Db extends SQLiteOpenHelper {
         long created=postEntry(fresh);
         audit("journal",created,"SETTLE_SUSPENSE",Journal.SUSPENSE,targetAccount,why);
 
-        // السداد الحقيقي ينقص دَين المدين، فلا يبقى مطالَبًا بما دفع.
-        if(Journal.RECEIVABLE.equals(targetAccount)&&party!=null&&!party.trim().isEmpty()){
-            long debtorId=findDebtor(party.trim());
-            if(debtorId>0){
-                suppressJournal=true;
-                try{
-                    addDebtEntry(debtorId,suspenseIsDebit?"DEBT":"PAID",amount,
-                            (suspenseIsDebit?"دين من ":"سداد من ")+"تصريف حركة #"+entryId,date);
-                }finally{suppressJournal=false;}
+        ContentValues links=new ContentValues();links.put("entry_id",created);
+        boolean previousSuppression=suppressJournal;suppressJournal=true;
+        try{
+            if(Journal.RECEIVABLE.equals(targetAccount)){
+                long id=addDebtEntry(findDebtor(party.trim()),suspenseIsDebit?"DEBT":"PAID",amount,"تصريف حركة #"+entryId,date);
+                links.put("debt_entry",id);
+            }else if(Journal.CASH.equals(targetAccount)){
+                long id=addCashboxEntry(defaultCashbox(),suspenseIsDebit?"IN":"OUT",amount,"تصريف حركة #"+entryId,date);
+                links.put("cashbox_entry",id);
+            }else if(Journal.EXPENSE.equals(targetAccount)){
+                long id=addExpense(party==null||party.trim().isEmpty()?"مصروف من تصريف الوسيط":party.trim(),amount,"تصريف حركة #"+entryId,date,0,0);
+                links.put("expense_entry",id);
             }
-        }
+            getWritableDatabase().insertOrThrow("settlement_links",null,links);
+        }finally{suppressJournal=previousSuppression;}
     }
 
     /**

@@ -73,7 +73,7 @@ public class ManagerActivity extends Activity {
         bottomRow.addView(expenseTile, cell());
         content.addView(bottomRow, rowGap);
 
-        TextView hint = text("الأرقام تحت كل أيقونة محدّثة الآن", 12, 0xff8b9097, false);
+        TextView hint = text("الأرقام تحت كل أيقونة محدّثة الآن", 12, 0xff626970, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(20), 0, 0);
         content.addView(hint);
@@ -86,7 +86,7 @@ public class ManagerActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
     }
 
     @Override protected void onResume() {
@@ -138,7 +138,7 @@ public class ManagerActivity extends Activity {
         name.setPadding(0, dp(12), 0, dp(3));
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView caption = text(note, 11, 0xff7c8186, false);
+        TextView caption = text(note, 11, 0xff626970, false);
         caption.setMaxLines(2);
         caption.setGravity(Gravity.CENTER);
         box.addView(caption, new LinearLayout.LayoutParams(-1, -2));

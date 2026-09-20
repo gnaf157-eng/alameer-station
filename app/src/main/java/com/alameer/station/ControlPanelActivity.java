@@ -57,7 +57,7 @@ public class ControlPanelActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
     }
 
     @Override protected void onResume() {
@@ -645,7 +645,7 @@ public class ControlPanelActivity extends Activity {
         box.setBackground(Util.round(Color.WHITE, dp(16)));
         box.setElevation(dp(2));
 
-        TextView name = text(title, 12, 0xff7c8186, false);
+        TextView name = text(title, 12, 0xff626970, false);
         name.setGravity(Gravity.CENTER);
         box.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
@@ -696,7 +696,7 @@ public class ControlPanelActivity extends Activity {
             LinearLayout words = new LinearLayout(this);
             words.setOrientation(LinearLayout.VERTICAL);
             words.addView(text(material, 16, Util.NAVY, true));
-            words.addView(text("السعة " + money(cap) + "  •  الحالي " + money(left), 11, 0xff8b9097, false));
+            words.addView(text("السعة " + money(cap) + "  •  الحالي " + money(left), 11, 0xff626970, false));
             top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
             TextView amount = text(money(left), 18, tint, true);
             amount.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -747,7 +747,7 @@ public class ControlPanelActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.VERTICAL);
         head.setPadding(dp(14), dp(6), dp(14), dp(12));
-        head.addView(text("إجمالي النقد في " + names.size() + " صندوق", 12, 0xff7c8186, false));
+        head.addView(text("إجمالي النقد في " + names.size() + " صندوق", 12, 0xff626970, false));
         TextView grand = text(money(total) + " ر.ي", 26, total < 0 ? Util.RED : Util.NAVY, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         head.addView(grand);
@@ -797,7 +797,7 @@ public class ControlPanelActivity extends Activity {
 
             int percent = total > 0 ? (int) Math.round(Math.max(0, balance) * 100 / total) : 0;
             row.addView(text("وارد " + money(in) + "  •  صادر " + money(out)
-                    + "  •  " + percent + "٪ من النقد", 11, 0xff8b9097, false));
+                    + "  •  " + percent + "٪ من النقد", 11, 0xff626970, false));
             box.addView(row);
             if (i < names.size() - 1) box.addView(divider());
         }
@@ -961,7 +961,7 @@ public class ControlPanelActivity extends Activity {
     }
 
     private View emptyLine(String message) {
-        TextView t = text(message, 14, 0xff8b9097, false);
+        TextView t = text(message, 14, 0xff626970, false);
         t.setPadding(dp(14), dp(10), dp(14), dp(14));
         return t;
     }

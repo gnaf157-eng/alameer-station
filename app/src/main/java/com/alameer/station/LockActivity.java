@@ -39,7 +39,7 @@ public class LockActivity extends Activity {
         name.setGravity(Gravity.CENTER);
         shell.addView(name);
 
-        TextView hint = text("أدخل رمز الدخول", 14, 0xff7c8186, false);
+        TextView hint = text("أدخل رمز الدخول", 14, 0xff626970, false);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(6), 0, dp(20));
         shell.addView(hint);
@@ -63,7 +63,7 @@ public class LockActivity extends Activity {
         enter.setOnClickListener(v -> tryPin());
         shell.addView(enter, new LinearLayout.LayoutParams(-1, -2));
 
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         pinInput.setOnEditorActionListener((v, id, e) -> { tryPin(); return true; });
     }
 

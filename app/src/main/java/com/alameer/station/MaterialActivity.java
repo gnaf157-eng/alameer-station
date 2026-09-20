@@ -78,7 +78,7 @@ public class MaterialActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         refresh();
     }
 
@@ -106,13 +106,13 @@ public class MaterialActivity extends Activity {
             words.addView(text("بيع " + (sell > 0 ? money(sell) : "—")
                     + "  •  شراء " + (buy > 0 ? money(buy) : "—")
                     + "  •  توصيل " + (freight > 0 ? money(freight) : "—"),
-                    12, 0xff7c8186, false));
+                    12, 0xff626970, false));
             words.addView(text("التكلفة " + (cost > 0 ? money(cost) + " ريال/لتر" : "غير مضبوطة")
                     + (margin != 0 ? "  •  الربح " + money(margin) : ""),
                     12, cost <= 0 ? Util.RED : margin > 0 ? Util.GREEN : Util.RED, true));
             words.addView(text("قيمة المخزون " + money(db.stockValue(material)) + " ر.ي"
                     + "  •  السعة " + money(db.capacity(material)) + " لتر",
-                    11, 0xff8b9097, false));
+                    11, 0xff626970, false));
             row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
             box.addView(row);
 
@@ -213,9 +213,9 @@ public class MaterialActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("أجرة التوصيل للتر", 13, 0xff7c8186, false));
+        box.addView(text("أجرة التوصيل للتر", 13, 0xff626970, false));
         box.addView(perLitre);
-        box.addView(text("أو احسبها من شحنة كاملة", 13, 0xff7c8186, false), space());
+        box.addView(text("أو احسبها من شحنة كاملة", 13, 0xff626970, false), space());
         box.addView(total);
         box.addView(litres);
         box.addView(result);
@@ -355,7 +355,7 @@ public class MaterialActivity extends Activity {
             LinearLayout words = new LinearLayout(this);
             words.setOrientation(LinearLayout.VERTICAL);
             words.addView(text(material, 18, Util.NAVY, true));
-            words.addView(text("اضغط لتسجيل وارد أو صادر", 11, 0xff8b9097, false));
+            words.addView(text("اضغط لتسجيل وارد أو صادر", 11, 0xff626970, false));
             top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
             LinearLayout amountBox = new LinearLayout(this);
             amountBox.setOrientation(LinearLayout.VERTICAL);
@@ -363,7 +363,7 @@ public class MaterialActivity extends Activity {
             amount.setTextDirection(View.TEXT_DIRECTION_LTR);
             amount.setGravity(Gravity.LEFT);
             amountBox.addView(amount);
-            TextView unit = text("لتر متاح", 10, 0xff8b9097, false);
+            TextView unit = text("لتر متاح", 10, 0xff626970, false);
             unit.setGravity(Gravity.LEFT);
             amountBox.addView(unit);
             top.addView(amountBox);
@@ -386,7 +386,7 @@ public class MaterialActivity extends Activity {
             card.setOnLongClickListener(v -> { materialHistory(name); return true; });
             listBox.addView(card, space());
         }
-        listBox.addView(text("المباع يُرحَّل تلقائيًا ضمن الصادر عند إغلاق كل وردية", 11, 0xff8b9097, false));
+        listBox.addView(text("المباع يُرحَّل تلقائيًا ضمن الصادر عند إغلاق كل وردية", 11, 0xff626970, false));
     }
 
     /** آخر الحركات مع الحذف بضغطة مطوّلة. */
@@ -406,7 +406,7 @@ public class MaterialActivity extends Activity {
                 words.setOrientation(LinearLayout.VERTICAL);
                 String note = c.getString(4);
                 words.addView(text(note.isEmpty() ? (in ? "وارد" : "صادر") : note, 16, Util.NAVY, true));
-                words.addView(text(c.getString(1) + "  •  " + c.getString(5), 12, 0xff7c8186, false));
+                words.addView(text(c.getString(1) + "  •  " + c.getString(5), 12, 0xff626970, false));
                 TextView badge = text(in ? "وارد" : "صادر", 11, in ? Util.GREEN : Util.RED, true);
                 badge.setPadding(dp(8), dp(3), dp(8), dp(3));
                 badge.setBackground(Util.round(in ? 0xffe7f1e7 : 0xfffbe9e9, dp(8)));
@@ -443,7 +443,7 @@ public class MaterialActivity extends Activity {
             }
         }
         if (count == 0) entriesBox.addView(text("لا توجد حركات مسجّلة بعد.", 15, 0xff777d84, false));
-        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لحذفها", 11, 0xff8b9097, false), space());
+        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لحذفها", 11, 0xff626970, false), space());
     }
 
     /** تسجيل وارد أو صادر لمادة، مع عرض رصيدها قبل الحفظ. */
@@ -504,11 +504,11 @@ public class MaterialActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(10), dp(24), 0);
         box.addView(balanceCard);
-        box.addView(text("نوع الحركة", 13, 0xff7c8186, false), space());
+        box.addView(text("نوع الحركة", 13, 0xff626970, false), space());
         box.addView(kind);
-        box.addView(text("الكمية", 13, 0xff7c8186, false), space());
+        box.addView(text("الكمية", 13, 0xff626970, false), space());
         box.addView(amount);
-        box.addView(text("البيان", 13, 0xff7c8186, false), space());
+        box.addView(text("البيان", 13, 0xff626970, false), space());
         box.addView(note);
         box.addView(dateButton, space());
         ScrollView form = new ScrollView(this);
@@ -574,7 +574,7 @@ public class MaterialActivity extends Activity {
         v.setGravity(Gravity.CENTER);
         v.setTextDirection(View.TEXT_DIRECTION_LTR);
         box.addView(v);
-        TextView l = text(label, 10, 0xff8b9097, false);
+        TextView l = text(label, 10, 0xff626970, false);
         l.setGravity(Gravity.CENTER);
         box.addView(l);
         return box;
@@ -713,7 +713,7 @@ public class MaterialActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), dp(8));
         if (lines.isEmpty()) {
-            box.addView(text(empty, 15, 0xff8b9097, false));
+            box.addView(text(empty, 15, 0xff626970, false));
         } else {
             for (String[] line : lines) {
                 LinearLayout row = new LinearLayout(this);
@@ -722,7 +722,7 @@ public class MaterialActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(line[0], 15, Util.NAVY, true));
-                words.addView(text(line[1], 11, 0xff8b9097, false));
+                words.addView(text(line[1], 11, 0xff626970, false));
                 row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(line[2], 16, Integer.parseInt(line[3]), true);
                 value.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -740,7 +740,7 @@ public class MaterialActivity extends Activity {
                         }
                         new AlertDialog.Builder(this).setTitle("حذف الحركة")
                                 .setMessage("سيُحذف هذا السطر نهائيًا ويتغيّر الرصيد.")
-                                .setPositiveButton("حذف", (d, w) -> { deleteEntry(entryId); refresh(); })
+                                .setPositiveButton("حذف", (d, w) -> { try{deleteEntry(entryId); refresh();}catch(Exception e){new AlertDialog.Builder(this).setTitle("تعذّر الحذف").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();} })
                                 .setNegativeButton("إلغاء", null).show();
                         return true;
                     });

@@ -89,7 +89,7 @@ public class CashboxActivity extends Activity {
         scroll.setFadingEdgeLength(dp(14));
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
         refresh();
     }
 
@@ -170,13 +170,13 @@ public class CashboxActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(8), dp(22), 0);
-        box.addView(text("نوع الحركة", 13, 0xff7c8186, false));
+        box.addView(text("نوع الحركة", 13, 0xff626970, false));
         box.addView(kind);
-        box.addView(text("العملة", 13, 0xff7c8186, false));
+        box.addView(text("العملة", 13, 0xff626970, false));
         box.addView(currency);
-        box.addView(text("الاسم", 13, 0xff7c8186, false));
+        box.addView(text("الاسم", 13, 0xff626970, false));
         box.addView(noteInput);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false));
+        box.addView(text("المبلغ", 13, 0xff626970, false));
         box.addView(amount);
         box.addView(dateButton);
         ScrollView form = new ScrollView(this);
@@ -206,7 +206,7 @@ public class CashboxActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(22), dp(10), dp(22), 0);
-        box.addView(text("كم ريالًا يمنيًا يساوي الواحد من كل عملة؟", 13, 0xff7c8186, false));
+        box.addView(text("كم ريالًا يمنيًا يساوي الواحد من كل عملة؟", 13, 0xff626970, false));
 
         for (int i = 0; i < Db.CURRENCIES.length; i++) {
             final String code = Db.CURRENCIES[i];
@@ -220,7 +220,7 @@ public class CashboxActivity extends Activity {
             words.setOrientation(LinearLayout.VERTICAL);
             words.addView(text("الريال " + Db.currencyName(code), 17, Util.NAVY, true));
             words.addView(text("١ " + Db.currencyName(code) + " = " + money(db.rate(code)) + " ر.ي",
-                    12, 0xff7c8186, false));
+                    12, 0xff626970, false));
             row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
 
             Button edit = action("تغيير", false);
@@ -234,7 +234,7 @@ public class CashboxActivity extends Activity {
             box.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
         }
         box.addView(text("الأرصدة تُحفظ بالريال اليمني، فتغيير السعر لا يغيّر الحركات السابقة.",
-                12, 0xff8b9097, false));
+                12, 0xff626970, false));
 
         ScrollView form = new ScrollView(this);
         form.addView(box);
@@ -267,7 +267,7 @@ public class CashboxActivity extends Activity {
                 .setNegativeButton("إلغاء", null).show();
     }
 
-    private TextView wrapText(String value) { return text(value, 13, 0xff7c8186, false); }
+    private TextView wrapText(String value) { return text(value, 13, 0xff626970, false); }
 
     /** ترس مرسوم بلا ملف صورة. */
     private class GearIcon extends android.graphics.drawable.Drawable {
@@ -380,7 +380,7 @@ public class CashboxActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(name, 18, active ? Util.NAVY : 0xff9aa0a6, true));
-                words.addView(text(active ? "اضغط لتسجيل وارد أو صادر" : "موقوف — لا تُسجَّل عليه حركات", 11, 0xff8b9097, false));
+                words.addView(text(active ? "اضغط لتسجيل وارد أو صادر" : "موقوف — لا تُسجَّل عليه حركات", 11, 0xff626970, false));
                 top.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 LinearLayout amountBox = new LinearLayout(this);
                 amountBox.setOrientation(LinearLayout.VERTICAL);
@@ -388,7 +388,7 @@ public class CashboxActivity extends Activity {
                 amount.setTextDirection(View.TEXT_DIRECTION_LTR);
                 amount.setGravity(Gravity.LEFT);
                 amountBox.addView(amount);
-                TextView unit = text("ريال يمني", 10, 0xff8b9097, false);
+                TextView unit = text("ريال يمني", 10, 0xff626970, false);
                 unit.setGravity(Gravity.LEFT);
                 amountBox.addView(unit);
                 top.addView(amountBox);
@@ -428,7 +428,7 @@ public class CashboxActivity extends Activity {
             listBox.addView(text(db.defaultCashbox() == 0
                     ? "⚠ لم تختر صندوق الورديات بعد. اضغط مطوّلًا على صندوق واختر «اجعله صندوق الورديات» ليستقبل النقد المسلّم تلقائيًا."
                     : "اضغط مطوّلًا على الصندوق لتعديله أو إيقافه", 11,
-                    db.defaultCashbox() == 0 ? 0xffa8610a : 0xff8b9097, false));
+                    db.defaultCashbox() == 0 ? 0xffa8610a : 0xff626970, false));
         }
     }
 
@@ -441,7 +441,7 @@ public class CashboxActivity extends Activity {
         v.setGravity(Gravity.CENTER);
         v.setTextDirection(View.TEXT_DIRECTION_LTR);
         box.addView(v);
-        TextView l = text(label, 10, 0xff8b9097, false);
+        TextView l = text(label, 10, 0xff626970, false);
         l.setGravity(Gravity.CENTER);
         box.addView(l);
         return box;
@@ -464,7 +464,7 @@ public class CashboxActivity extends Activity {
                 words.setOrientation(LinearLayout.VERTICAL);
                 String note = c.getString(3);
                 words.addView(text(note.isEmpty() ? (in ? "وارد" : "صادر") : note, 16, Util.NAVY, true));
-                words.addView(text(c.getString(5) + "  •  " + c.getString(4), 12, 0xff7c8186, false));
+                words.addView(text(c.getString(5) + "  •  " + c.getString(4), 12, 0xff626970, false));
                 TextView badge = text(in ? "وارد" : "صادر", 11, in ? Util.GREEN : Util.RED, true);
                 badge.setPadding(dp(8), dp(3), dp(8), dp(3));
                 badge.setBackground(Util.round(in ? 0xffe7f1e7 : 0xfffbe9e9, dp(8)));
@@ -498,7 +498,7 @@ public class CashboxActivity extends Activity {
             }
         }
         if (count == 0) entriesBox.addView(text("لا توجد حركات مسجّلة بعد.", 15, 0xff777d84, false));
-        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لتعديلها أو حذفها", 11, 0xff8b9097, false), space());
+        else entriesBox.addView(text("اضغط مطوّلًا على أي حركة لتعديلها أو حذفها", 11, 0xff626970, false), space());
     }
 
     /** إضافة صندوق أو تعديله. */
@@ -517,9 +517,9 @@ public class CashboxActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), 0);
-        box.addView(text("اسم الصندوق", 13, 0xff7c8186, false));
+        box.addView(text("اسم الصندوق", 13, 0xff626970, false));
         box.addView(nameInput);
-        box.addView(text("الرصيد الافتتاحي (ريال يمني)", 13, 0xff7c8186, false), space());
+        box.addView(text("الرصيد الافتتاحي (ريال يمني)", 13, 0xff626970, false), space());
         box.addView(openingInput);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -661,20 +661,20 @@ public class CashboxActivity extends Activity {
         kinds.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         LinearLayout kindCol = new LinearLayout(this);
         kindCol.setOrientation(LinearLayout.VERTICAL);
-        kindCol.addView(text("نوع الحركة", 13, 0xff7c8186, false));
+        kindCol.addView(text("نوع الحركة", 13, 0xff626970, false));
         kindCol.addView(kind);
         kinds.addView(kindCol, new LinearLayout.LayoutParams(0, -2, 2));
         LinearLayout curCol = new LinearLayout(this);
         curCol.setOrientation(LinearLayout.VERTICAL);
-        curCol.addView(text("العملة", 13, 0xff7c8186, false));
+        curCol.addView(text("العملة", 13, 0xff626970, false));
         curCol.addView(currency);
         LinearLayout.LayoutParams cw = new LinearLayout.LayoutParams(0, -2, 1);
         cw.setMargins(dp(10), 0, 0, 0);
         kinds.addView(curCol, cw);
         box.addView(kinds, space());
-        box.addView(text("الاسم", 13, 0xff7c8186, false), space());
+        box.addView(text("الاسم", 13, 0xff626970, false), space());
         box.addView(note);
-        box.addView(text("المبلغ", 13, 0xff7c8186, false), space());
+        box.addView(text("المبلغ", 13, 0xff626970, false), space());
         box.addView(amount);
         box.addView(dateButton, space());
         ScrollView form = new ScrollView(this);
@@ -969,7 +969,7 @@ public class CashboxActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), dp(8));
         if (lines.isEmpty()) {
-            box.addView(text(empty, 15, 0xff8b9097, false));
+            box.addView(text(empty, 15, 0xff626970, false));
         } else {
             for (String[] line : lines) {
                 LinearLayout row = new LinearLayout(this);
@@ -978,7 +978,7 @@ public class CashboxActivity extends Activity {
                 LinearLayout words = new LinearLayout(this);
                 words.setOrientation(LinearLayout.VERTICAL);
                 words.addView(text(line[0], 15, Util.NAVY, true));
-                words.addView(text(line[1], 11, 0xff8b9097, false));
+                words.addView(text(line[1], 11, 0xff626970, false));
                 row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView value = text(line[2], 16, Integer.parseInt(line[3]), true);
                 value.setTextDirection(View.TEXT_DIRECTION_LTR);

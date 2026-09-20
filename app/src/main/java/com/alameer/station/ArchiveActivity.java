@@ -51,7 +51,7 @@ public class ArchiveActivity extends Activity {
         scroll.setFillViewport(true);
         scroll.addView(content);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        setContentView(shell);
+        setContentView(shell);Util.safeInsets(shell);
     }
 
     @Override protected void onResume() {
@@ -89,7 +89,7 @@ public class ArchiveActivity extends Activity {
                 lines.setOrientation(LinearLayout.VERTICAL);
                 lines.addView(text(who, 18, Util.NAVY, true));
                 lines.addView(text(db.shiftCode(id) + "  •  " + pumps + " طرمبة", 13, Util.NAVY, true));
-                lines.addView(text(date, 12, 0xff8b9097, false));
+                lines.addView(text(date, 12, 0xff626970, false));
                 top.addView(lines, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView badge = text("PDF · XLS", 11, Color.WHITE, true);
                 badge.setPadding(dp(10), dp(5), dp(10), dp(5));
@@ -100,7 +100,7 @@ public class ArchiveActivity extends Activity {
                 TextView money = text("المبيعات " + money(sales) + " ر.ي", 15, Util.GREEN, true);
                 money.setPadding(0, dp(6), 0, 0);
                 card.addView(money);
-                card.addView(text("مُعتمدة ومُرحّلة  •  اضغط لـ PDF أو Excel", 12, 0xff8b9097, false));
+                card.addView(text("مُعتمدة ومُرحّلة  •  اضغط لـ PDF أو Excel", 12, 0xff626970, false));
 
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
                 cp.setMargins(0, dp(6), 0, dp(6));
@@ -131,7 +131,7 @@ public class ArchiveActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(6), dp(20), dp(6));
         box.addView(text("التقرير للقراءة والمشاركة فقط، ولا يمكن تعديل الوردية بعد ترحيلها.",
-                13, 0xff7c8186, false));
+                13, 0xff626970, false));
 
         final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("تقرير الوردية " + db.shiftCode(id))

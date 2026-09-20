@@ -17,7 +17,7 @@ public class LoginActivity extends Activity {
         root.setPadding(28,64,28,28);root.setBackgroundColor(Util.BG);
         root.addView(Util.title(this,"محطة الأمير\nمطابقة الورديات"),Util.spaced());
         if(db.openAccess()) buildOpenAccess(root); else buildPinEntry(root);
-        ScrollView scroll=new ScrollView(this);scroll.addView(root);setContentView(scroll);
+        ScrollView scroll=new ScrollView(this);scroll.addView(root);setContentView(scroll);Util.safeInsets(scroll);
     }
 
     /** وضع التجربة: اختيار الحساب من قائمة بلا رمز. */
@@ -76,3 +76,4 @@ public class LoginActivity extends Activity {
         }
     }
 }
+

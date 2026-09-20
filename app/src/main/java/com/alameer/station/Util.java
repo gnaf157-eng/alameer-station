@@ -8,7 +8,19 @@ import java.text.*;
 import java.util.*;
 
 public final class Util {
-    public static final int NAVY=Color.rgb(21,62,118), NAVY_LIGHT=Color.rgb(36,96,176), GOLD=Color.rgb(36,96,176), ACCENT=Color.rgb(65,145,232), ACCENT_SOFT=Color.rgb(232,241,253), GREEN=Color.rgb(18,128,92), RED=Color.rgb(180,35,53), BG=Color.rgb(244,247,251);
+    public static final int NAVY=Color.rgb(21,62,118), NAVY_LIGHT=Color.rgb(36,96,176), GOLD=Color.rgb(36,96,176), ACCENT=Color.rgb(36,96,176), ACCENT_SOFT=Color.rgb(232,241,253), GREEN=Color.rgb(18,128,92), RED=Color.rgb(180,35,53), BG=Color.rgb(244,247,251);
+    /** Android 15 edge-to-edge: preserve content padding and keep controls clear of system bars. */
+    public static void safeInsets(View root){
+        if(android.os.Build.VERSION.SDK_INT<35)return;
+        final int l=root.getPaddingLeft(),t=root.getPaddingTop(),r=root.getPaddingRight(),b=root.getPaddingBottom();
+        root.setOnApplyWindowInsetsListener((view,insets)->{
+            android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+            android.graphics.Insets keyboard=insets.getInsets(WindowInsets.Type.ime());
+            view.setPadding(l+bars.left,t+bars.top,r+bars.right,b+Math.max(bars.bottom,keyboard.bottom));
+            return WindowInsets.CONSUMED;
+        });
+        root.requestApplyInsets();
+    }
     public static String now(){return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.US).format(new Date());}
     public static TextView title(android.content.Context c,String text){TextView v=new TextView(c);v.setText(text);v.setTextSize(25);v.setTextColor(Color.WHITE);v.setTypeface(android.graphics.Typeface.DEFAULT,1);v.setGravity(Gravity.CENTER);v.setPadding(20,38,20,38);v.setBackground(round(NAVY,22));return v;}
     public static TextView label(android.content.Context c,String text){TextView v=new TextView(c);v.setText(text);v.setTextSize(17);v.setTextColor(NAVY);v.setPadding(16,16,16,12);v.setTextDirection(View.TEXT_DIRECTION_RTL);return v;}
@@ -20,3 +32,4 @@ public final class Util {
     public static LinearLayout.LayoutParams spaced(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,8,0,8);return p;}
     public static double number(String s){return Calc.number(s);}
 }
+
