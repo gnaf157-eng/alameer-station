@@ -69,7 +69,7 @@ jobs:
           echo "code=$(grep -oP 'versionCode \K\d+' app/build.gradle)" >> "$GITHUB_OUTPUT"
 
       - name: Decode release keystore
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
         id: keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -83,7 +83,7 @@ jobs:
           fi
 
       - name: Build signed release APK
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
         env:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -92,27 +92,112 @@ jobs:
           SYNC_URL: ${{ secrets.SYNC_URL }}
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+          UPDATE_MANIFEST_URL: ${{ secrets.UPDATE_MANIFEST_URL }}
         run: |
           for required in KEYSTORE_FILE KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [ -z "${!required}" ]; then echo "::error::Missing release signing secret: $required"; exit 1; fi
           done
           # التطبيق يقرأ التحديث من المستودع العام للنسخ إن ضُبط.
-          if [ -n "${{ secrets.UPDATE_MANIFEST_URL }}" ]; then
-            export UPDATE_MANIFEST_URL="${{ secrets.UPDATE_MANIFEST_URL }}"
+          if [ -n "$UPDATE_MANIFEST_URL" ]; then
+            export UPDATE_MANIFEST_URL
           elif [ -n "$RELEASES_REPO" ]; then
             export UPDATE_MANIFEST_URL="https://github.com/$RELEASES_REPO/releases/latest/download/update-manifest.json"
           fi
-          echo "Update URL: ${UPDATE_MANIFEST_URL:-<default>}"
           ./gradlew --no-daemon :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk \
              "Tabiq-v${{ steps.version.outputs.name }}.apk"
 
       - name: Verify the APK is signed
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
         run: |
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "Tabiq-v${{ steps.version.outputs.name }}.apk" | tee certs.txt
           grep -q "SHA-256 digest" certs.txt
+
+
+      - name: Verify candidate update compatibility
+        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        env:
+          CANDIDATE_VERSION_NAME: ${{ steps.version.outputs.name }}
+          CANDIDATE_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --max-time 120 \
+            'https://github.com/gnaf157-eng/alameer-station/releases/download/v2.66.0/Tabiq-v2.66.0.apk' \
+            --output "$RUNNER_TEMP/Tabiq-v2.66.0-reference.apk"
+          python3 - <<'PYCHECK'
+          import hashlib, json, os, pathlib, re, subprocess
+
+          build_tools = pathlib.Path(os.environ['ANDROID_SDK_ROOT']) / 'build-tools' / '35.0.0'
+          previous = pathlib.Path(os.environ['RUNNER_TEMP']) / 'Tabiq-v2.66.0-reference.apk'
+          candidate = pathlib.Path('Tabiq-v' + os.environ['CANDIDATE_VERSION_NAME'] + '.apk')
+          expected_hash = '75642049d9f435e691d0756c080a2b65fc80a7c4ebddce57a4dfed2e0ae6e1ed'
+
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          if digest(previous) != expected_hash:
+              raise RuntimeError('The reference APK does not match the published 2.66.0 SHA-256.')
+
+          def inspect(path):
+              certificates = subprocess.check_output(
+                  [str(build_tools / 'apksigner'), 'verify', '--print-certs', str(path)],
+                  text=True)
+              fingerprints = sorted(set(re.findall(
+                  r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)$',
+                  certificates, re.MULTILINE)))
+              if not fingerprints:
+                  raise RuntimeError('No verified signing certificate in ' + path.name)
+              # Verify signatures for the Android 9/10 devices used for this application.
+              subprocess.run(
+                  [str(build_tools / 'apksigner'), 'verify', '--min-sdk-version', '28',
+                   '--max-sdk-version', '29', str(path)], check=True)
+              badging = subprocess.check_output(
+                  [str(build_tools / 'aapt'), 'dump', 'badging', str(path)], text=True)
+              package = re.search(
+                  r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",
+                  badging, re.MULTILINE)
+              if package is None:
+                  raise RuntimeError('Cannot read APK identity for ' + path.name)
+              return dict(package=package[1], versionCode=int(package[2]),
+                          versionName=package[3], signerSha256=fingerprints, sha256=digest(path))
+
+          old, new = inspect(previous), inspect(candidate)
+          if old['package'] != 'com.alameer.station.shifts.v2' or new['package'] != old['package']:
+              raise RuntimeError('The application ID differs from the installed-release family.')
+          if old['versionName'] != '2.66.0' or old['versionCode'] != 152:
+              raise RuntimeError('The reference APK version is not 2.66.0 (152).')
+          if new['signerSha256'] != old['signerSha256']:
+              raise RuntimeError('Signing certificate mismatch: do not install or release this APK.')
+          if new['versionCode'] != int(os.environ['CANDIDATE_VERSION_CODE']) or new['versionCode'] <= old['versionCode']:
+              raise RuntimeError('The candidate version code must match the source and exceed the reference.')
+          if new['versionName'] != os.environ['CANDIDATE_VERSION_NAME']:
+              raise RuntimeError('The candidate version name does not match the source.')
+
+          report = dict(commit=os.environ['GITHUB_SHA'], reference=old, candidate=new,
+                        signatureAndPackageCheck='passed', phoneUpgradeTest='pending',
+                        liveUserDataAccessed=False)
+          pathlib.Path('upgrade-verification.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('## Candidate upgrade verification\n\n')
+              summary.write('Same signing certificate and application ID as 2.66.0 (152); '
+                            'candidate version code is higher. Signatures verified for Android 9/10.\n\n')
+              summary.write('Phone installation, data retention and visual checks are still pending. '
+                            'No GitHub Release or update manifest was published.\n')
+          PYCHECK
+
+      - name: Upload verified candidate for phone testing
+        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tabiq-candidate-${{ steps.version.outputs.name }}
+          path: |
+            Tabiq-v${{ steps.version.outputs.name }}.apk
+            upgrade-verification.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Generate update manifest
         if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
