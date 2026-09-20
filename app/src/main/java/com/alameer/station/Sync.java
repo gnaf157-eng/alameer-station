@@ -17,7 +17,7 @@ public class Sync {
             try(Cursor c=db.pendingSync()){
                 while(c.moveToNext()){
                     total++;long shiftId=c.getLong(0);
-                    try{if(post(url,payload(c,shiftId))){db.markSynced(shiftId);ok++;}}catch(Exception ignored){}
+                    try{if(post(url,payload(c,shiftId))){if(db.markSynced(shiftId,c.getInt(12)))ok++;}}catch(Exception ignored){}
                 }
             }
             int fOk=ok,fTotal=total;
@@ -81,3 +81,4 @@ public class Sync {
     private String readAll(InputStream in)throws Exception{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);return out.toString(StandardCharsets.UTF_8.name());}
     private void toast(String msg){Toast.makeText(activity,msg,Toast.LENGTH_LONG).show();}
 }
+

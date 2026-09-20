@@ -50,6 +50,18 @@ jobs:
           fi
           exit $code
 
+      - name: Summarize accounting tests
+        if: always()
+        run: |
+          python3 - <<'PYTEST'
+          import glob, xml.etree.ElementTree as ET
+          totals = dict(tests=0, failures=0, errors=0, skipped=0)
+          for path in glob.glob('app/build/test-results/testDebugUnitTest/TEST-*.xml'):
+              root = ET.parse(path).getroot()
+              for key in totals: totals[key] += int(root.get(key, 0))
+          print('TEST_SUMMARY', totals)
+          PYTEST
+
       - name: Read app version
         id: version
         run: |

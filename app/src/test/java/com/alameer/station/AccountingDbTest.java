@@ -93,4 +93,25 @@ public class AccountingDbTest {
         db.getWritableDatabase().execSQL("INSERT INTO supplier_entries(kind,amount,supplier,entry_date,created_at) VALUES('PAY',700,'GAS',?,?)",new Object[]{date,date});
         assertEquals(200,db.supplierBalance(),0.001);assertEquals(500,db.supplierOwed(),0.001);
     }
+
+    @Test public void staleSyncAcknowledgementDoesNotClearNewRevision(){
+        long shift=filledShift();db.closeAndPostShift(shift,db.soloWorkerId(),"",box);int revision;
+        try(Cursor c=db.pendingSync()){assertTrue(c.moveToFirst());revision=c.getInt(12);}
+        db.reopenShift(shift,"تصحيح");assertFalse(db.markSynced(shift,revision));
+        db.closeAndPostShift(shift,db.soloWorkerId(),"",box);assertFalse(db.markSynced(shift,revision));assertTrue(db.markSynced(shift,revision+1));
+    }
+    @Test public void actual19SchemaGetsAdditiveColumnsWithoutChangingAmounts(){
+        android.database.sqlite.SQLiteDatabase old=android.database.sqlite.SQLiteDatabase.create(null);
+        try{
+            old.execSQL("CREATE TABLE cashbox_entries(id INTEGER PRIMARY KEY,amount REAL,note TEXT)");
+            old.execSQL("CREATE TABLE debt_entries(id INTEGER PRIMARY KEY,amount REAL)");
+            old.execSQL("CREATE TABLE expense_entries(id INTEGER PRIMARY KEY,amount REAL)");
+            old.execSQL("CREATE TABLE supplier_entries(id INTEGER PRIMARY KEY,amount REAL)");
+            old.execSQL("INSERT INTO cashbox_entries VALUES(41,123.45,'keep')");
+            db.onUpgrade(old,19,20);
+            try(Cursor c=old.rawQuery("SELECT id,amount,note,managed FROM cashbox_entries",null)){
+                assertTrue(c.moveToFirst());assertEquals(41,c.getLong(0));assertEquals(123.45,c.getDouble(1),0.000001);assertEquals("keep",c.getString(2));assertEquals(0,c.getInt(3));
+            }
+        }finally{old.close();}
+    }
 }
