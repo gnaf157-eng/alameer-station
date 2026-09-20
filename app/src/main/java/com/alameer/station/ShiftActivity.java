@@ -1313,7 +1313,7 @@ public class ShiftActivity extends Activity {
             if(money<=0||Double.isNaN(money)||Double.isInfinite(money)){
                 amount.setError("أدخل مبلغًا صحيحًا");amount.requestFocus();return;
             }
-            db.addMovement(shiftId,type,value,money);
+            try{db.addMovement(shiftId,type,value,money);}catch(Exception e){amount.setError(e.getMessage());return;}
             loadMovements();refreshTotals();
             saved.setText("✓ سُجّلت: "+value+"  •  "+Calc.money(money)+" ر.ي");
             refreshRunning.run();
@@ -1382,7 +1382,7 @@ public class ShiftActivity extends Activity {
         public int getOpacity(){return android.graphics.PixelFormat.TRANSLUCENT;}
     }
 
-    private void movementDialog(String type,String label){LinearLayout box=new LinearLayout(this);box.setPadding(30,10,30,0);box.setOrientation(LinearLayout.VERTICAL);EditText name=new EditText(this);name.setHint("الاسم أو البيان");EditText amount=new EditText(this);amount.setHint("المبلغ");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);box.addView(name);box.addView(amount);new AlertDialog.Builder(this).setTitle("إضافة "+label).setView(box).setPositiveButton("حفظ",(d,w)->{if(name.getText().toString().trim().isEmpty()||Util.number(amount.getText().toString())<=0){Toast.makeText(this,"أدخل الاسم والمبلغ",Toast.LENGTH_SHORT).show();return;}db.addMovement(shiftId,type,name.getText().toString(),Util.number(amount.getText().toString()));loadMovements();refreshTotals();}).setNegativeButton("إلغاء",null).show();}
+    private void movementDialog(String type,String label){LinearLayout box=new LinearLayout(this);box.setPadding(30,10,30,0);box.setOrientation(LinearLayout.VERTICAL);EditText name=new EditText(this);name.setHint("الاسم أو البيان");EditText amount=new EditText(this);amount.setHint("المبلغ");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);box.addView(name);box.addView(amount);new AlertDialog.Builder(this).setTitle("إضافة "+label).setView(box).setPositiveButton("حفظ",(d,w)->{if(name.getText().toString().trim().isEmpty()||Util.number(amount.getText().toString())<=0){Toast.makeText(this,"أدخل الاسم والمبلغ",Toast.LENGTH_SHORT).show();return;}try{db.addMovement(shiftId,type,name.getText().toString(),Util.number(amount.getText().toString()));}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();return;}loadMovements();refreshTotals();}).setNegativeButton("إلغاء",null).show();}
     private void loadMovements(){
         movementsBox.removeAllViews();int count=0;
         try(Cursor c=db.movements(shiftId)){while(c.moveToNext()){
@@ -1402,7 +1402,7 @@ public class ShiftActivity extends Activity {
                 row.setOnClickListener(v->editMovement(movementId));
                 TextView remove=text("✕",18,Util.RED,true);remove.setPadding(dp(14),dp(4),dp(6),dp(4));
                 remove.setContentDescription("حذف الحركة");
-                remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(d,w)->{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}).setNegativeButton("إلغاء",null).show());
+                remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(d,w)->{try{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}).setNegativeButton("إلغاء",null).show());
                 row.addView(remove);
             }
             movementsBox.addView(row);View line=new View(this);line.setBackgroundColor(0xffeceef0);movementsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));

@@ -352,7 +352,17 @@ public class Db extends SQLiteOpenHelper {
     /** هل الطرمبة داخل وردية مفتوحة لم يُدخل لها قراءة بعد؟ */
     public boolean pumpInOpenShift(long pumpId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM readings r JOIN shifts s ON s.id=r.shift_id WHERE r.pump_id=? AND r.current IS NULL AND s.status IN ('OPEN','RETURNED')",new String[]{String.valueOf(pumpId)})){c.moveToFirst();return c.getInt(0)>0;}}
     public boolean workerHasOpenShift(long id){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE worker_id=? AND status IN ('OPEN','SUBMITTED','RETURNED')",new String[]{String.valueOf(id)})){c.moveToFirst();return c.getInt(0)>0;}}
-    public void deleteMovement(long movementId){getWritableDatabase().delete("movements","id=?",new String[]{String.valueOf(movementId)});}
+    private void requireEditableMovement(long movementId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT shift_id FROM movements WHERE id=?",new String[]{String.valueOf(movementId)})){
+            if(!c.moveToFirst()||!isOpen(c.getLong(0)))throw new IllegalStateException("الوردية مغلقة؛ افتحها للتصحيح أولًا");
+            requireDate(shiftDate(c.getLong(0)));
+        }
+    }
+    private void validateMovement(String type,String name,double amount){
+        if(!java.util.Arrays.asList("CASH","DEBT","COLLECTION","EXPENSE").contains(type))throw new IllegalArgumentException("نوع حركة غير صحيح");
+        if(name==null||name.trim().isEmpty()||!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("أدخل اسمًا ومبلغًا صحيحًا أكبر من صفر");
+    }
+    public void deleteMovement(long movementId){atomic(()->{requireEditableMovement(movementId);getWritableDatabase().delete("movements","id=?",new String[]{String.valueOf(movementId)});return null;});}
     public ArrayList<Integer> workerIds(){ArrayList<Integer> out=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT id FROM workers WHERE role='WORKER' AND active=1 ORDER BY id",null)){while(c.moveToNext())out.add(c.getInt(0));}return out;}
     public long openShift(int workerId, boolean night) {
         SQLiteDatabase db=getWritableDatabase();
@@ -393,7 +403,7 @@ public class Db extends SQLiteOpenHelper {
         }
     }
     public String validateShift(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*),SUM(CASE WHEN r.current IS NULL THEN 1 ELSE 0 END),SUM(CASE WHEN r.price<=0 THEN 1 ELSE 0 END),SUM(CASE WHEN r.current<r.previous THEN 1 ELSE 0 END) FROM readings r JOIN pumps p ON p.id=r.pump_id WHERE r.shift_id=? AND "+LIVE_PUMP,new String[]{String.valueOf(shiftId)})){if(!c.moveToFirst()||c.getInt(0)==0)return "لا توجد طرمبات مسندة لهذا العامل";if(c.getInt(1)>0)return "أدخل القراءة الحالية لجميع الطرمبات";if(c.getInt(2)>0)return "سعر الوقود غير مضبوط. اطلب من المدير إدخال الأسعار";if(c.getInt(3)>0)return "إحدى القراءات الحالية أقل من القراءة السابقة";}return "";}
-    public void addMovement(long shiftId,String type,String name,double amount){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("type",type);v.put("name",name.trim());v.put("amount",amount);v.put("created_at",Util.now());db.insertOrThrow("movements",null,v);ContentValues n=new ContentValues();n.put("type",type);n.put("name",name.trim());db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);}
+    public void addMovement(long shiftId,String type,String name,double amount){validateMovement(type,name,amount);if(!isOpen(shiftId))throw new IllegalStateException("الوردية مغلقة؛ افتحها للتصحيح أولًا");requireDate(shiftDate(shiftId));SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("type",type);v.put("name",name.trim());v.put("amount",amount);v.put("created_at",Util.now());db.insertOrThrow("movements",null,v);ContentValues n=new ContentValues();n.put("type",type);n.put("name",name.trim());db.insertWithOnConflict("remembered_names",null,n,SQLiteDatabase.CONFLICT_IGNORE);}
     /** بيانات حركة واحدة: 0=type,1=name,2=amount. */
     public Cursor movement(long movementId){
         return getReadableDatabase().rawQuery(
@@ -406,6 +416,7 @@ public class Db extends SQLiteOpenHelper {
      * يُسجَّل التعديل في سجل التدقيق بقيمته قبل وبعد.
      */
     public void updateMovement(long movementId,String type,String name,double amount){
+        validateMovement(type,name,amount);requireEditableMovement(movementId);
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String clean=name==null?"":name.trim();
         if(clean.isEmpty())throw new IllegalArgumentException("اكتب الاسم");
@@ -2070,23 +2081,31 @@ public class Db extends SQLiteOpenHelper {
         return "GAS".equals(code)?Journal.SUPPLIER_GAS:Journal.SUPPLIER;
     }
 
-    /** ما علينا لمورّد بعينه: المشتريات ناقص ما وُرِّد. */
+    /**
+     * رصيد مورّد بقاعدة التطبيق الموحّدة: الموجب لنا والسالب علينا.
+     * ما وُرِّد يزيد رصيدنا، والمشتريات تنقصه.
+     */
     public double supplierBalance(String supplier){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0 AND COALESCE(supplier,'OIL')=?",
                 new String[]{supplier})){
             return c.moveToFirst()?c.getDouble(0):0;
         }
     }
 
-    /** ما علينا للموردين جميعًا. */
+    /** رصيد الموردين جميعًا: الموجب لنا والسالب علينا. */
     public double supplierBalance(){
         try(Cursor c=getReadableDatabase().rawQuery(
-                "SELECT COALESCE(SUM(CASE WHEN kind='BUY' THEN amount ELSE -amount END),0) "+
+                "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0",null)){
             return c.moveToFirst()?c.getDouble(0):0;
         }
+    }
+
+    /** ما علينا للموردين فقط (موجب)، لحساب المطلوبات. */
+    public double supplierOwed(){
+        return Math.max(0,-supplierBalance("OIL"))+Math.max(0,-supplierBalance("GAS"));
     }
 
     public double supplierBought(String supplier){

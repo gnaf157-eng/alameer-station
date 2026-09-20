@@ -66,8 +66,8 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "file=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
           else
-            echo "file=" >> "$GITHUB_OUTPUT"
-            echo "::notice::سيُستخدم مفتاح التوقيع المرافق signing/release.p12"
+            echo "::error::Configure KEYSTORE_BASE64 with the existing production signing key before releasing. Do not generate a replacement key."
+            exit 1
           fi
 
       - name: Build signed release APK
@@ -81,6 +81,9 @@ jobs:
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
         run: |
+          for required in KEYSTORE_FILE KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!required}" ]; then echo "::error::Missing release signing secret: $required"; exit 1; fi
+          done
           # التطبيق يقرأ التحديث من المستودع العام للنسخ إن ضُبط.
           if [ -n "${{ secrets.UPDATE_MANIFEST_URL }}" ]; then
             export UPDATE_MANIFEST_URL="${{ secrets.UPDATE_MANIFEST_URL }}"

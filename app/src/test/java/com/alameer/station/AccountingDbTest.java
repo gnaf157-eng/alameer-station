@@ -22,7 +22,7 @@ public class AccountingDbTest {
     @Test public void lockedEditCannotAlterOriginal(){long id=db.addCashboxEntry(box,"IN",100,"test",date);db.lockPeriod("2026-09","test");refused(()->db.updateCashboxEntry(id,"OUT",200,"new","2026-10-01","YER"));refused(()->db.deleteCashboxEntry(id));assertEquals(100,db.cashboxBalance(box),0.001);assertEquals(1,count("journal"));}
     @Test public void editKeepsStoredExchangeRate(){db.setRate("SAR",139.5);long id=db.addCashboxEntry(box,"IN",100,"test",date,"SAR");db.setRate("SAR",200);db.updateCashboxEntry(id,"IN",100,"changed note",date,"SAR");assertEquals(13950,db.cashboxBalance(box),0.001);assertEquals(13950,account(Journal.CASH),0.001);}
     @Test public void linkedSupplierCashCannotBeEditedAlone(){long id=db.paySupplier("OIL",box,500,"test",date);long cash;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT cashbox_entry FROM supplier_entries WHERE id=?",new String[]{""+id})){c.moveToFirst();cash=c.getLong(0);}refused(()->db.updateCashboxEntry(cash,"IN",900,"test",date,"YER"));db.voidSupplierEntry(id);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);}
-    @Test public void supplierTransferVoidRestoresDebtor(){long who=db.addDebtor("عميل", "",0);db.addDebtEntry(who,"DEBT",500,"test",date);long id=db.moveDebtorToSupplier(who,"OIL","test",date);assertEquals(0,db.debtorBalance(who),0.001);assertEquals(-500,db.supplierBalance("OIL"),0.001);db.voidSupplierEntry(id);assertEquals(500,db.debtorBalance(who),0.001);assertEquals(0,db.supplierBalance("OIL"),0.001);assertEquals(500,account(Journal.RECEIVABLE),0.001);}
+    @Test public void supplierTransferVoidRestoresDebtor(){long who=db.addDebtor("عميل", "",0);db.addDebtEntry(who,"DEBT",500,"test",date);long id=db.moveDebtorToSupplier(who,"OIL","test",date);assertEquals(0,db.debtorBalance(who),0.001);assertEquals(500,db.supplierBalance("OIL"),0.001);db.voidSupplierEntry(id);assertEquals(500,db.debtorBalance(who),0.001);assertEquals(0,db.supplierBalance("OIL"),0.001);assertEquals(500,account(Journal.RECEIVABLE),0.001);}
     @Test public void expenseDeleteRestoresCash(){long id=db.addExpense("زيت",100,"test",date,box,0);assertEquals(-100,db.cashboxBalance(box),0.001);db.deleteExpense(id);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);assertEquals(0,account(Journal.EXPENSE),0.001);}
     @Test public void openingCanOnlyBePostedOnce(){db.setCashboxOpening(box,-100);db.postOpeningBalances(date);assertEquals(-100,account(Journal.CASH),0.001);refused(()->db.postOpeningBalances(date));refused(()->db.setCashboxOpening(box,200));assertEquals(1,count("journal"));}
     @Test public void archivedAccountsStillIncluded(){long who=db.addDebtor("عميل","",100);db.setDebtorActive(who,false);db.setCashboxOpening(box,200);db.setCashboxActive(box,false);assertEquals(100,db.debtsTotal(),0.001);assertEquals(200,db.cashboxesTotal(),0.001);}
@@ -79,4 +79,18 @@ public class AccountingDbTest {
         assertFalse(Backup.validDatabase(target));target.delete();
     }
     @Test public void parserHandlesArabicAndRejectsNonFinite(){assertEquals(1234.5,Calc.number("١٬٢٣٤٫٥"),0.0001);assertEquals(1234.5,Calc.number("۱٬۲۳۴٫۵"),0.0001);assertEquals(0,Calc.number("NaN"),0);assertEquals(0,Calc.number("Infinity"),0);}
+
+    @Test public void closedShiftCannotChangeMovementsOrReadings(){
+        long shift=filledShift();long movement,reading;
+        try(Cursor c=db.movements(shift)){c.moveToFirst();movement=c.getLong(0);}
+        try(Cursor c=db.shiftReadings(shift)){c.moveToFirst();reading=c.getLong(0);}
+        db.closeAndPostShift(shift,db.soloWorkerId(),"",box);
+        refused(()->db.addMovement(shift,"CASH","خطأ",1));refused(()->db.deleteMovement(movement));
+        refused(()->db.updateMovement(movement,"CASH","خطأ",1));assertFalse(db.saveReading(reading,999));assertFalse(db.savePrevious(reading,0));
+    }
+    @Test public void supplierLiabilitiesDoNotNetAgainstOtherSupplierAdvances(){
+        db.getWritableDatabase().execSQL("INSERT INTO supplier_entries(kind,amount,supplier,entry_date,created_at) VALUES('BUY',500,'OIL',?,?)",new Object[]{date,date});
+        db.getWritableDatabase().execSQL("INSERT INTO supplier_entries(kind,amount,supplier,entry_date,created_at) VALUES('PAY',700,'GAS',?,?)",new Object[]{date,date});
+        assertEquals(200,db.supplierBalance(),0.001);assertEquals(500,db.supplierOwed(),0.001);
+    }
 }

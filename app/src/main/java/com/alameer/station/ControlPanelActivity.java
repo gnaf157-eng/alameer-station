@@ -89,8 +89,9 @@ public class ControlPanelActivity extends Activity {
         final double credits = db.creditsTotal();
         final double netDebt = debts - credits;
         final double stock = db.stockValueTotal();
+        // القاعدة الموحّدة: الموجب لنا والسالب علينا، فالرصيد يُجمع كما هو.
         final double owed = db.supplierBalance();
-        final double capital = cash + netDebt + stock - owed;
+        final double capital = cash + netDebt + stock + owed;
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -108,7 +109,7 @@ public class ControlPanelActivity extends Activity {
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
         box.addView(grand);
-        box.addView(text("الصناديق + الديون + المخزون − الموردين  •  اضغط للتفصيل",
+        box.addView(text("الصناديق + الديون + المخزون + الموردين  •  اضغط للتفصيل",
                 11, 0xffCFE2FA, false));
         return box;
     }
@@ -121,18 +122,46 @@ public class ControlPanelActivity extends Activity {
         sb.append("\n• نقد الصناديق\n   ").append(whole(cash)).append(" ر.ي\n");
         sb.append("\n• صافي الديون\n   ").append(whole(netDebt)).append(" ر.ي");
         double gross = db.debtsTotal(), owedUs = db.creditsTotal();
-        if (owedUs > 0.009)
-            sb.append("\n   لنا ").append(whole(gross)).append("  •  علينا ").append(whole(owedUs));
+        sb.append("\n   لنا ").append(whole(gross));
+        if (owedUs > 0.009) sb.append("  •  علينا ").append(whole(owedUs));
         sb.append("\n");
-        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي\n");
-        sb.append("\n   مجموع الموجودات ").append(whole(cash + netDebt + stock)).append(" ر.ي\n");
+        // أكبر الأرصدة، لتُطابق بندًا ببند مع أي سجل خارجي.
+        int shown = 0;
+        try (Cursor c = db.debtors(false)) {
+            while (c.moveToNext() && shown < 12) {
+                double bal = c.getDouble(7);
+                if (Math.abs(bal) < 0.01) continue;
+                shown++;
+                sb.append("\n   ").append(c.getString(1)).append("  ").append(whole(bal));
+            }
+        }
+        if (shown > 0) sb.append("\n");
+        sb.append("\n• قيمة المخزون بالتكلفة\n   ").append(whole(stock)).append(" ر.ي");
+        // تفصيل كل مادة: اللترات وتكلفتها، ليسهل مطابقتها بجدولك.
+        for (String m : Db.MATERIALS) {
+            double litres = Math.max(0, db.materialSummary(m)[3]);
+            double each = db.stockValue(m);
+            if (litres < 0.01 && each < 0.01) continue;
+            sb.append("\n   ").append(m).append("  ").append(whole(litres)).append(" لتر");
+            sb.append("  =  ").append(whole(each));
+        }
+        sb.append("\n");
+        // كل مورّد في جانبه: الموجب موجودات والسالب مطلوبات.
+        double oil = db.supplierBalance("OIL"), gas = db.supplierBalance("GAS");
+        double assetSide = cash + netDebt + stock + Math.max(0, oil) + Math.max(0, gas);
+        if (oil > 0.009)
+            sb.append("\n• رصيد لنا عند شركة النفط\n   ").append(whole(oil)).append(" ر.ي\n");
+        if (gas > 0.009)
+            sb.append("\n• رصيد لنا عند شركة الغاز\n   ").append(whole(gas)).append(" ر.ي\n");
+        sb.append("\n   مجموع الموجودات ").append(whole(assetSide)).append(" ر.ي\n");
 
+        double dueOil = oil < 0 ? -oil : 0, dueGas = gas < 0 ? -gas : 0;
         sb.append("\n\nالمطلوبات\n");
-        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(db.supplierBalance("OIL"))).append(" ر.ي\n");
-        sb.append("\n• مستحق لشركة الغاز\n   ").append(whole(db.supplierBalance("GAS"))).append(" ر.ي\n");
-        sb.append("\n   مجموع المطلوبات ").append(whole(owed)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة النفط\n   ").append(whole(dueOil)).append(" ر.ي\n");
+        sb.append("\n• مستحق لشركة الغاز\n   ").append(whole(dueGas)).append(" ر.ي\n");
+        sb.append("\n   مجموع المطلوبات ").append(whole(dueOil + dueGas)).append(" ر.ي\n");
 
-        sb.append("\n\nرأس المال = الموجودات − المطلوبات\n");
+        sb.append("\n\nصافي الأصول التقديري = الموجودات − المطلوبات\n");
         sb.append("   ").append(whole(capital)).append(" ر.ي");
         if (capital < -0.009)
             sb.append("\n\n⚠ المطلوبات تتجاوز الموجودات.");
