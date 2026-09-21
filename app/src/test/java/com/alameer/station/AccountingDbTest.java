@@ -114,4 +114,23 @@ public class AccountingDbTest {
             }
         }finally{old.close();}
     }
+
+    @Test public void nonzeroShiftCannotCloseOrPostEvenWithReason(){
+        for(double amount:new double[]{1,-1,0.001,-0.001}){
+            long shift=filledShift();
+            db.addMovement(shift,amount>0?"COLLECTION":"EXPENSE","اختبار فرق",Math.abs(amount));
+            refused(()->db.closeAndPostShift(shift,db.soloWorkerId(),"سبب مكتوب",box));
+            refused(()->db.submit(shift,db.soloWorkerId(),"سبب مكتوب"));
+            refused(()->db.approve(shift));
+            refused(()->db.closeUnmatched(shift));
+            refused(()->db.postShift(shift,box));
+            refused(()->db.journalShift(shift));
+            assertTrue(db.isOpen(shift));
+            assertFalse(db.shiftPosted(shift));
+            assertFalse(db.shiftJournalled(shift));
+            db.addMovement(shift,amount>0?"CASH":"COLLECTION","تصحيح الفرق",Math.abs(amount));
+            db.closeAndPostShift(shift,db.soloWorkerId(),"",box);
+            assertFalse(db.isOpen(shift));
+        }
+    }
 }

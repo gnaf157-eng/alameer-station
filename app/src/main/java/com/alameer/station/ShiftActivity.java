@@ -1642,25 +1642,16 @@ public class ShiftActivity extends Activity {
         String issue=db.validateShift(shiftId);
         if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إغلاق الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}
         double bal=db.balance(shiftId);
-        if(Math.abs(bal)<0.01){
+        if(Double.isFinite(bal)&&Math.abs(bal)<=0.0000001){
             new AlertDialog.Builder(this).setTitle("إغلاق الوردية")
                 .setMessage(db.isHistorical(shiftId)?"ستُحفظ الوردية القديمة في الأرشيف دون تغيير قراءات الطرمبات الحالية.":"الوردية مطابقة. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق.")
                 .setPositiveButton("إغلاق",(d,w)->finishShift(""))
                 .setNegativeButton("إلغاء",null).show();
             return;
         }
-        EditText reason=new EditText(this);styleInput(reason);
-        reason.setHint("سبب العجز أو الزيادة");
-        LinearLayout box=column();box.setPadding(dp(24),dp(8),dp(24),0);box.addView(reason);
-        AlertDialog d=new AlertDialog.Builder(this)
-            .setTitle("الباقي "+money(bal)+" ريال")
-            .setMessage("توجد زيادة أو عجز. اكتب السبب ليُحفظ في التقرير.")
-            .setView(box).setPositiveButton("إغلاق",null).setNegativeButton("رجوع",null).create();
-        d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-            String text=reason.getText().toString().trim();
-            if(text.isEmpty()){reason.setError("السبب مطلوب");return;}
-            d.dismiss();finishShift(text);}));
-        d.show();
+        new AlertDialog.Builder(this).setTitle("لا يمكن إقفال الوردية")
+            .setMessage("الباقي: "+Double.toString(bal)+" ريال. يجب أن يصبح الفارق صفرًا. قراءاتك وحركاتك محفوظة؛ راجعها وصحح الفرق.")
+            .setPositiveButton("مراجعة الوردية",null).show();
     }
     /** يؤرشف الوردية الحالية ويبدأ واحدة جديدة، ثم يعرض حفظ التقرير. */
     private void finishShift(String reason){
