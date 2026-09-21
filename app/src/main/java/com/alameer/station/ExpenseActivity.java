@@ -252,7 +252,7 @@ public class ExpenseActivity extends Activity {
         final List<Long> boxIds = new ArrayList<>();
         final List<String> boxNames = new ArrayList<>();
         boxIds.add(0L);
-        boxNames.add("بدون خصم من صندوق");
+        boxNames.add("اختر الصندوق المدفوع منه");
         try (Cursor c = db.cashboxes(true)) {
             while (c.moveToNext()) {
                 boxIds.add(c.getLong(0));
@@ -302,6 +302,7 @@ public class ExpenseActivity extends Activity {
             double value = Calc.number(amount.getText().toString());
             if (!(value > 0)) { amount.setError("اكتب مبلغًا أكبر من صفر"); return; }
             final long boxId = boxIds.get(boxPicker.getSelectedItemPosition());
+            if(boxId<=0){amount.setError("اختر الصندوق المقابل للمصروف؛ بياناتك باقية في النافذة");return;}
             if (boxId > 0 && db.cashboxBalance(boxId) < value) {
                 new AlertDialog.Builder(this).setTitle("رصيد غير كافٍ")
                         .setMessage("رصيد الصندوق " + money(db.cashboxBalance(boxId)) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")

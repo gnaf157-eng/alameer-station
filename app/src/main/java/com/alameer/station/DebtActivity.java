@@ -668,8 +668,16 @@ public class DebtActivity extends Activity {
 
         Spinner kind = new Spinner(this);
         kind.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"دين جديد (يزيد عليه)", "سداد (ينقص عنه)"}));
+                new String[]{"بيع آجل خارج الورديات", "تحصيل دين إلى صندوق", "سلفة نقدية من صندوق"}));
 
+        final java.util.ArrayList<Long> cashIds=new java.util.ArrayList<>();
+        final java.util.ArrayList<String> cashNames=new java.util.ArrayList<>();
+        cashIds.add(0L);cashNames.add("اختر الصندوق للتحصيل أو السلفة");
+        try(android.database.Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes ORDER BY name",null)){
+            while(c.moveToNext()){cashIds.add(c.getLong(0));cashNames.add(c.getString(1));}
+        }
+        final Spinner cashAccount=new Spinner(this);
+        cashAccount.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,cashNames));
         final EditText amount = new EditText(this);
         styleInput(amount);
         amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -693,7 +701,7 @@ public class DebtActivity extends Activity {
         final Runnable preview = () -> {
             double value = Calc.number(amount.getText().toString());
             if (!(value > 0)) { afterText.setText(""); return; }
-            double after = kind.getSelectedItemPosition() == 0 ? current + value : current - value;
+            double after = kind.getSelectedItemPosition() == 1 ? current - value : current + value;
             afterText.setText("الدين بعد الحركة: " + money(after) + " ر.ي");
             afterText.setTextColor(after > 0.01 ? Util.RED : after < -0.01 ? Util.GREEN : 0xff626970);
         };
@@ -713,6 +721,8 @@ public class DebtActivity extends Activity {
         box.addView(balanceCard);
         box.addView(text("نوع الحركة", 13, 0xff626970, false), space());
         box.addView(kind);
+        box.addView(cashAccount);
+        box.addView(text("المبيعات المسجلة في وردية لا تُسجّل هنا مرة أخرى. التحصيل والسلفة يؤثران على الصندوق المختار تلقائيًا.",13,0xff5a6672,false),space());
         box.addView(text("المبلغ", 13, 0xff626970, false), space());
         box.addView(amount);
         box.addView(text("البيان", 13, 0xff626970, false), space());
@@ -730,12 +740,16 @@ public class DebtActivity extends Activity {
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             double value = Calc.number(amount.getText().toString());
             if (!(value > 0)) { amount.setError("اكتب مبلغًا أكبر من صفر"); return; }
-            String direction = kind.getSelectedItemPosition() == 0 ? "DEBT" : "PAID";
+            String direction = kind.getSelectedItemPosition() == 1 ? "PAID" : "DEBT";
+            final String operation=new String[]{"CREDIT_SALE","COLLECTION","CASH_LOAN"}[kind.getSelectedItemPosition()];
+            final long targetBox=cashIds.get(cashAccount.getSelectedItemPosition());
+            if(!"CREDIT_SALE".equals(operation)&&targetBox==0){amount.setError("اختر الصندوق المقابل أولًا؛ بيانات الإدخال باقية");return;}
             if ("PAID".equals(direction) && current < value) {
                 new AlertDialog.Builder(this).setTitle("السداد أكبر من الدين")
                         .setMessage("الدين عليه " + money(current) + " ر.ي وأنت تسجّل سداد " + money(value) + " ر.ي.\nسيصبح رصيده سالبًا. هل تريد التسجيل؟")
                         .setPositiveButton("سجّل", (d, w) -> {
-                            db.addDebtEntry(debtorId, direction, value, note.getText().toString(), date[0]);
+                            try{db.addCustomerTransaction(debtorId, operation, targetBox, value, note.getText().toString(), date[0]);}
+                            catch(RuntimeException e){amount.setError(e.getMessage());return;}
                             dialog.dismiss();
                             refresh();
                         })
@@ -743,7 +757,7 @@ public class DebtActivity extends Activity {
                 return;
             }
             try {
-                db.addDebtEntry(debtorId, direction, value, note.getText().toString(), date[0]);
+                db.addCustomerTransaction(debtorId, operation, targetBox, value, note.getText().toString(), date[0]);
             } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
             dialog.dismiss();
             refresh();

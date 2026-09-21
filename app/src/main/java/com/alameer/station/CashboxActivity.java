@@ -653,6 +653,20 @@ public class CashboxActivity extends Activity {
         kind.setOnItemSelectedListener(redraw);
         currency.setOnItemSelectedListener(redraw);
 
+        final java.util.ArrayList<String> counterpartNames=new java.util.ArrayList<>();
+        final java.util.ArrayList<String> counterpartTypes=new java.util.ArrayList<>();
+        final java.util.ArrayList<Long> counterpartIds=new java.util.ArrayList<>();
+        counterpartNames.add("اختر الحساب المقابل");counterpartTypes.add("");counterpartIds.add(0L);
+        counterpartNames.add("مبيعات نقدية خارج الورديات");counterpartTypes.add("SALE");counterpartIds.add(0L);
+        counterpartNames.add("مصروف نقدي — اكتب البند في البيان");counterpartTypes.add("EXPENSE");counterpartIds.add(0L);
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM debtors ORDER BY name",null)){
+            while(c.moveToNext()){counterpartNames.add("عميل: "+c.getString(1));counterpartTypes.add("CUSTOMER");counterpartIds.add(c.getLong(0));}
+        }
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE id<>? ORDER BY name",new String[]{String.valueOf(boxId)})){
+            while(c.moveToNext()){counterpartNames.add("تحويل صندوق: "+c.getString(1));counterpartTypes.add("TRANSFER");counterpartIds.add(c.getLong(0));}
+        }
+        final Spinner counterpartPicker=new Spinner(this);
+        counterpartPicker.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,counterpartNames));
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(10), dp(24), 0);
@@ -672,6 +686,9 @@ public class CashboxActivity extends Activity {
         cw.setMargins(dp(10), 0, 0, 0);
         kinds.addView(curCol, cw);
         box.addView(kinds, space());
+        box.addView(text("الحساب المقابل",14,Util.NAVY,true),space());
+        box.addView(counterpartPicker);
+        box.addView(text("وارد من العميل = تحصيل، صادر إليه = سلفة. لا تكرر نقد الورديات هنا.",13,0xff626970,false),space());
         box.addView(text("الاسم", 13, 0xff626970, false), space());
         box.addView(note);
         box.addView(text("المبلغ", 13, 0xff626970, false), space());
@@ -697,7 +714,7 @@ public class CashboxActivity extends Activity {
                 new AlertDialog.Builder(this).setTitle("رصيد غير كافٍ")
                         .setMessage("رصيد الصندوق " + money(opening) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
                         .setPositiveButton("سجّل", (d, w) -> {
-                            db.addCashboxEntry(boxId, direction, entered, note.getText().toString(), date[0], code);
+                            try{db.addCashTransaction(boxId, direction, entered, note.getText().toString(), date[0], code, counterpartTypes.get(counterpartPicker.getSelectedItemPosition()), counterpartIds.get(counterpartPicker.getSelectedItemPosition()));}catch(RuntimeException e){amount.setError(e.getMessage());return;}
                             db.rememberName("CASH", note.getText().toString());
                             dialog.dismiss();
                             refresh();
@@ -706,7 +723,7 @@ public class CashboxActivity extends Activity {
                 return;
             }
             try {
-                db.addCashboxEntry(boxId, direction, entered, note.getText().toString(), date[0], code);
+                db.addCashTransaction(boxId, direction, entered, note.getText().toString(), date[0], code, counterpartTypes.get(counterpartPicker.getSelectedItemPosition()), counterpartIds.get(counterpartPicker.getSelectedItemPosition()));
                 db.rememberName("CASH", note.getText().toString());
             } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
             dialog.dismiss();

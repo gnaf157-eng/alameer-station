@@ -133,4 +133,60 @@ public class AccountingDbTest {
             assertFalse(db.isOpen(shift));
         }
     }
+
+    @Test public void explicitCollectionUpdatesBothLedgersAndCancellationRestoresBoth(){
+        long person=db.addDebtor("عميل مباشر","",0);
+        db.addCustomerTransaction(person,"CREDIT_SALE",0,200,"فاتورة مستقلة",date);
+        long receipt=db.addCustomerTransaction(person,"COLLECTION",box,80,"قبض",date);
+        assertEquals(120,db.debtorBalance(person),0.001);
+        assertEquals(80,db.cashboxBalance(box),0.001);
+        assertEquals(0,account(Journal.SUSPENSE),0.001);
+        assertEquals(120,account(Journal.RECEIVABLE),0.001);
+        long cashId;
+        try(Cursor c=db.cashboxEntries(box,10)){assertTrue(c.moveToFirst());cashId=c.getLong(0);}
+        final long linked=cashId;refused(()->db.deleteCashboxEntry(linked));
+        assertTrue(db.deleteDebtEntry(receipt));
+        assertEquals(200,db.debtorBalance(person),0.001);
+        assertEquals(0,db.cashboxBalance(box),0.001);
+        assertEquals(200,account(Journal.RECEIVABLE),0.001);
+    }
+    @Test public void explicitLoanMovesCashWithoutSalesAndReverses(){
+        long person=db.addDebtor("مستلف","",0);
+        long id=db.addCustomerTransaction(person,"CASH_LOAN",box,50,"سلفة",date);
+        assertEquals(50,db.debtorBalance(person),0.001);
+        assertEquals(-50,db.cashboxBalance(box),0.001);
+        assertEquals(0,account(Journal.SALES),0.001);
+        db.deleteDebtEntry(id);
+        assertEquals(0,db.debtorBalance(person),0.001);
+        assertEquals(0,db.cashboxBalance(box),0.001);
+    }
+    @Test public void explicitCustomerFailureLeavesNoHalfTransaction(){
+        long person=db.addDebtor("عميل اختبار","",0);
+        refused(()->db.addCustomerTransaction(person,"COLLECTION",0,10,"",date));
+        assertEquals(0,count("debt_entries"));
+        db.getWritableDatabase().execSQL("CREATE TRIGGER reject_explicit BEFORE INSERT ON journal BEGIN SELECT RAISE(ABORT,'test'); END");
+        try{db.addCustomerTransaction(person,"COLLECTION",box,10,"",date);fail();}catch(RuntimeException expected){}
+        assertEquals(0,count("debt_entries"));assertEquals(0,count("cashbox_entries"));
+        assertEquals(0,count("settlement_links"));
+    }
+
+    @Test public void explicitCashTransferCancelsBothBoxes(){
+        long other=db.addCashbox("الصندوق الآخر",0);
+        long id=db.addCashTransaction(box,"OUT",40,"تحويل",date,"YER","TRANSFER",other);
+        assertEquals(-40,db.cashboxBalance(box),0.001);assertEquals(40,db.cashboxBalance(other),0.001);
+        assertEquals(0,account(Journal.CASH),0.001);assertEquals(0,account(Journal.SUSPENSE),0.001);
+        db.deleteCashboxEntry(id);
+        assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,db.cashboxBalance(other),0.001);
+    }
+    @Test public void explicitCashCollectionAndExpenseHaveLinkedCounterparts(){
+        long who=db.addDebtor("عميل الصندوق","",0);
+        long receipt=db.addCashTransaction(box,"IN",60,"تحصيل",date,"YER","CUSTOMER",who);
+        assertEquals(-60,db.debtorBalance(who),0.001);
+        assertEquals(60,db.cashboxBalance(box),0.001);
+        db.deleteCashboxEntry(receipt);assertEquals(0,db.debtorBalance(who),0.001);
+        long expense=db.addCashTransaction(box,"OUT",25,"كهرباء",date,"YER","EXPENSE",0);
+        assertEquals(1,count("expense_entries"));assertEquals(25,account(Journal.EXPENSE),0.001);
+        db.deleteCashboxEntry(expense);assertEquals(0,count("expense_entries"));
+        assertEquals(0,account(Journal.EXPENSE),0.001);assertEquals(0,db.cashboxBalance(box),0.001);
+    }
 }

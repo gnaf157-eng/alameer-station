@@ -227,7 +227,7 @@ public class Db extends SQLiteOpenHelper {
         }
         String settlementColumn=table.equals("cashbox_entries")?"cashbox_entry":table.equals("debt_entries")?"debt_entry":table.equals("expense_entries")?"expense_entry":"";
         if(!settlementColumn.isEmpty())try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM settlement_links WHERE "+settlementColumn+"=?",new String[]{String.valueOf(id)})){
-            if(c.moveToFirst())throw new IllegalStateException("الحركة مرتبطة بتصريف الحساب الوسيط؛ صحّح العملية الأصلية.");
+            if(c.moveToFirst())throw new IllegalStateException("الحركة مرتبطة بقيد آخر؛ صحّح العملية من مصدرها.");
         }
         String link=table.equals("cashbox_entries")?"cashbox_entry":table.equals("material_entries")?"material_entry":table.equals("debt_entries")?"debt_entry":"";
         if(!link.isEmpty())try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM supplier_entries WHERE voided=0 AND "+link+"=?",new String[]{String.valueOf(id)})){
@@ -651,6 +651,7 @@ public class Db extends SQLiteOpenHelper {
     private void updateCashboxEntryAtomic(long id,String direction,double amount,String note,
                                    String date,String currency){
         requireDate(date);requireStandalone("cashbox_entries",id);
+        if(explicitCashEntry(id))throw new IllegalStateException("ألغِ الحركة ثم أعد تسجيلها لتصحيح طرفي القيد معًا.");
         if(!"IN".equals(direction)&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String before="";long boxId=0;
@@ -699,6 +700,7 @@ public class Db extends SQLiteOpenHelper {
     }
     private void updateDebtEntryAtomic(long id,String direction,double amount,String note,String date){
         requireDate(date);requireStandalone("debt_entries",id);
+        if(explicitCustomerEntry(id))throw new IllegalStateException("للحفاظ على طرفي القيد، ألغِ الحركة وأعد تسجيلها بالقيم الصحيحة.");
         if(!"DEBT".equals(direction)&&!"PAID".equals(direction))throw new IllegalArgumentException("نوع الحركة غير معروف");
         if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا أكبر من صفر");
         String before="";long debtorId=0;
@@ -817,6 +819,7 @@ public class Db extends SQLiteOpenHelper {
     private boolean deleteCashboxEntryAtomic(long id){
         requireStandalone("cashbox_entries",id);
         reverseManual("CASHBOX",id);
+        reverseManual("CASH_EXPLICIT",id);
         return getWritableDatabase().delete("cashbox_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** id,direction,amount,note,entry_date,box_name */
@@ -1848,6 +1851,91 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=debtors(false)){while(c.moveToNext()){double b=c.getDouble(7);if(b<-0.009)total-=b;}}
         return total;
     }
+    /** Cash movement with a selected real counterpart, atomically linked for cancellation. */
+    public long addCashTransaction(long boxId,String direction,double amount,String note,String date,String currency,String counterpart,long targetId){
+        return atomic(()->{
+            requireDate(date);requireEntity("cashboxes",boxId);
+            boolean incoming="IN".equals(direction);
+            if(!incoming&&!"OUT".equals(direction))throw new IllegalArgumentException("نوع الحركة غير صحيح");
+            if(!java.util.Arrays.asList("SALE","EXPENSE","CUSTOMER","TRANSFER").contains(counterpart))throw new IllegalArgumentException("اختر الحساب المقابل");
+            if("SALE".equals(counterpart)&&!incoming)throw new IllegalArgumentException("المبيعات النقدية حركة واردة؛ اختر العملية الصحيحة");
+            if("EXPENSE".equals(counterpart)&&incoming)throw new IllegalArgumentException("المصروف حركة صادرة؛ اختر العملية الصحيحة");
+            if("CUSTOMER".equals(counterpart))requireEntity("debtors",targetId);
+            if("TRANSFER".equals(counterpart)){
+                requireEntity("cashboxes",targetId);
+                if(targetId==boxId)throw new IllegalArgumentException("اختر صندوقًا آخر");
+            }
+            if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("المبلغ غير صحيح");
+            String code=currency==null?"YER":currency;
+            double yer=toYer(amount,code);
+            if(!Double.isFinite(yer)||yer<=0)throw new IllegalArgumentException("سعر الصرف غير صحيح");
+            String label=note==null?"":note.trim();
+            if(label.isEmpty())throw new IllegalArgumentException("اكتب البيان أو بند المصروف");
+            long cashId,linkedCash=0,debtId=0,expenseId=0;
+            boolean prior=suppressJournal;suppressJournal=true;
+            try{
+                cashId=addCashboxEntry(boxId,direction,amount,label,date,code);
+                ContentValues primary=new ContentValues();primary.put("managed",0);
+                getWritableDatabase().update("cashbox_entries",primary,"id=?",new String[]{String.valueOf(cashId)});
+                if("CUSTOMER".equals(counterpart))debtId=addDebtEntry(targetId,incoming?"PAID":"DEBT",yer,label,date);
+                if("TRANSFER".equals(counterpart))linkedCash=addCashboxEntry(targetId,incoming?"OUT":"IN",amount,label,date,code);
+                if("EXPENSE".equals(counterpart))expenseId=addExpense(label,yer,label,date,0,0);
+            }finally{suppressJournal=prior;}
+            String other="SALE".equals(counterpart)?Journal.SALES:"EXPENSE".equals(counterpart)?Journal.EXPENSE:"CUSTOMER".equals(counterpart)?Journal.RECEIVABLE:Journal.CASH;
+            String fromName="",targetName=label;
+            try(Cursor c=getReadableDatabase().rawQuery("SELECT name FROM cashboxes WHERE id=?",new String[]{String.valueOf(boxId)})){if(c.moveToFirst())fromName=c.getString(0);}
+            if("CUSTOMER".equals(counterpart))targetName=debtorName(targetId);
+            if("TRANSFER".equals(counterpart))try(Cursor c=getReadableDatabase().rawQuery("SELECT name FROM cashboxes WHERE id=?",new String[]{String.valueOf(targetId)})){if(c.moveToFirst())targetName=c.getString(0);}
+            Journal.Entry entry=new Journal.Entry(label,date,"CASH_EXPLICIT",cashId);
+            if(incoming){entry.debit(Journal.CASH,yer,fromName);entry.credit(other,yer,targetName);}
+            else{entry.debit(other,yer,targetName);entry.credit(Journal.CASH,yer,fromName);}
+            long journalId=postEntry(entry);
+            if(linkedCash>0||debtId>0||expenseId>0){
+                ContentValues link=new ContentValues();link.put("entry_id",journalId);link.put("cashbox_entry",linkedCash);link.put("debt_entry",debtId);link.put("expense_entry",expenseId);
+                getWritableDatabase().insertOrThrow("settlement_links",null,link);
+            }
+            return cashId;
+        });
+    }
+    private boolean explicitCashEntry(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='CASH_EXPLICIT' AND source_id=? AND reversed_by=0 AND reverses=0",new String[]{String.valueOf(id)})){return c.moveToFirst();}
+    }
+
+    /** Explicit customer transaction: no suspense account and both ledgers commit together. */
+    public long addCustomerTransaction(long debtorId,String operation,long boxId,double amount,String note,String date){
+        return atomic(()->{
+            requireDate(date);requireEntity("debtors",debtorId);
+            if(!java.util.Arrays.asList("CREDIT_SALE","COLLECTION","CASH_LOAN").contains(operation))
+                throw new IllegalArgumentException("اختر نوع العملية");
+            if(!Double.isFinite(amount)||amount<=0)throw new IllegalArgumentException("اكتب مبلغًا صحيحًا أكبر من صفر");
+            boolean collection="COLLECTION".equals(operation);
+            boolean usesCash=!"CREDIT_SALE".equals(operation);
+            if(usesCash)requireEntity("cashboxes",boxId);
+            String direction=collection?"PAID":"DEBT";
+            String label=("CREDIT_SALE".equals(operation)?"بيع آجل خارج الورديات":collection?"تحصيل دين":"سلفة نقدية")+" — "+debtorName(debtorId);
+            if(note!=null&&!note.trim().isEmpty())label+=" — "+note.trim();
+            long debtId,cashId=0;
+            boolean prior=suppressJournal;suppressJournal=true;
+            try{
+                debtId=addDebtEntry(debtorId,direction,amount,label,date);
+                ContentValues primary=new ContentValues();primary.put("managed",0);
+                getWritableDatabase().update("debt_entries",primary,"id=?",new String[]{String.valueOf(debtId)});
+                if(usesCash)cashId=addCashboxEntry(boxId,collection?"IN":"OUT",amount,label,date);
+            }finally{suppressJournal=prior;}
+            String debit=collection?Journal.CASH:Journal.RECEIVABLE;
+            String credit=collection?Journal.RECEIVABLE:usesCash?Journal.CASH:Journal.SALES;
+            long entry=postEntry(Journal.simple(label,date,"DEBT_EXPLICIT",debtId,debit,credit,amount,debtorName(debtorId)));
+            if(cashId>0){
+                ContentValues link=new ContentValues();link.put("entry_id",entry);link.put("cashbox_entry",cashId);
+                getWritableDatabase().insertOrThrow("settlement_links",null,link);
+            }
+            return debtId;
+        });
+    }
+    private boolean explicitCustomerEntry(long id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='DEBT_EXPLICIT' AND source_id=? AND reversed_by=0 AND reverses=0",new String[]{String.valueOf(id)})){return c.moveToFirst();}
+    }
+
     public long addDebtEntry(long debtorId,String direction,double amount,String note,String date){
         return atomic(()->addDebtEntryAtomic(debtorId,direction,amount,note,date));
     }
@@ -1946,6 +2034,7 @@ public class Db extends SQLiteOpenHelper {
     private boolean deleteDebtEntryAtomic(long id){
         requireStandalone("debt_entries",id);
         reverseManual("DEBT",id);
+        reverseManual("DEBT_EXPLICIT",id);
         return getWritableDatabase().delete("debt_entries","id=?",new String[]{String.valueOf(id)})==1;
     }
     /** حدود التنبيه القابلة للضبط من الإعدادات. */
