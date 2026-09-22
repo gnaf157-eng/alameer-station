@@ -33,6 +33,13 @@ public class ShiftWorkspaceTest {
   try(Cursor c=ShiftWorkspace.operations(db,shift,1)){assertTrue(c.moveToFirst());assertEquals(0,c.getInt(8));}
  }
  @Test public void cashPurchaseAndTransferHaveBalancedRealCounterparts(){long other=db.addCashbox("ثان",0);ShiftWorkspace.add(db,shift,1,"TRANSFER",box,other,"",0,50,"تحويل");ShiftWorkspace.add(db,shift,2,"BUY_CASH",box,0,"غاز",5,100,"شراء");review();close();assertEquals(650,db.cashboxBalance(box),0.001);assertEquals(50,db.cashboxBalance(other),0.001);try(Cursor c=db.getReadableDatabase().rawQuery("SELECT SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END) FROM journal_lines",null)){c.moveToFirst();assertEquals(0,c.getDouble(0),0.000001);}}
+ @Test public void schema20UpgradePreservesExistingAmounts(){
+  db.addCashTransaction(box,"IN",123.45,"قديم",db.shiftDate(shift),"YER","SALE",0);
+  android.database.sqlite.SQLiteDatabase sql=db.getWritableDatabase();
+  for(String table:new String[]{"readings","movements","shift_operations"})for(String event:new String[]{"INSERT","UPDATE","DELETE"})sql.execSQL("DROP TRIGGER IF EXISTS review_"+table+"_"+event);
+  sql.execSQL("DROP TABLE shift_operations");sql.execSQL("DROP TABLE shift_workspace");sql.execSQL("DROP TABLE shift_links");sql.setVersion(20);db.close();db=new Db(context);
+  assertEquals(21,db.getWritableDatabase().getVersion());assertEquals(123.45,db.cashboxBalance(box),0.000001);assertEquals(1,count("journal"));assertEquals(0,count("shift_operations"));assertEquals(0,count("shift_workspace"));
+ }
  @Test public void mobileTabsAndReadOnlyLedgerCanOpen(){
   db.setSetting("name_set","1");
   org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).create().start().resume();

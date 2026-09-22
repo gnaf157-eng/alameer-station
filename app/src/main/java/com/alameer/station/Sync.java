@@ -13,14 +13,17 @@ public class Sync {
         if(pending==0){if(userRequested)toast("لا توجد ورديات بانتظار المزامنة.");return;}
         if(userRequested)toast("جاري مزامنة "+pending+" وردية...");
         new Thread(()->{
-            int ok=0,total=0;
+            int ok=0,total=0,needsUpgrade=0;
             try(Cursor c=db.pendingSync()){
                 while(c.moveToNext()){
                     total++;long shiftId=c.getLong(0);
+                    // The old endpoint accepts worker movements only; never send a partial workspace.
+                    if(ShiftWorkspace.exists(db,shiftId)){needsUpgrade++;continue;}
                     try{if(post(url,payload(c,shiftId))){if(db.markSynced(shiftId,c.getInt(12)))ok++;}}catch(Exception ignored){}
                 }
             }
             int fOk=ok,fTotal=total;
+            if(needsUpgrade>0)activity.runOnUiThread(()->toast("الورديات الجديدة محفوظة محليًا؛ يلزم تحديث ربط Google Sheets لاستقبال التبويبات الثلاثة معًا. يمكنك مشاركة التقرير الكامل PDF أو Excel."));
             activity.runOnUiThread(()->toast(fTotal==0?"لا توجد ورديات بانتظار المزامنة.":"تمت مزامنة "+fOk+" من "+fTotal+" وردية."+(fOk<fTotal?" الباقي سيُعاد إرساله لاحقاً.":"")));
         }).start();
     }
@@ -81,4 +84,5 @@ public class Sync {
     private String readAll(InputStream in)throws Exception{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=in.read(b))>0)out.write(b,0,n);return out.toString(StandardCharsets.UTF_8.name());}
     private void toast(String msg){Toast.makeText(activity,msg,Toast.LENGTH_LONG).show();}
 }
+
 
