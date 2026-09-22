@@ -290,10 +290,16 @@ public class ExpenseActivity extends Activity {
         ScrollView form = new ScrollView(this);
         form.addView(box);
 
+        final String draftKey="expense";
+        if(EntryDraft.restore(this,draftKey,date,amount,note,category)){
+            dateButton.setText("التاريخ: "+date[0]);
+            Toast.makeText(this,"استُعيدت المسودة. راجع نوع العملية والحساب المقابل قبل الحفظ.",Toast.LENGTH_LONG).show();
+        }
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("مخرج جديد")
                 .setView(form)
-                .setPositiveButton("حفظ", null)
+                .setPositiveButton("حفظ وترحيل", null)
+                .setNeutralButton("حفظ مسودة",null)
                 .setNegativeButton("إلغاء", null)
                 .create();
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -307,7 +313,9 @@ public class ExpenseActivity extends Activity {
                 new AlertDialog.Builder(this).setTitle("رصيد غير كافٍ")
                         .setMessage("رصيد الصندوق " + money(db.cashboxBalance(boxId)) + " ر.ي وأنت تصرف " + money(value) + " ر.ي.\nهل تريد التسجيل رغم ذلك؟")
                         .setPositiveButton("سجّل", (d, w) -> {
-                            db.addExpense(name, value, note.getText().toString(), date[0], boxId, 0);
+                            try{db.addExpense(name, value, note.getText().toString(), date[0], boxId, 0);}
+                            catch(RuntimeException e){amount.setError(e.getMessage());return;}
+                            EntryDraft.clear(this,draftKey);
                             dialog.dismiss();
                             refresh();
                         })
@@ -316,11 +324,18 @@ public class ExpenseActivity extends Activity {
             }
             try {
                 db.addExpense(name, value, note.getText().toString(), date[0], boxId, 0);
-            } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
-            dialog.dismiss();
+            } catch (RuntimeException e) { amount.setError(e.getMessage()); return; }
+            EntryDraft.clear(this,draftKey);
+                            dialog.dismiss();
             refresh();
         }));
         dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{
+            if(EntryDraft.save(this,draftKey,date[0],amount,note,category)){
+                Toast.makeText(this,"حُفظت مسودة على الجهاز دون التأثير على الأرصدة",Toast.LENGTH_LONG).show();
+                dialog.dismiss();
+            }else Toast.makeText(this,"تعذر حفظ المسودة؛ احتفظ بالنافذة مفتوحة وحاول مجددًا",Toast.LENGTH_LONG).show();
+        });
     }
 
     private LinearLayout.LayoutParams cell() {

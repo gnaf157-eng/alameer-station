@@ -731,10 +731,16 @@ public class DebtActivity extends Activity {
         ScrollView form = new ScrollView(this);
         form.addView(box);
 
+        final String draftKey="debt_"+debtorId;
+        if(EntryDraft.restore(this,draftKey,date,amount,note)){
+            dateButton.setText("التاريخ: "+date[0]);
+            Toast.makeText(this,"استُعيدت المسودة. راجع نوع العملية والحساب المقابل قبل الحفظ.",Toast.LENGTH_LONG).show();
+        }
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(debtorName)
                 .setView(form)
-                .setPositiveButton("حفظ", null)
+                .setPositiveButton("حفظ وترحيل", null)
+                .setNeutralButton("حفظ مسودة",null)
                 .setNegativeButton("إلغاء", null)
                 .create();
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -750,6 +756,7 @@ public class DebtActivity extends Activity {
                         .setPositiveButton("سجّل", (d, w) -> {
                             try{db.addCustomerTransaction(debtorId, operation, targetBox, value, note.getText().toString(), date[0]);}
                             catch(RuntimeException e){amount.setError(e.getMessage());return;}
+                            EntryDraft.clear(this,draftKey);
                             dialog.dismiss();
                             refresh();
                         })
@@ -758,11 +765,18 @@ public class DebtActivity extends Activity {
             }
             try {
                 db.addCustomerTransaction(debtorId, operation, targetBox, value, note.getText().toString(), date[0]);
-            } catch (IllegalArgumentException e) { amount.setError(e.getMessage()); return; }
-            dialog.dismiss();
+            } catch (RuntimeException e) { amount.setError(e.getMessage()); return; }
+            EntryDraft.clear(this,draftKey);
+                            dialog.dismiss();
             refresh();
         }));
         dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{
+            if(EntryDraft.save(this,draftKey,date[0],amount,note)){
+                Toast.makeText(this,"حُفظت مسودة على الجهاز دون التأثير على الأرصدة",Toast.LENGTH_LONG).show();
+                dialog.dismiss();
+            }else Toast.makeText(this,"تعذر حفظ المسودة؛ احتفظ بالنافذة مفتوحة وحاول مجددًا",Toast.LENGTH_LONG).show();
+        });
     }
 
     private LinearLayout.LayoutParams cell() {
