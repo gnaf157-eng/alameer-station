@@ -380,16 +380,7 @@ public class ControlPanelActivity extends Activity {
                 .setTitle("تفصيل حالة التوازن")
                 .setMessage(sb.toString())
                 .setNeutralButton("سجل التدقيق", (d, w) -> showAuditLog());
-        if (!doubled.isEmpty()) {
-            ask.setPositiveButton("إصلاح " + doubled.size() + " ترحيل مكرّر", (d, w) -> repairDoubles(doubled));
-            ask.setNegativeButton("إغلاق", null);
-        } else if (waiting > 0) {
-            ask.setPositiveButton("ترحيل " + waiting + " وردية", (d, w) -> runBacklog());
-            ask.setNegativeButton("إغلاق", null);
-        } else {
-            ask.setPositiveButton("حسنًا", null);
-            ask.setNegativeButton("إقفال فترة", (d, w) -> lockPeriodDialog());
-        }
+        ask.setPositiveButton("حسنًا", null);
         ask.show();
     }
 

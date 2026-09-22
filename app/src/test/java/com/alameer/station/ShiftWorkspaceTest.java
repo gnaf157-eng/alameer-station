@@ -17,7 +17,7 @@ public class ShiftWorkspaceTest {
  void close(){db.closeAndPostShift(shift,db.soloWorkerId(),"",box);}
  @Test public void draftsDoNotChangeAnyLedgerAndSurviveReopening(){ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");ShiftWorkspace.add(db,shift,2,"BUY_CREDIT",0,0,"بترول",10,100,"فاتورة");assertEquals(0,count("journal"));assertEquals(0,count("cashbox_entries"));assertEquals(0,count("material_entries"));db.close();db=new Db(context);assertEquals(2,count("shift_operations"));assertEquals(0,db.cashboxBalance(box),0.001);}
  @Test public void reviewAllThreeAndZeroDifferenceAreRequired(){refuse(this::close);ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);refuse(this::close);ShiftWorkspace.review(db,shift,2);db.addMovement(shift,"EXPENSE","فرق",1);review();refuse(this::close);assertTrue(db.isOpen(shift));assertEquals(0,count("journal"));}
- @Test public void editsInvalidateReviewButSavingSameReadingsDoesNot(){review();db.getWritableDatabase().execSQL("UPDATE readings SET current=current WHERE shift_id=?",new Object[]{shift});assertEquals(7,ShiftWorkspace.reviewed(db,shift));db.addMovement(shift,"DEBT","عميل",1);assertEquals(0,ShiftWorkspace.reviewed(db,shift));}
+ @Test public void editsInvalidateReviewButSavingSameReadingsDoesNot(){review();db.getWritableDatabase().execSQL("UPDATE readings SET current=current WHERE shift_id=?",new Object[]{shift});assertEquals(7,ShiftWorkspace.reviewed(db,shift));db.addMovement(shift,"DEBT","عميل",1);assertEquals(6,ShiftWorkspace.reviewed(db,shift));}
  @Test public void allSectionsPostOnceWithOneCodeAndImmutableRecords(){
   ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");ShiftWorkspace.add(db,shift,2,"BUY_CREDIT",0,0,"بترول",10,100,"فاتورة");review();close();
   assertEquals(780,db.cashboxBalance(box),0.001);assertFalse(db.isOpen(shift));assertEquals(1,count("posted_shifts"));assertTrue(count("shift_links")>0);assertEquals(2,count("shift_operations"));refuse(this::close);refuse(()->db.reopenShift(shift,"تصحيح"));refuse(()->db.unpostShift(shift));
@@ -33,5 +33,11 @@ public class ShiftWorkspaceTest {
   try(Cursor c=ShiftWorkspace.operations(db,shift,1)){assertTrue(c.moveToFirst());assertEquals(0,c.getInt(8));}
  }
  @Test public void cashPurchaseAndTransferHaveBalancedRealCounterparts(){long other=db.addCashbox("ثان",0);ShiftWorkspace.add(db,shift,1,"TRANSFER",box,other,"",0,50,"تحويل");ShiftWorkspace.add(db,shift,2,"BUY_CASH",box,0,"غاز",5,100,"شراء");review();close();assertEquals(650,db.cashboxBalance(box),0.001);assertEquals(50,db.cashboxBalance(other),0.001);try(Cursor c=db.getReadableDatabase().rawQuery("SELECT SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END) FROM journal_lines",null)){c.moveToFirst();assertEquals(0,c.getDouble(0),0.000001);}}
+ @Test public void mobileTabsAndReadOnlyLedgerCanOpen(){
+  db.setSetting("name_set","1");
+  org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).create().start().resume();
+  ShiftActivity screen=controller.get();assertEquals(3,screen.tabs.length);assertEquals("مطابقة العامل",screen.tabs[0].getText().toString());screen.workspacePage(5);screen.workspacePage(6);screen.workspacePage(2);controller.pause().stop().destroy();
+  org.robolectric.android.controller.ActivityController<LedgerActivity> ledger=Robolectric.buildActivity(LedgerActivity.class,LedgerActivity.intent(context,"cashbox_entries")).create().start().resume();ledger.pause().stop().destroy();
+ }
  @Test public void reportCannotPresentUnpostedDraftAsOfficial(){refuse(()->new ReportTable(db,shift));}
 }

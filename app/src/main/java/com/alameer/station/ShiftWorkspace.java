@@ -11,12 +11,13 @@ public final class ShiftWorkspace {
         s.execSQL("CREATE TABLE IF NOT EXISTS shift_workspace(shift_id INTEGER PRIMARY KEY,cashbox_id INTEGER NOT NULL DEFAULT 0,reviewed INTEGER NOT NULL DEFAULT 0)");
         s.execSQL("CREATE TABLE IF NOT EXISTS shift_operations(id INTEGER PRIMARY KEY AUTOINCREMENT,shift_id INTEGER NOT NULL,section INTEGER NOT NULL,kind TEXT NOT NULL,box_id INTEGER NOT NULL DEFAULT 0,target_id INTEGER NOT NULL DEFAULT 0,material TEXT NOT NULL DEFAULT '',quantity REAL NOT NULL DEFAULT 0,amount REAL NOT NULL,note TEXT NOT NULL,posted INTEGER NOT NULL DEFAULT 0)");
         s.execSQL("CREATE TABLE IF NOT EXISTS shift_links(shift_id INTEGER NOT NULL,entity TEXT NOT NULL,row_id INTEGER NOT NULL,PRIMARY KEY(entity,row_id))");
-        // Edits to a reviewed draft invalidate all three confirmations, including meter autosaves.
+        // Invalidate the edited section, retaining review of independent sections.
         for(String table:new String[]{"readings","movements","shift_operations"}){
             for(String event:new String[]{"INSERT","UPDATE","DELETE"}){
                 String ref=event.equals("DELETE")?"OLD":"NEW";
                 String when=table.equals("readings")&&event.equals("UPDATE")?" WHEN OLD.current IS NOT NEW.current OR OLD.previous IS NOT NEW.previous OR OLD.price IS NOT NEW.price":"";
-                s.execSQL("CREATE TRIGGER IF NOT EXISTS review_"+table+"_"+event+" AFTER "+event+" ON "+table+when+" BEGIN UPDATE shift_workspace SET reviewed=0 WHERE shift_id="+ref+".shift_id; END");
+                String mask=table.equals("shift_operations")?"(1 << "+ref+".section)":"1";
+                s.execSQL("CREATE TRIGGER IF NOT EXISTS review_"+table+"_"+event+" AFTER "+event+" ON "+table+when+" BEGIN UPDATE shift_workspace SET reviewed=reviewed & ~"+mask+" WHERE shift_id="+ref+".shift_id; END");
             }
         }
     }
@@ -25,7 +26,7 @@ public final class ShiftWorkspace {
     static void openOnly(Db db,long id){if(!db.isOpen(id)||!exists(db,id))throw new IllegalStateException("افتح وردية جديدة أولًا؛ الدفاتر للعرض فقط");}
     static long box(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT cashbox_id FROM shift_workspace WHERE shift_id=?",new String[]{""+id})){return c.moveToFirst()?c.getLong(0):db.defaultCashbox();}}
     static int reviewed(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT reviewed FROM shift_workspace WHERE shift_id=?",new String[]{""+id})){return c.moveToFirst()?c.getInt(0):0;}}
-    static void selectBox(Db db,long id,long box){openOnly(db,id);db.getWritableDatabase().execSQL("UPDATE shift_workspace SET cashbox_id=?,reviewed=0 WHERE shift_id=?",new Object[]{box,id});}
+    static void selectBox(Db db,long id,long box){openOnly(db,id);db.getWritableDatabase().execSQL("UPDATE shift_workspace SET cashbox_id=?,reviewed=reviewed & ~2 WHERE shift_id=?",new Object[]{box,id});}
     static void review(Db db,long id,int section){openOnly(db,id);if(section<0||section>2)throw new IllegalArgumentException();db.getWritableDatabase().execSQL("UPDATE shift_workspace SET reviewed=reviewed|? WHERE shift_id=?",new Object[]{1<<section,id});}
     static void ready(Db db,long id){if(exists(db,id)&&reviewed(db,id)!=7)throw new IllegalStateException("راجع وأكد التبويبات الثلاثة: مطابقة العامل، الصناديق، المواد. أكد عدم وجود حركة إن كان التبويب فارغًا.");}
     static Cursor operations(Db db,long id,int section){return db.getReadableDatabase().rawQuery("SELECT id,kind,box_id,target_id,material,quantity,amount,note,posted FROM shift_operations WHERE shift_id=? AND section=? ORDER BY id",new String[]{""+id,""+section});}
