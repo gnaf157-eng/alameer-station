@@ -19,6 +19,7 @@ final class ReportTable {
     }
     private static String sum(String col,int start,int end){return end<start?"0":"SUM("+col+start+":"+col+end+")";}
     ReportTable(Db db,long id){
+        if(ShiftWorkspace.exists(db,id)&&!db.shiftPosted(id))throw new IllegalStateException("يصدر التقرير الرسمي بعد ترحيل كامل الوردية");
         String issue=db.validateShift(id);
         if(!issue.isEmpty())throw new IllegalStateException(issue);
         String worker="",opened="",closed="",state="",reason="",note="";
@@ -39,7 +40,7 @@ final class ReportTable {
             }
         }
         add(true,Branding.stationName(db)+" — تقرير الوردية","","","","");
-        add(false,"رقم الوردية",id,"العامل",worker,"");
+        add(false,"كود الوردية",db.shiftCode(id),"العامل",worker,"");
         add(false,"تاريخ الوردية",db.shiftDate(id),ShiftDates.day(db.shiftDate(id)),"","");
         add(false,"تاريخ الإدخال",opened,"وقت الإغلاق",closed,"");
         add(false,"الحالة",state,"سبب الفرق",reason,"");
@@ -102,7 +103,28 @@ final class ReportTable {
         add(false,"المخاريج",f("A"+tr,totals[0]),"","","");
         add(true,"الباقي",f("E"+salesRow+"+B"+tr+"-E"+tr+"-C"+tr+"-A"+tr,sales+totals[1]-totals[3]-totals[2]-totals[0]),"","","");
         add(false,"سبب الفرق",reason,"","","");
+        if(ShiftWorkspace.exists(db,id)){
+            add(true,"حركة الصناديق","","","","");
+            add(false,"نقد العامل (تلقائي)",cashboxName(db,ShiftWorkspace.box(db,id)),db.total(id,"CASH"),"ر.ي","دون تكرار");
+            for(int section=1;section<=2;section++){
+                if(section==2)add(true,"حركة المواد الإضافية","","","","");
+                add(true,"الحركة","البيان","الحساب / المادة","الكمية","القيمة ر.ي");
+                double total=0;
+                try(Cursor c=ShiftWorkspace.operations(db,id,section)){
+                    while(c.moveToNext()){
+                        String counterpart=section==2?c.getString(4):cashboxName(db,c.getLong(2));
+                        String kind=c.getString(1);
+                        if(kind.equals("TRANSFER"))counterpart+=" ← "+cashboxName(db,c.getLong(3));
+                        if(kind.equals("COLLECTION")||kind.equals("LOAN"))counterpart+=" / "+db.debtorName(c.getLong(3));
+                        if(kind.equals("SUPPLIER"))counterpart+=" / "+(c.getLong(3)==1?"شركة الغاز":"شركة النفط");
+                        add(false,ShiftWorkspace.label(kind),c.getString(7),counterpart,section==2?c.getDouble(5):"",c.getDouble(6));total+=c.getDouble(6);
+                    }
+                }
+                add(true,"مجموع قيم الحركات (ليس صافي الرصيد)","","","",total);
+            }
+        }
     }
+    private static String cashboxName(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT name FROM cashboxes WHERE id=?",new String[]{""+id})){return c.moveToFirst()?c.getString(0):"غير محدد";}}
     /** عمود كل نوع حركة: مخاريج، مقبوضات، ديون، ثم الفلوس في آخر عمود. */
     static final int[] CELL={0,1,2,4};
     private static int movementOrder(int column){
@@ -127,3 +149,4 @@ final class ReportTable {
     }
     static String format(double n){return String.format(java.util.Locale.US,n==Math.rint(n)?"%,.0f":"%,.2f",n);}
 }
+

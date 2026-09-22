@@ -13,12 +13,13 @@ public class ShiftActivity extends Activity {
         if(shiftId==0){ // فُتح التطبيق مباشرة بلا شاشة دخول
             workerId=db.soloWorkerId();
             workerName=db.workerName(workerId);
-            shiftId=db.openSoloShift(workerId);
+            if(!getIntent().getBooleanExtra("openSettings",false))shiftId=db.openSoloShift(workerId);
             askNameOnFirstRun=db.setting("name_set","0").equals("0");
         }
         // فتح وردية بعينها قادمًا من شاشة ورديات العامل.
         long requested=getIntent().getLongExtra("openShift",0);
         if(requested>0)shiftId=requested;
+        ShiftWorkspace.ensure(db,shiftId);
         build();
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
@@ -34,7 +35,7 @@ public class ShiftActivity extends Activity {
             loadReadings();loadMovements();refreshTotals();
         }
     }
-    LinearLayout[] pages=new LinearLayout[5];
+    LinearLayout[] pages=new LinearLayout[7];
     Button[] tabs=new Button[3];
     LinearLayout navBar;
     int settingsReturnPage=0;
@@ -187,7 +188,8 @@ public class ShiftActivity extends Activity {
         TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
         Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
-        Button close=action("إغلاق الوردية وبدء وردية جديدة",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
+        Button confirm=action("تأكيد مراجعة مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[2].addView(confirm,space());
+        Button close=action("إغلاق الوردية وترحيل الكل",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
@@ -198,8 +200,8 @@ public class ShiftActivity extends Activity {
         nav.setBackground(Util.round(Color.WHITE,dp(22)));
         nav.setElevation(dp(3));
         // الأرشيف صار أيقونة مستقلة في واجهة المدير، ويبقى تبويبًا عند العامل ليتابع حالة ورديّاته.
-        String[] names={"ورديتي","الحركات","المطابقة"};
-        int[] destinations={0,1,2};
+        String[] names={"مطابقة العامل","الصناديق","المواد"};
+        int[] destinations={0,5,6};
         for(int i=0;i<tabs.length;i++){
             final int n=destinations[i];
             Button tab=new Button(this);tabs[i]=tab;
@@ -339,7 +341,7 @@ public class ShiftActivity extends Activity {
 
             buildLockSettings();
             buildTelegramSettings();
-            buildFreshStartSettings();
+            // Financial entries belong to an open workspace; no reset/posting shortcuts.
         }
         LinearLayout aboutSection=section("حول التطبيق");
         LinearLayout about=panel(Color.WHITE);
@@ -571,7 +573,7 @@ public class ShiftActivity extends Activity {
             capBtn.setOnClickListener(v->capacityDialog(material,cap));
             row.addView(capBtn);
             Button dipBtn=action("قياس",false);dipBtn.setTextSize(13);
-            dipBtn.setOnClickListener(v->dipDialog(material));
+            dipBtn.setEnabled(false);dipBtn.setText("مطابقة الخزان ضمن حركة مواد الوردية");
             row.addView(dipBtn);
             box.addView(row);
             View line=new View(this);line.setBackgroundColor(0xffeceef0);
@@ -830,6 +832,7 @@ public class ShiftActivity extends Activity {
         return e;
     }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
+    void workspacePage(int selected){showPage(selected);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}
     private void showPage(int selected){
         page=selected;
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
@@ -838,7 +841,7 @@ public class ShiftActivity extends Activity {
         for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         // شاشة الإعدادات لا تحتاج شريط التنقّل السفلي.
         if(navBar!=null)navBar.setVisibility(selected==4?View.GONE:View.VISIBLE);
-        int active=selected==2?2:selected>=3?-1:selected;
+        int active=selected==5?1:selected==6?2:selected<=2?0:-1;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
             tabs[i].setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18000000),Util.round(i==active?Util.ACCENT:Color.WHITE,dp(17)),null));
@@ -846,6 +849,7 @@ public class ShiftActivity extends Activity {
             tabs[i].setTypeface(android.graphics.Typeface.DEFAULT,i==active?1:0);
             tabs[i].setSelected(i==active);
         }
+        if(selected==5||selected==6)new WorkspaceForms(this,pages[selected],selected==5?1:2);
         if(selected==3)loadArchive();
         refreshTotals();
     }
@@ -1543,6 +1547,7 @@ public class ShiftActivity extends Activity {
     }
     /** لا يُصدَّر تقرير إلا لوردية مطابقة تمامًا (الباقي = صفر). */
     private boolean reportAllowed(long id){
+        if(ShiftWorkspace.exists(db,id)&&!db.shiftPosted(id)){new AlertDialog.Builder(this).setMessage("أغلق الوردية ورحّل التبويبات الثلاثة قبل مشاركة تقريرها الرسمي").setPositiveButton("حسنًا",null).show();return false;}
         String issue=db.validateShift(id);
         if(!issue.isEmpty()){
             new AlertDialog.Builder(this).setTitle("لا يمكن إخراج التقرير")
@@ -1563,6 +1568,7 @@ public class ShiftActivity extends Activity {
      * المُغلقة تُفتح للتعديل بعد تأكيد، فيُعكس قيدها ويُلغى ترحيلها.
      */
     private void openArchived(final long id,boolean live){
+        if(!live){chooseReport(id);return;}
         if(live){ switchTo(id); return; }
         new AlertDialog.Builder(this).setTitle("وردية #"+id)
             .setMessage("تفتح الوردية بقراءاتها وحركاتها كما سُجّلت، وتصير قابلة للتعديل.\n\n"
@@ -1582,7 +1588,7 @@ public class ShiftActivity extends Activity {
 
     /** ينقل الشاشة كلها إلى وردية أخرى ويعرض قراءاتها وحركاتها. */
     private void switchTo(long id){
-        shiftId=id;
+        shiftId=id;ShiftWorkspace.ensure(db,id);
         loadReadings();loadMovements();refreshTotals();
         showPage(0);
         if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);
@@ -1639,12 +1645,13 @@ public class ShiftActivity extends Activity {
     /** يقفل الوردية الحالية بعد حفظها ويبدأ وردية جديدة بعدادات الإغلاق. */
     private void closeShift(){
         if(!saveReadings())return;
+        try{ShiftWorkspace.ready(db,shiftId);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();return;}
         String issue=db.validateShift(shiftId);
         if(!issue.isEmpty()){new AlertDialog.Builder(this).setTitle("لا يمكن إغلاق الوردية").setMessage(issue).setPositiveButton("حسنًا",null).show();return;}
         double bal=db.balance(shiftId);
         if(Double.isFinite(bal)&&Math.abs(bal)<=0.0000001){
             new AlertDialog.Builder(this).setTitle("إغلاق الوردية")
-                .setMessage(db.isHistorical(shiftId)?"ستُحفظ الوردية القديمة في الأرشيف دون تغيير قراءات الطرمبات الحالية.":"الوردية مطابقة. ستُحفظ في الأرشيف وتبدأ وردية جديدة بقراءات الإغلاق.")
+                .setMessage(db.isHistorical(shiftId)?"ستُحفظ الوردية القديمة في الأرشيف دون تغيير قراءات الطرمبات الحالية.":"سيتم ترحيل مطابقة العامل والصناديق والمواد معًا وحفظ تقرير شامل في الأرشيف.")
                 .setPositiveButton("إغلاق",(d,w)->finishShift(""))
                 .setNegativeButton("إلغاء",null).show();
             return;
@@ -1662,18 +1669,22 @@ public class ShiftActivity extends Activity {
         catch(Exception e){new AlertDialog.Builder(this).setTitle("لم تُغلق الوردية")
             .setMessage("لم يُحفظ ترحيل جزئي. راجع السبب وحاول مجددًا:\n"+e.getMessage())
             .setPositiveButton("حسنًا",null).show();return;}
-        shiftId=db.openSoloShift(workerId);
-        loadReadings();loadMovements();refreshTotals();showPage(0);
-        String base=historical?"حُفظت الوردية القديمة دون تغيير قراءات الطرمبات الحالية.":"بدأت وردية جديدة بقراءات الإغلاق.";
+        // A new shift is created only when the user explicitly opens one.
+
+        String base="تم ترحيل التبويبات الثلاثة وحفظ التقرير الشامل في الأرشيف.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
+        showPage(3);
         final String code=db.shiftCode(closed);
         new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code)
             .setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")
             .setPositiveButton("حفظ PDF",(d,w)->sharePdf(closed))
-            .setNegativeButton("لاحقًا",null)
+            .setNeutralButton("مشاركة Excel",(d,w)->shareExcel(closed))
+            .setNegativeButton("الرئيسية",(d,w)->finish())
+            .setOnCancelListener(d->finish())
             .show();
     }
     private String arabicType(String t){if("COLLECTION".equals(t))return "مقبوضات";if("CASH".equals(t))return "نقد مسلّم";if("DEBT".equals(t))return "ديون";return "مخاريج";}
     private String fmt(double n){return n==Math.rint(n)?String.format(Locale.US,"%.0f",n):String.format(Locale.US,"%.2f",n);}
 }
+
 

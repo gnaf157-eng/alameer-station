@@ -21,8 +21,8 @@ android {
         applicationId 'com.alameer.station.shifts.v2'
         minSdk 26
         targetSdk 35
-        versionCode 153
-        versionName '2.66.1'
+        versionCode 154
+        versionName '2.66.2'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', "\"${prop('UPDATE_MANIFEST_URL') ?: 'https://github.com/gnaf157-eng/alameer-station/releases/latest/download/update-manifest.json'}\""
         buildConfigField 'String', 'SYNC_URL', "\"${prop('SYNC_URL')}\""
         buildConfigField 'String', 'SYNC_SECRET', "\"${prop('SYNC_SECRET')}\""
@@ -59,4 +59,5 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'
 }
+
 

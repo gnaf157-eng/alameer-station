@@ -73,7 +73,7 @@ public class HomeActivity extends Activity {
         // الوردية: إدخال ومطابقة وترحيل في دورة واحدة.
         LinearLayout row1 = new LinearLayout(this);
         row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("الوردية", "العدادات والحركات والمطابقة", 0,
+        row1.addView(tile("فتح / متابعة وردية", "مطابقة العامل • الصناديق • المواد", 0,
                 v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
         row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
                 v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
@@ -85,28 +85,28 @@ public class HomeActivity extends Activity {
         double cash = db.cashboxesTotal();
         double debts = db.debtsTotal();
         double credits = db.creditsTotal();
-        row0.addView(balanceTile("حركة الصناديق", money(cash) + " ر.ي",
+        row0.addView(balanceTile("دفتر الصناديق", money(cash) + " ر.ي",
                 "وارد وصادر النقد", cash < 0 ? Util.RED : Util.GREEN, 3,
-                v -> startActivity(new Intent(this, CashboxActivity.class))), cell());
+                v -> startActivity(LedgerActivity.intent(this,"cashbox_entries"))), cell());
         cashValue = lastAmount;
-        row0.addView(balanceTile("حركة الديون", money(debts) + " ر.ي",
+        row0.addView(balanceTile("دفتر الديون", money(debts) + " ر.ي",
                 credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين",
                 debts > 0 ? Util.RED : Util.GREEN, 4,
-                v -> startActivity(new Intent(this, DebtActivity.class))), cell());
+                v -> startActivity(LedgerActivity.intent(this,"debt_entries"))), cell());
         debtValue = lastAmount; debtNote = lastNote;
         shell.addView(row0, rowWeight(true));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setGravity(Gravity.CENTER);
-        row2.addView(tile("حركة المخاريج", "مصروفات المحطة", 5,
-                v -> startActivity(new Intent(this, ExpenseActivity.class))), cell());
+        row2.addView(tile("دفتر المخاريج", "مصروفات المحطة", 5,
+                v -> startActivity(LedgerActivity.intent(this,"expense_entries"))), cell());
         double litres = 0;
         for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
         double stockValue = db.stockValueTotal();
-        row2.addView(balanceTile("حركة المواد", money(litres) + " لتر",
+        row2.addView(balanceTile("دفتر المواد", money(litres) + " لتر",
                 stockValue > 0 ? money(stockValue) + " ر.ي" : "وارد وصادر اللترات",
                 Util.NAVY, 6,
-                v -> startActivity(new Intent(this, MaterialActivity.class))), cell());
+                v -> startActivity(LedgerActivity.intent(this,"material_entries"))), cell());
         stockText = lastAmount; stockNote = lastNote;
         shell.addView(row2, rowWeight(true));
 
@@ -117,7 +117,7 @@ public class HomeActivity extends Activity {
                 money(owed) + " ر.ي",
                 owed < -0.009 ? "النفط والغاز" : "الحسابات مسدّدة",
                 owed < -0.009 ? Util.RED : Util.GREEN, 9,
-                v -> startActivity(new Intent(this, SupplierActivity.class))), cell());
+                v -> startActivity(LedgerActivity.intent(this,"supplier_entries"))), cell());
         supplierValue = lastAmount; supplierNote = lastNote;
         row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
                 v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
@@ -462,4 +462,5 @@ public class HomeActivity extends Activity {
         public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 }
+
 

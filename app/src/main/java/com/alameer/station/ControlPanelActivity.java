@@ -273,7 +273,7 @@ public class ControlPanelActivity extends Activity {
                     android.content.res.ColorStateList.valueOf(0x33FFFFFF),
                     Util.round(0xffB86A00, dp(11)), null));
             pending.setClickable(true);
-            pending.setOnClickListener(v -> startActivity(new Intent(this, SuspenseActivity.class)));
+            pending.setOnClickListener(v -> startActivity(LedgerActivity.intent(this,"journal")));
             LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
             pp.setMargins(0, dp(9), 0, 0);
             box.addView(pending, pp);
@@ -1030,4 +1030,5 @@ public class ControlPanelActivity extends Activity {
 
     private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
 }
+
 

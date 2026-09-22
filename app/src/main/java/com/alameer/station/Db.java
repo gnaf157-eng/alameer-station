@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 20;
+    private static final int DB_VERSION = 21;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -34,6 +34,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(DIP_SQL);
         db.execSQL(POSTED_SQL);
         db.execSQL(SUPPLIER_SQL);
+        ShiftWorkspace.create(db);
         seed(db);
     }
 
@@ -90,6 +91,7 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<21&&newVersion>=21)ShiftWorkspace.create(db);
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
@@ -454,11 +456,13 @@ public class Db extends SQLiteOpenHelper {
     public double balance(long shiftId){return Calc.balance(sales(shiftId),total(shiftId,"COLLECTION"),total(shiftId,"CASH"),total(shiftId,"DEBT"),total(shiftId,"EXPENSE"));}
     /** Only floating-point arithmetic noise is tolerated; monetary differences are not settled. */
     private void requireMatchedShift(long shiftId){
+        if(ShiftWorkspace.exists(this,shiftId)&&!closingWorkspace&& !isOpen(shiftId))throw new IllegalStateException("الوردية مرحّلة وغير قابلة للتعديل");
         double difference=balance(shiftId);
         if(!Double.isFinite(difference)||Math.abs(difference)>0.0000001)
             throw new IllegalStateException("لا يمكن إقفال أو ترحيل الوردية حتى يصبح الفارق صفرًا. الباقي: "+Double.toString(difference)+" ر.ي. البيانات محفوظة؛ صحح القراءات أو الحركات.");
     }
     /** Status, pump handover, ledgers and journal commit together. */
+    private boolean closingWorkspace=false;
     public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){
         return atomic(()->{
             if(!isOpen(shiftId))throw new IllegalStateException("الوردية مغلقة بالفعل");
@@ -469,14 +473,21 @@ public class Db extends SQLiteOpenHelper {
             if(!Double.isFinite(difference))throw new IllegalStateException("توجد قيمة غير صالحة في الوردية");
             String why=reason==null?"":reason.trim();
             requireMatchedShift(shiftId);
-            submit(shiftId,workerId,why);
-            approve(shiftId);
-            String result=postShift(shiftId,cashboxId);
-            journalShift(shiftId);
-            return result;
+            ShiftWorkspace.ready(this,shiftId);
+            boolean unified=ShiftWorkspace.exists(this,shiftId);
+            Map<String,Long> before=unified?ShiftWorkspace.before(this):null;
+            closingWorkspace=true;
+            try{
+                submit(shiftId,workerId,why);
+                approve(shiftId);
+                String result=postShift(shiftId,unified?ShiftWorkspace.box(this,shiftId):cashboxId);
+                journalShift(shiftId);
+                if(unified){ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
+                return result;
+            }finally{closingWorkspace=false;}
         });
     }
-    public void submit(long shiftId,int workerId,String reason){requireMatchedShift(shiftId);SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("sales",sales(shiftId));v.put("collections",total(shiftId,"COLLECTION"));v.put("cash_delivered",total(shiftId,"CASH"));v.put("debts",total(shiftId,"DEBT"));v.put("expenses",total(shiftId,"EXPENSE"));v.put("balance",balance(shiftId));v.put("difference_reason",reason);v.put("manager_note","");v.put("status","SUBMITTED");v.put("closed_at",Util.now());v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,workerId,"SUBMIT","إرسال/تعديل الوردية؛ السبب: "+reason);}
+    public void submit(long shiftId,int workerId,String reason){if(ShiftWorkspace.exists(this,shiftId)&&!closingWorkspace)throw new IllegalStateException("استخدم إغلاق الوردية وترحيل الكل");requireMatchedShift(shiftId);SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("sales",sales(shiftId));v.put("collections",total(shiftId,"COLLECTION"));v.put("cash_delivered",total(shiftId,"CASH"));v.put("debts",total(shiftId,"DEBT"));v.put("expenses",total(shiftId,"EXPENSE"));v.put("balance",balance(shiftId));v.put("difference_reason",reason);v.put("manager_note","");v.put("status","SUBMITTED");v.put("closed_at",Util.now());v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,workerId,"SUBMIT","إرسال/تعديل الوردية؛ السبب: "+reason);}
     public Cursor archive(int workerId,boolean admin){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.status,s.sales,s.balance,s.sync_state,COALESCE(s.manager_note,''),COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) FROM shifts s JOIN workers w ON w.id=s.worker_id "+(admin?"":"WHERE s.worker_id=? ")+"ORDER BY COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)) DESC,s.id DESC",admin?null:new String[]{String.valueOf(workerId)});}
     public Cursor submitted(){return getReadableDatabase().rawQuery("SELECT s.id,w.name,s.opened_at,s.sales,s.balance,s.difference_reason FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.status='SUBMITTED' ORDER BY s.id",null);}
     public int pendingCount(){try(Cursor c=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM shifts WHERE status='SUBMITTED'",null)){c.moveToFirst();return c.getInt(0);}}
@@ -489,8 +500,8 @@ public class Db extends SQLiteOpenHelper {
     public void closeUnmatched(long shiftId){
         throw new IllegalStateException("إقفال وردية غير مطابقة غير مسموح؛ صحح الفارق أولًا.");
     }
-    public void approve(long shiftId){requireMatchedShift(shiftId);SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{if(!isHistorical(shiftId))db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});ContentValues v=new ContentValues();v.put("status","APPROVED");v.put("sync_state","PENDING");db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"APPROVE","اعتماد المدير");db.setTransactionSuccessful();}finally{db.endTransaction();}}
-    public void returnToWorker(long shiftId,String note){SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("status","RETURNED");v.put("manager_note",note);v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"RETURN","إرجاع للعامل: "+note);}
+    public void approve(long shiftId){if(ShiftWorkspace.exists(this,shiftId)&&!closingWorkspace)throw new IllegalStateException("استخدم إغلاق الوردية وترحيل الكل");requireMatchedShift(shiftId);SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{if(!isHistorical(shiftId))db.execSQL("UPDATE pumps SET last_reading=(SELECT r.current FROM readings r WHERE r.shift_id=? AND r.pump_id=pumps.id) WHERE id IN (SELECT pump_id FROM readings WHERE shift_id=? AND current IS NOT NULL)",new Object[]{shiftId,shiftId});ContentValues v=new ContentValues();v.put("status","APPROVED");v.put("sync_state","PENDING");db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"APPROVE","اعتماد المدير");db.setTransactionSuccessful();}finally{db.endTransaction();}}
+    public void returnToWorker(long shiftId,String note){if(ShiftWorkspace.exists(this,shiftId))throw new IllegalStateException("الدفاتر المرحّلة للعرض فقط");SQLiteDatabase db=getWritableDatabase();ContentValues v=new ContentValues();v.put("status","RETURNED");v.put("manager_note",note);v.put("sync_state","PENDING");db.execSQL("UPDATE shifts SET revision=revision+1 WHERE id=?",new Object[]{shiftId});db.update("shifts",v,"id=?",new String[]{String.valueOf(shiftId)});audit(db,shiftId,1,"RETURN","إرجاع للعامل: "+note);}
     public String shiftStatus(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT status FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){return c.moveToFirst()?c.getString(0):"OPEN";}}
     public String managerNote(long shiftId){try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(manager_note,'') FROM shifts WHERE id=?",new String[]{String.valueOf(shiftId)})){return c.moveToFirst()?c.getString(0):"";}}
     /** سعر اللتر السائد لنوع وقود، أو صفر إن لم يوجد. */
@@ -994,6 +1005,7 @@ public class Db extends SQLiteOpenHelper {
         atomic(()->{unpostShiftAtomic(shiftId);return null;});
     }
     private void unpostShiftAtomic(long shiftId){
+        if(ShiftWorkspace.exists(this,shiftId))throw new IllegalStateException("الدفاتر المرحّلة للعرض فقط");
         SQLiteDatabase db=getWritableDatabase();
         // يُحرَّر حجز الكود ليجوز إعادة الترحيل بعد المراجعة.
         db.delete("posted_shifts","shift_id=?",new String[]{String.valueOf(shiftId)});
@@ -1226,6 +1238,7 @@ public class Db extends SQLiteOpenHelper {
      * التصحيح الوحيد المسموح: قيد عكسي. لا تعديل ولا حذف لقيد معتمد.
      */
     public long reverseEntry(long entryId,String reason){
+        ShiftWorkspace.immutable(this,"journal",entryId);
         if(reason==null||reason.trim().isEmpty())throw new IllegalArgumentException("اكتب سبب التصحيح");
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
@@ -1510,6 +1523,7 @@ public class Db extends SQLiteOpenHelper {
 
     /** يسجّل سبب فرق وردية مُغلقة حتى يجوز ترحيلها، ويحفظ الأثر في سجل التدقيق. */
     public void settleShift(long shiftId,String reason){
+        if(ShiftWorkspace.exists(this,shiftId))throw new IllegalStateException("لا يمكن تعديل الوردية المرحّلة");
         if(reason==null||reason.trim().isEmpty())throw new IllegalArgumentException("اكتب سبب الفرق");
         SQLiteDatabase db=getWritableDatabase();
         db.beginTransaction();
@@ -1582,6 +1596,7 @@ public class Db extends SQLiteOpenHelper {
         atomic(()->{reopenShiftAtomic(shiftId,reason);return null;});
     }
     private void reopenShiftAtomic(long shiftId,String reason){
+        if(ShiftWorkspace.exists(this,shiftId))throw new IllegalStateException("الوردية المرحّلة للعرض فقط");
         requireDate(shiftDate(shiftId));
         String why=reason==null||reason.trim().isEmpty()?"فتح الوردية للتعديل":reason.trim();
         String before="";
@@ -2427,6 +2442,7 @@ public class Db extends SQLiteOpenHelper {
         atomic(()->{voidSupplierEntryAtomic(id);return null;});
     }
     private void voidSupplierEntryAtomic(long id){
+        ShiftWorkspace.immutable(this,"supplier_entries",id);
         String kind="";long materialEntry=0,cashEntry=0,debtEntry=0;
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT kind,material_entry,cashbox_entry,debt_entry,entry_date FROM supplier_entries WHERE id=? AND voided=0",
@@ -2657,4 +2673,5 @@ public class Db extends SQLiteOpenHelper {
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }
+
 
