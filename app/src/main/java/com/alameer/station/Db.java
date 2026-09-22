@@ -1185,6 +1185,11 @@ public class Db extends SQLiteOpenHelper {
     public long postEntry(Journal.Entry entry){
         String reject=Journal.rejectReason(entry);
         if(!reject.isEmpty())throw new IllegalStateException(reject);
+        // Keep legacy reversals, but never create a new suspense posting.
+        for(Journal.Line line:entry.lines){
+            if(Journal.SUSPENSE.equals(line.account))
+                throw new IllegalStateException("حدد الحساب المقابل للحركة قبل الترحيل. يمكنك حفظها كمسودة ثم استكمالها؛ الحساب الوسيط غير مسموح.");
+        }
         if(periodLocked(entry.date))
             throw new IllegalStateException("الفترة "+Journal.periodOf(entry.date)+" مقفلة. افتحها بصلاحية المدير أولًا.");
         SQLiteDatabase db=getWritableDatabase();

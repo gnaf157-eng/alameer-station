@@ -17,12 +17,12 @@ public class AccountingDbTest {
     double account(String name){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT COALESCE(SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END),0) FROM journal_lines WHERE account=?",new String[]{name})){c.moveToFirst();return c.getDouble(0);}}
     void refused(Runnable action){try{action.run();fail("operation must be refused");}catch(IllegalStateException|IllegalArgumentException expected){}}
     @Test public void lockedPeriodCannotWriteAnyLedger(){db.lockPeriod("2026-09","test");refused(()->db.addCashboxEntry(box,"IN",10,"test",date));assertEquals(0,count("cashbox_entries"));assertEquals(0,count("journal"));}
-    @Test public void journalFailureRollsBackCash(){db.getWritableDatabase().execSQL("CREATE TRIGGER reject_journal BEFORE INSERT ON journal BEGIN SELECT RAISE(ABORT,'test failure'); END");try{db.addCashboxEntry(box,"IN",10,"test",date);fail();}catch(RuntimeException expected){}assertEquals(0,count("cashbox_entries"));}
-    @Test public void repeatedEditsOnlyReverseLiveOriginal(){long id=db.addCashboxEntry(box,"IN",100,"test",date);db.updateCashboxEntry(id,"IN",200,"test",date,"YER");db.updateCashboxEntry(id,"IN",300,"test",date,"YER");assertEquals(300,db.cashboxBalance(box),0.001);assertEquals(300,account(Journal.CASH),0.001);assertTrue(db.deleteCashboxEntry(id));assertEquals(0,account(Journal.CASH),0.001);}
-    @Test public void lockedEditCannotAlterOriginal(){long id=db.addCashboxEntry(box,"IN",100,"test",date);db.lockPeriod("2026-09","test");refused(()->db.updateCashboxEntry(id,"OUT",200,"new","2026-10-01","YER"));refused(()->db.deleteCashboxEntry(id));assertEquals(100,db.cashboxBalance(box),0.001);assertEquals(1,count("journal"));}
-    @Test public void editKeepsStoredExchangeRate(){db.setRate("SAR",139.5);long id=db.addCashboxEntry(box,"IN",100,"test",date,"SAR");db.setRate("SAR",200);db.updateCashboxEntry(id,"IN",100,"changed note",date,"SAR");assertEquals(13950,db.cashboxBalance(box),0.001);assertEquals(13950,account(Journal.CASH),0.001);}
+    @Test public void journalFailureRollsBackCash(){db.getWritableDatabase().execSQL("CREATE TRIGGER reject_journal BEFORE INSERT ON journal BEGIN SELECT RAISE(ABORT,'test failure'); END");try{db.addCashTransaction(box,"IN",10,"test",date,"YER","SALE",0);fail();}catch(RuntimeException expected){}assertEquals(0,count("cashbox_entries"));}
+    @Test public void legacyEditsCannotReintroduceSuspenseAndCancellationStillWorks(){long id=legacyCash(100,"test","YER");refused(()->db.updateCashboxEntry(id,"IN",200,"test",date,"YER"));refused(()->db.updateCashboxEntry(id,"IN",300,"test",date,"YER"));assertEquals(100,db.cashboxBalance(box),0.001);assertEquals(100,account(Journal.CASH),0.001);assertEquals(1,count("journal"));assertTrue(db.deleteCashboxEntry(id));assertEquals(0,account(Journal.CASH),0.001);}
+    @Test public void lockedEditCannotAlterOriginal(){long id=legacyCash(100,"test","YER");db.lockPeriod("2026-09","test");refused(()->db.updateCashboxEntry(id,"OUT",200,"new","2026-10-01","YER"));refused(()->db.deleteCashboxEntry(id));assertEquals(100,db.cashboxBalance(box),0.001);assertEquals(1,count("journal"));}
+    @Test public void rejectedLegacyEditKeepsStoredExchangeRate(){db.setRate("SAR",139.5);long id=legacyCash(100,"test","SAR");db.setRate("SAR",200);refused(()->db.updateCashboxEntry(id,"IN",100,"changed note",date,"SAR"));assertEquals(13950,db.cashboxBalance(box),0.001);assertEquals(13950,account(Journal.CASH),0.001);}
     @Test public void linkedSupplierCashCannotBeEditedAlone(){long id=db.paySupplier("OIL",box,500,"test",date);long cash;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT cashbox_entry FROM supplier_entries WHERE id=?",new String[]{""+id})){c.moveToFirst();cash=c.getLong(0);}refused(()->db.updateCashboxEntry(cash,"IN",900,"test",date,"YER"));db.voidSupplierEntry(id);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);}
-    @Test public void supplierTransferVoidRestoresDebtor(){long who=db.addDebtor("عميل", "",0);db.addDebtEntry(who,"DEBT",500,"test",date);long id=db.moveDebtorToSupplier(who,"OIL","test",date);assertEquals(0,db.debtorBalance(who),0.001);assertEquals(500,db.supplierBalance("OIL"),0.001);db.voidSupplierEntry(id);assertEquals(500,db.debtorBalance(who),0.001);assertEquals(0,db.supplierBalance("OIL"),0.001);assertEquals(500,account(Journal.RECEIVABLE),0.001);}
+    @Test public void supplierTransferVoidRestoresDebtor(){long who=db.addDebtor("عميل", "",0);db.addCustomerTransaction(who,"CREDIT_SALE",0,500,"test",date);long id=db.moveDebtorToSupplier(who,"OIL","test",date);assertEquals(0,db.debtorBalance(who),0.001);assertEquals(500,db.supplierBalance("OIL"),0.001);db.voidSupplierEntry(id);assertEquals(500,db.debtorBalance(who),0.001);assertEquals(0,db.supplierBalance("OIL"),0.001);assertEquals(500,account(Journal.RECEIVABLE),0.001);}
     @Test public void expenseDeleteRestoresCash(){long id=db.addExpense("زيت",100,"test",date,box,0);assertEquals(-100,db.cashboxBalance(box),0.001);db.deleteExpense(id);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);assertEquals(0,account(Journal.EXPENSE),0.001);}
     @Test public void openingCanOnlyBePostedOnce(){db.setCashboxOpening(box,-100);db.postOpeningBalances(date);assertEquals(-100,account(Journal.CASH),0.001);refused(()->db.postOpeningBalances(date));refused(()->db.setCashboxOpening(box,200));assertEquals(1,count("journal"));}
     @Test public void archivedAccountsStillIncluded(){long who=db.addDebtor("عميل","",100);db.setDebtorActive(who,false);db.setCashboxOpening(box,200);db.setCashboxActive(box,false);assertEquals(100,db.debtsTotal(),0.001);assertEquals(200,db.cashboxesTotal(),0.001);}
@@ -36,7 +36,7 @@ public class AccountingDbTest {
         assertEquals(sales,db.cashboxBalance(box),0.001);assertEquals(sales,account(Journal.CASH),0.001);assertEquals(1,count("posted_shifts"));
     }
     @Test public void invalidCurrencyAndRatesAreRejected(){refused(()->db.setRate("SAR",Double.POSITIVE_INFINITY));refused(()->db.addCashboxEntry(box,"IN",1,"",date,"BAD"));assertEquals(0,count("cashbox_entries"));}
-    @Test public void upgrade19PreservesEveryExistingRow(){long id=db.addCashboxEntry(box,"IN",123,"keep",date);String before;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){c.moveToFirst();before=c.getString(0);}db.onUpgrade(db.getWritableDatabase(),19,20);try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){assertTrue(c.moveToFirst());assertEquals(before,c.getString(0));}}
+    @Test public void upgrade19PreservesEveryExistingRow(){long id=legacyCash(123,"keep","YER");String before;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){c.moveToFirst();before=c.getString(0);}db.onUpgrade(db.getWritableDatabase(),19,20);try(Cursor c=db.getReadableDatabase().rawQuery("SELECT amount||note||entry_date FROM cashbox_entries WHERE id=?",new String[]{""+id})){assertTrue(c.moveToFirst());assertEquals(before,c.getString(0));}}
 
     long filledShift(){long id=db.openSoloShift(db.soloWorkerId());db.getWritableDatabase().execSQL("UPDATE readings SET current=previous+1,price=100,sales=100 WHERE shift_id=?",new Object[]{id});db.addMovement(id,"CASH","نقد",db.sales(id));return id;}
     long sourceJournal(String source,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id FROM journal WHERE source=? AND source_id=? AND reversed_by=0 AND reverses=0",new String[]{source,""+id})){assertTrue(c.moveToFirst());return c.getLong(0);}}
@@ -54,19 +54,19 @@ public class AccountingDbTest {
         try(Cursor c=db.getReadableDatabase().rawQuery("SELECT MIN(last_reading) FROM pumps",null)){c.moveToFirst();assertEquals(500,c.getDouble(0),0.001);}
     }
     @Test public void settlementAndSourceDeletionRestoreBothLedgers(){
-        long debtor=db.addDebtor("عميل","",0);db.addDebtEntry(debtor,"DEBT",100,"بيع",date);
-        long cash=db.addCashboxEntry(box,"IN",100,"سداد",date);
+        long debtor=db.addDebtor("عميل","",0);db.addCustomerTransaction(debtor,"CREDIT_SALE",0,100,"بيع",date);
+        long cash=legacyCash(100,"سداد","YER");
         db.settleSuspense(sourceJournal("CASHBOX",cash),Journal.RECEIVABLE,"عميل","سداد");assertEquals(0,db.debtorBalance(debtor),0.001);
         db.deleteCashboxEntry(cash);assertEquals(100,db.debtorBalance(debtor),0.001);assertEquals(100,account(Journal.RECEIVABLE),0.001);assertEquals(0,count("settlement_links"));
     }
-    @Test public void settlementRequiresExistingDebtor(){long cash=db.addCashboxEntry(box,"IN",100,"سداد",date);refused(()->db.settleSuspense(sourceJournal("CASHBOX",cash),Journal.RECEIVABLE,"غير موجود","سداد"));assertEquals(1,count("journal"));}
+    @Test public void settlementRequiresExistingDebtor(){long cash=legacyCash(100,"سداد","YER");refused(()->db.settleSuspense(sourceJournal("CASHBOX",cash),Journal.RECEIVABLE,"غير موجود","سداد"));assertEquals(1,count("journal"));}
     @Test public void cashSettlementWritesDefaultCashboxAndReversesIt(){
-        db.setDefaultCashbox(box);long debtor=db.addDebtor("عميل","",0);long debt=db.addDebtEntry(debtor,"DEBT",100,"سلفة",date);
+        db.setDefaultCashbox(box);long debtor=db.addDebtor("عميل","",0);long debt=legacyDebt(debtor,100,"سلفة");
         db.settleSuspense(sourceJournal("DEBT",debt),Journal.CASH,"","سلفة نقدية");assertEquals(-100,db.cashboxBalance(box),0.001);
         db.deleteDebtEntry(debt);assertEquals(0,db.cashboxBalance(box),0.001);assertEquals(0,account(Journal.CASH),0.001);
     }
     @Test public void backupIncludesCommittedWalAndOpeningData()throws Exception{
-        db.getWritableDatabase().enableWriteAheadLogging();db.setCashboxOpening(box,250);db.addCashboxEntry(box,"IN",123,"حركة أخيرة",date);
+        db.getWritableDatabase().enableWriteAheadLogging();db.setCashboxOpening(box,250);db.addCashTransaction(box,"IN",123,"حركة أخيرة",date,"YER","SALE",0);
         java.io.File target=new java.io.File(context.getCacheDir(),"snapshot-test.db");Backup.snapshot(db,target);
         try(android.database.sqlite.SQLiteDatabase copy=android.database.sqlite.SQLiteDatabase.openDatabase(target.getPath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
             try(Cursor c=copy.rawQuery("SELECT amount,note FROM cashbox_entries",null)){assertTrue(c.moveToFirst());assertEquals(123,c.getDouble(0),0.001);assertEquals("حركة أخيرة",c.getString(1));}
@@ -188,5 +188,32 @@ public class AccountingDbTest {
         assertEquals(1,count("expense_entries"));assertEquals(25,account(Journal.EXPENSE),0.001);
         db.deleteCashboxEntry(expense);assertEquals(0,count("expense_entries"));
         assertEquals(0,account(Journal.EXPENSE),0.001);assertEquals(0,db.cashboxBalance(box),0.001);
+    }
+
+    // Simulate persisted pre-migration records in the test database only.
+    long legacyCash(double amount,String note,String currency){
+        long id=db.addCashTransaction(box,"IN",amount,note,date,currency,"SALE",0);
+        legacyJournal("CASH_EXPLICIT","CASHBOX",id);return id;
+    }
+    long legacyDebt(long person,double amount,String note){
+        long id=db.addCustomerTransaction(person,"CREDIT_SALE",0,amount,note,date);
+        legacyJournal("DEBT_EXPLICIT","DEBT",id);return id;
+    }
+    void legacyJournal(String from,String to,long id){
+        long journal=sourceJournal(from,id);
+        db.getWritableDatabase().execSQL("UPDATE journal_lines SET account=? WHERE entry_id=? AND account=?",new Object[]{Journal.SUSPENSE,journal,Journal.SALES});
+        db.getWritableDatabase().execSQL("UPDATE journal SET source=? WHERE id=?",new Object[]{to,journal});
+    }
+    @Test public void allNewSuspensePathsAreRejectedWithoutPartialRows(){
+        long who=db.addDebtor("عميل","",0);
+        refused(()->db.addCashboxEntry(box,"IN",10,"قبض",date));
+        refused(()->db.addCashboxEntry(box,"OUT",10,"صرف",date));
+        refused(()->db.addDebtEntry(who,"DEBT",10,"دين",date));
+        refused(()->db.addDebtEntry(who,"PAID",10,"سداد",date));
+        refused(()->db.addExpense("مصروف",10,"مصروف بلا صندوق",date,0,0));
+        refused(()->db.postEntry(Journal.simple("اختبار",date,"TEST",1,Journal.CASH,Journal.SUSPENSE,10,"")));
+        assertEquals(0,count("journal"));assertEquals(0,count("journal_lines"));
+        assertEquals(0,count("cashbox_entries"));assertEquals(0,count("debt_entries"));
+        assertEquals(0,count("expense_entries"));assertEquals(0,count("settlement_links"));
     }
 }
