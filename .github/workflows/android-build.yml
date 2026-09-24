@@ -59,6 +59,8 @@ jobs:
           for path in glob.glob('app/build/test-results/testDebugUnitTest/TEST-*.xml'):
               root = ET.parse(path).getroot()
               for key in totals: totals[key] += int(root.get(key, 0))
+              for failure in root.iter('failure'):
+                  print('TEST_FAILURE', path, (failure.text or '')[:5000])
           print('TEST_SUMMARY', totals)
           PYTEST
 
@@ -67,7 +69,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: app/build/test-results/testDebugUnitTest/
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/ui/
 
       - name: Build preview APK
         if: github.ref == 'refs/heads/arena/cat-ledgers-workflow'

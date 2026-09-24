@@ -92,8 +92,7 @@ public class ControlPanelActivity extends Activity {
         try(Cursor row=db.getReadableDatabase().rawQuery("SELECT s.id,w.reviewed FROM shifts s JOIN shift_workspace w ON w.shift_id=s.id WHERE s.status='OPEN' ORDER BY s.id LIMIT 1",null)){
             if(row.moveToFirst()){long id=row.getLong(0);int r=row.getInt(1);c.addView(StationUi.text(this,db.shiftCode(id)+" • "+db.shiftDate(id),13,false));
                 c.addView(StationUi.text(this,"العامل: "+((r&1)!=0?"تمت المطابقة":"قيد المطابقة")+" • فرق "+Calc.money(db.balance(id))+" ر.ي",15,false));
-                c.addView(StationUi.text(this,"الصناديق: "+((r&2)!=0?"تمت المطابقة":"قيد المطابقة")+"
-المواد: "+((r&4)!=0?"تمت المطابقة":"قيد المطابقة"),15,false));
+                c.addView(StationUi.text(this,"الصناديق: "+((r&2)!=0?"تمت المطابقة":"قيد المطابقة")+"\nالمواد: "+((r&4)!=0?"تمت المطابقة":"قيد المطابقة"),15,false));
             }else c.addView(StationUi.text(this,"لا توجد وردية مفتوحة",15,false));
         }return c;
     }

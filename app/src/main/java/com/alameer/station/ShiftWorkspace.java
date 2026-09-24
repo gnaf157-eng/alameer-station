@@ -24,8 +24,10 @@ public final class ShiftWorkspace {
             }
         }
     }
+    static String workerName(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT COALESCE(NULLIF(sw.worker_name,''),w.name) FROM shifts s JOIN workers w ON w.id=s.worker_id LEFT JOIN shift_workspace sw ON sw.shift_id=s.id WHERE s.id=?",new String[]{""+id})){return c.moveToFirst()?c.getString(0):db.workerName(db.soloWorkerId());}}
+    static void nameWorker(Db db,long shift,String name){openOnly(db,shift);if(name==null||name.trim().isEmpty())throw new IllegalArgumentException("اكتب اسم العامل");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET worker_name=?,reviewed=0 WHERE shift_id=?",new Object[]{name.trim(),shift});}
     static boolean exists(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT 1 FROM shift_workspace WHERE shift_id=?",new String[]{""+id})){return c.moveToFirst();}}
-    static void ensure(Db db,long id){if(!db.isOpen(id))return;ContentValues v=new ContentValues();v.put("shift_id",id);v.put("cashbox_id",db.defaultCashbox());v.put("strict_counts",1);v.put("cashbox_rate",db.rate(boxCurrency(db,db.defaultCashbox())));db.getWritableDatabase().insertWithOnConflict("shift_workspace",null,v,SQLiteDatabase.CONFLICT_IGNORE);db.shiftCode(id);}
+    static void ensure(Db db,long id){if(!db.isOpen(id))return;ContentValues v=new ContentValues();v.put("shift_id",id);v.put("cashbox_id",db.defaultCashbox());v.put("strict_counts",1);v.put("cashbox_rate",db.rate(boxCurrency(db,db.defaultCashbox())));db.getWritableDatabase().insertWithOnConflict("shift_workspace",null,v,SQLiteDatabase.CONFLICT_IGNORE);db.shiftCode(id);db.getWritableDatabase().execSQL("UPDATE shift_workspace SET worker_name=(SELECT w.name FROM shifts s JOIN workers w ON w.id=s.worker_id WHERE s.id=?) WHERE shift_id=? AND worker_name=''",new Object[]{id,id});}
     static void openOnly(Db db,long id){if(!db.isOpen(id)||!exists(db,id))throw new IllegalStateException("افتح وردية جديدة أولًا؛ الدفاتر للعرض فقط");}
     static long box(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT cashbox_id FROM shift_workspace WHERE shift_id=?",new String[]{""+id})){return c.moveToFirst()?c.getLong(0):db.defaultCashbox();}}
     static int reviewed(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT reviewed FROM shift_workspace WHERE shift_id=?",new String[]{""+id})){return c.moveToFirst()?c.getInt(0):0;}}
@@ -77,6 +79,7 @@ public final class ShiftWorkspace {
                         if(freight>0){long driver=customer(db,detail.getString(0));db.addDebtEntry(driver,"PAID",freight,"أجرة نقل — "+note,date,id);
                             db.postEntry(Journal.simple("أجرة نقل — "+note,date,"SHIFT_FREIGHT",id,Journal.INVENTORY,Journal.RECEIVABLE,freight,detail.getString(0)));}
                     }
+                }else if(k.equals("EXPENSE")){db.addExpense(c.getString(7).split(" — ",2)[0],a,note,date,0,box);
                 }else if(section==1){
                     db.addCashTransaction(box,k.equals("COLLECTION")?"IN":"OUT",a,note,date,"YER",k.equals("COLLECTION")||k.equals("LOAN")?"CUSTOMER":k,target);
                 }else if(k.equals("BUY_CREDIT"))db.buyFromSupplier(mat,q,a/q,note,date);
@@ -96,6 +99,7 @@ public final class ShiftWorkspace {
         if(!found)s.execSQL("ALTER TABLE "+table+" ADD COLUMN "+name+" "+declaration);
     }
     static void extend(SQLiteDatabase s){
+        column(s,"shift_workspace","worker_name","TEXT NOT NULL DEFAULT ''");
         column(s,"shift_workspace","strict_counts","INTEGER NOT NULL DEFAULT 0");
         column(s,"shift_workspace","cashbox_rate","REAL NOT NULL DEFAULT 1");
         column(s,"shift_operations","driver_name","TEXT NOT NULL DEFAULT ''");
@@ -133,7 +137,7 @@ public final class ShiftWorkspace {
         if(section==1){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1",null)){while(c.moveToNext())assertCount(db,shift,section,""+c.getLong(0),c.getString(1),expectedCash(db,shift,c.getLong(0)));}}
         else for(String m:Db.MATERIALS)assertCount(db,shift,section,m,m,expectedMaterial(db,shift,m));
     }
-    private static void assertCount(Db db,long shift,int section,String account,String name,double expected){Double actual=counted(db,shift,section,account);if(actual==null)throw new IllegalStateException("أدخل الرصيد الفعلي: "+name);if(!Double.isFinite(expected)||Math.abs(actual-expected)>0.0000001)throw new IllegalStateException("فرق "+name+": "+(actual-expected)+" — يجب تصحيح الفرق قبل الترحيل");}
+    private static void assertCount(Db db,long shift,int section,String account,String name,double expected){Double actual=counted(db,shift,section,account);if(actual==null)throw new IllegalStateException("أدخل الرصيد الفعلي: "+name);if(!Double.isFinite(expected)||Math.abs(actual-expected)>0.0000001)throw new IllegalStateException("فرق "+name+": "+(actual-expected)+" — يجب تصحيح الفرق قبل الترحيل");db.getWritableDatabase().execSQL("UPDATE shift_counts SET expected=? WHERE shift_id=? AND section=? AND account=?",new Object[]{expected,shift,section,account});}
     static long customer(Db db,String name){String n=name==null?"":name.trim();if(n.isEmpty())throw new IllegalArgumentException("اكتب الاسم");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id FROM debtors WHERE name=?",new String[]{n})){if(c.moveToFirst())return c.getLong(0);}return db.addDebtor(n,"",0);}
     static long addSupply(Db db,long shift,String mat,double q,String driver,String note){
         if(!Arrays.asList(Db.MATERIALS).contains(mat)||driver==null||driver.trim().isEmpty())throw new IllegalArgumentException("اختر المادة واكتب اسم السائق");double price=db.buyPrice(mat),freight=db.freightPrice(mat)*q;

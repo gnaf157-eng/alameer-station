@@ -38,7 +38,7 @@ public class HomeActivity extends Activity {
   String[] names={"مطابقة العامل","الصناديق","المواد"};int[] pages={0,5,6};
   for(int k=0;k<3;k++){final int page=pages[k];Button b=StationUi.button(this,names[k],k==stage,()->startActivity(new Intent(this,ShiftActivity.class).putExtra("startPage",page)));b.setTextSize(13);b.setSelected(k==stage);HomeIcon art=new HomeIcon(k==0?0:k==1?3:6);art.setBounds(0,0,dp(24),dp(24));b.setCompoundDrawables(null,art,null,null);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(78),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(b,p);}
  }
- @Override protected void onResume(){super.onResume();refreshNavigation();}
+ @Override protected void onResume(){super.onResume();build();}
  @Override protected void onDestroy(){if(db!=null)db.close();super.onDestroy();}
     private static class HomeIcon extends Drawable {
         final int kind;

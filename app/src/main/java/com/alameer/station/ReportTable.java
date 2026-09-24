@@ -25,7 +25,7 @@ final class ReportTable {
         String worker="",opened="",closed="",state="",reason="",note="";
         try(Cursor c=db.shiftHeader(id)){
             if(!c.moveToFirst())throw new IllegalArgumentException("الوردية غير موجودة");
-            worker=c.getString(0);opened=c.getString(1);closed=c.getString(2);
+            worker=ShiftWorkspace.workerName(db,id);opened=c.getString(1);closed=c.getString(2);
             state=Calc.arabicStatus(c.getString(3));reason=c.getString(4);note=c.getString(5);
         }
         List<Object[]> readings=new ArrayList<>();

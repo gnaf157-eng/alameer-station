@@ -19,7 +19,7 @@ public class ShiftActivity extends Activity {
         // فتح وردية بعينها قادمًا من شاشة ورديات العامل.
         long requested=getIntent().getLongExtra("openShift",0);
         if(requested>0)shiftId=requested;
-        ShiftWorkspace.ensure(db,shiftId);
+        ShiftWorkspace.ensure(db,shiftId);workerName=ShiftWorkspace.workerName(db,shiftId);
         if(getIntent().getBooleanExtra("openSettings",false)){ManagerAccess.run(this,db,()->build(),this::finish);return;}
         build();
         new AppUpdater(this).check(false);
@@ -119,7 +119,7 @@ public class ShiftActivity extends Activity {
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
         titleRow.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));
         greetingText=text(workerName,21,Util.NAVY,true);
-        greetingText.setMaxLines(1);
+        greetingText.setMaxLines(1);greetingText.setOnClickListener(v->nameDialog());greetingText.setContentDescription("اسم عامل الوردية — اضغط للتغيير");
         titleRow.addView(greetingText,new LinearLayout.LayoutParams(0,-2,1));
         shiftCodeBadge=text("",13,Util.NAVY,true);
         shiftCodeBadge.setPadding(dp(11),dp(6),dp(11),dp(6));
@@ -713,7 +713,7 @@ public class ShiftActivity extends Activity {
             .setPositiveButton("حفظ",(d,w)->{
                 double value=Calc.number(input.getText().toString());
                 if(value<=0){Toast.makeText(this,"اكتب قيمة أكبر من صفر",Toast.LENGTH_SHORT).show();return;}
-                sink.accept(value);buildSettingsPage();
+                try{sink.accept(value);buildSettingsPage();}catch(RuntimeException e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}
             }).setNegativeButton("إلغاء",null).show();
     }
 
@@ -780,7 +780,7 @@ public class ShiftActivity extends Activity {
         d.setOnShowListener(x->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             String value=input.getText().toString().trim();
             if(value.isEmpty()){input.setError("أدخل الاسم");return;}
-            db.renameWorker(workerId,value);
+            if(db.isOpen(shiftId))ShiftWorkspace.nameWorker(db,shiftId,value);else db.renameWorker(workerId,value);
             workerName=value;
             d.dismiss();
             Toast.makeText(this,"حُفظ الاسم.",Toast.LENGTH_SHORT).show();
@@ -1681,7 +1681,7 @@ public class ShiftActivity extends Activity {
         catch(Exception e){new AlertDialog.Builder(this).setTitle("لم تُغلق الوردية")
             .setMessage("لم يُحفظ ترحيل جزئي. راجع السبب وحاول مجددًا:\n"+e.getMessage())
             .setPositiveButton("حسنًا",null).show();return;}
-        shiftId=db.openSoloShift(workerId);ShiftWorkspace.ensure(db,shiftId);
+        shiftId=db.openSoloShift(workerId);ShiftWorkspace.ensure(db,shiftId);workerName=ShiftWorkspace.workerName(db,shiftId);refreshGreeting();
         loadReadings();loadMovements();refreshTotals();
 
         String base="تم ترحيل التبويبات الثلاثة وحفظ التقرير الشامل في الأرشيف.";

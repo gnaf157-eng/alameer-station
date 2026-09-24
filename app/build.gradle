@@ -41,6 +41,7 @@ android {
     }
 
     buildTypes {
+        debug { applicationIdSuffix ".preview"; versionNameSuffix "-preview" }
         release {
             if (signingReady) signingConfig signingConfigs.release
             minifyEnabled false
