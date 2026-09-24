@@ -73,17 +73,6 @@ jobs:
             app/build/test-results/testDebugUnitTest/
             app/build/reports/ui/
 
-      - name: Build preview APK
-        if: github.ref == 'refs/heads/arena/cat-ledgers-workflow'
-        run: ./gradlew --no-daemon :app:assembleDebug
-
-      - name: Upload preview APK
-        if: github.ref == 'refs/heads/arena/cat-ledgers-workflow'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Tabiq-preview
-          path: app/build/outputs/apk/debug/app-debug.apk
-
       - name: Read app version
         id: version
         run: |
@@ -91,7 +80,7 @@ jobs:
           echo "code=$(grep -oP 'versionCode \K\d+' app/build.gradle)" >> "$GITHUB_OUTPUT"
 
       - name: Decode release keystore
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         id: keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -105,7 +94,7 @@ jobs:
           fi
 
       - name: Build signed release APK
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         env:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -130,7 +119,7 @@ jobs:
              "Tabiq-v${{ steps.version.outputs.name }}.apk"
 
       - name: Verify the APK is signed
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         run: |
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "Tabiq-v${{ steps.version.outputs.name }}.apk" | tee certs.txt
@@ -138,7 +127,7 @@ jobs:
 
 
       - name: Verify candidate update compatibility
-        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         env:
           CANDIDATE_VERSION_NAME: ${{ steps.version.outputs.name }}
           CANDIDATE_VERSION_CODE: ${{ steps.version.outputs.code }}
@@ -211,7 +200,7 @@ jobs:
           PYCHECK
 
       - name: Upload verified candidate for phone testing
-        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         uses: actions/upload-artifact@v4
         with:
           name: Tabiq-candidate-${{ steps.version.outputs.name }}
