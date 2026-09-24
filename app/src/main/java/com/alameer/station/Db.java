@@ -1159,7 +1159,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM shifts s WHERE s.status<>'OPEN' "+
                 "AND substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7)=? "+
-                "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0)",
+                "AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0)",
                 new String[]{period})){
             if(c.moveToFirst()&&c.getInt(0)>0)
                 throw new IllegalStateException("لا يمكن إقفال "+period+": فيها "+c.getInt(0)+" وردية لم تُرحّل بعد. رحّلها أولًا.");
@@ -1480,16 +1480,20 @@ public class Db extends SQLiteOpenHelper {
     }
 
     /** الورديات المُغلقة التي لم يُسجَّل لها قيد بعد: 0=id,1=عامل,2=تاريخ,3=الفرق. */
+    // A fully posted workspace can have cash/material operations with no worker money.
+    // Its posted_shifts record is the completion evidence; no zero journal is invented.
+    private static final String ZERO_WORKER_POSTED="s.sales=0 AND s.collections=0 AND s.cash_delivered=0 AND s.debts=0 AND s.expenses=0 AND s.balance=0 AND EXISTS(SELECT 1 FROM posted_shifts ps JOIN shift_workspace sw ON sw.shift_id=ps.shift_id WHERE ps.shift_id=s.id)";
     public Cursor unpostedShifts(){
         return getReadableDatabase().rawQuery(
             "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
             "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
-            "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
+            "WHERE s.status<>'OPEN' AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
             "ORDER BY s.id DESC",null);
     }
 
     /** هل للوردية قيد مسجّل؟ */
     public boolean shiftJournalled(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM shifts s WHERE s.id=? AND ("+ZERO_WORKER_POSTED+")",new String[]{String.valueOf(shiftId)})){if(c.moveToFirst())return true;}
         try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0 AND reverses=0",
                 new String[]{String.valueOf(shiftId)})){
             return c.moveToFirst();
@@ -1556,7 +1560,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT DISTINCT p.period FROM period_locks p JOIN shifts s "+
                 "ON p.period=substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7) "+
-                "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
+                "WHERE s.status<>'OPEN' AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
                 "ORDER BY p.period LIMIT 1",null)){
             return c.moveToFirst()?c.getString(0):"";
         }

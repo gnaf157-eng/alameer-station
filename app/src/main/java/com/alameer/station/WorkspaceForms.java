@@ -20,10 +20,10 @@ final class WorkspaceForms {
   root.addView(text(db.shiftCode(shift)+"  •  "+db.shiftDate(shift),13));
   root.addView(text("تُرحّل بيانات الوردية كاملة بعد اكتمال المطابقات الثلاث.",13));
   if(section==1){
-   LinearLayout receipt=card("١  استلام نقد العامل");receipt.addView(text("النقد المسلّم: "+Calc.money(db.total(shift,"CASH"))+" ر.ي",17));
+   LinearLayout receipt=card("استلام نقد العامل");receipt.addView(text("النقد المسلّم: "+Calc.money(db.total(shift,"CASH"))+" ر.ي",17));
    Choices boxes=new Choices("cashboxes");Spinner pick=boxes.spinner();int chosen=boxes.ids.indexOf(ShiftWorkspace.box(db,shift));if(chosen>=0)pick.setSelection(chosen);LinearLayout receiveRow=new LinearLayout(a);receiveRow.addView(pick,new LinearLayout.LayoutParams(0,dp(48),1));receipt.addView(receiveRow);Spinner receiveCurrency=spinner(Db.CURRENCY_NAMES);receiveCurrency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(CashAccounts.receiptCurrency(db,shift)));receiveRow.addView(receiveCurrency,new LinearLayout.LayoutParams(0,dp(48),1));
    button(receipt,"اعتماد صندوق الاستلام",false,()->{if(boxes.id(pick)==0)throw new IllegalArgumentException("اختر صندوق الاستلام");ShiftWorkspace.selectBox(db,shift,boxes.id(pick),Db.CURRENCIES[receiveCurrency.getSelectedItemPosition()]);render();});
-   LinearLayout entry=card("٢  الحركات الإضافية");entry.addView(text("القبض والصرف والتحويل بين الصناديق. نقد العامل محسوب أعلاه مرة واحدة.",13));for(int row=0;row<2;row++){LinearLayout tiles=new LinearLayout(a);for(int col=0;col<2;col++){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(108),1);p.setMargins(dp(5),dp(5),dp(5),dp(5));tiles.addView(CashEntryCard.tile(this,row*2+col),p);}entry.addView(tiles);}
+   LinearLayout entry=card("حركة الصناديق");entry.addView(text("القبض والصرف والتحويل بين الصناديق. نقد العامل محسوب أعلاه مرة واحدة.",13));for(int row=0;row<2;row++){LinearLayout tiles=new LinearLayout(a);for(int col=0;col<2;col++){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(108),1);p.setMargins(dp(5),dp(5),dp(5),dp(5));tiles.addView(CashEntryCard.tile(this,row*2+col),p);}entry.addView(tiles);}root.removeView(entry);root.addView(entry,3,StationUi.space(a));
   }else{
    LinearLayout companies=card("١  حسابات الشركات");
    for(String company:new String[]{"OIL","GAS"}){double balance=ShiftWorkspace.expectedCompany(db,shift,company);companies.addView(text(Db.supplierName(company)+"  •  "+(balance>=0?"لنا ":"علينا ")+Calc.money(Math.abs(balance))+" ر.ي",16));}
@@ -43,7 +43,7 @@ final class WorkspaceForms {
    if(kind.equals("FUEL_SUPPLY"))try(Cursor f=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+row})){f.moveToFirst();line+="\nأجرة "+f.getString(0)+": "+Calc.money(f.getDouble(1))+" ر.ي";}
    list.addView(text(line,15));button(list,"حذف الحركة",false,()->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(d,w)->{ShiftWorkspace.delete(db,shift,row);render();}).setNegativeButton("رجوع",null).show());
   }while(c.moveToNext());}}
- void counts(){LinearLayout c=card(section==1?"٣  الأرصدة الفعلية للصناديق":"٢  الجرد الفعلي باللترات");
+ void counts(){LinearLayout c=card(section==1?"الأرصدة الفعلية للصناديق":"٢  الجرد الفعلي باللترات");
   if(section==1)try(Cursor boxes=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1 ORDER BY name",null)){while(boxes.moveToNext()){long box=boxes.getLong(0);for(String code:CashAccounts.currencies(db,box,shift))countRow(c,CashAccounts.key(box,code),boxes.getString(1),CashAccounts.expected(db,shift,box,code),Db.currencyName(code));}}
   else for(String mat:Db.MATERIALS)countRow(c,mat,mat,ShiftWorkspace.expectedMaterial(db,shift,mat),"لتر");
  }

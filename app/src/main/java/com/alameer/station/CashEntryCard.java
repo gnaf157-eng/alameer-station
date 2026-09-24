@@ -40,7 +40,7 @@ final class CashEntryCard {
   changed(from,()->{long box=boxes.id(from);if(box>0)currency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(ShiftWorkspace.boxCurrency(db,box)));refresh();});
   changed(currency,this::refresh);changed(to,this::refresh);changed(targetCurrency,this::refresh);
   amount.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int co,int af){}public void onTextChanged(CharSequence s,int st,int be,int co){}public void afterTextChanged(Editable e){refresh();}});
-  dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->save()));chooseKind(selected);
+  dialog.setOnShowListener(x->{Button save=dialog.getButton(-1);save.setTextColor(Util.NAVY);save.setBackgroundTintList(null);save.setBackground(Util.round(Util.ACCENT,h.dp(10)));save.setMinHeight(h.dp(48));save.setPadding(h.dp(16),h.dp(8),h.dp(16),h.dp(8));dialog.getButton(-2).setTextColor(Util.NAVY);save.setOnClickListener(v->save());});chooseKind(selected);
  }
  void show(){dialog.show();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);}
  static int icon(int kind){return kind==0?0:kind==1?1:kind==2?3:4;}
