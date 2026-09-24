@@ -116,12 +116,18 @@ final class ReportTable {
                         String kind=c.getString(1);
                         if(kind.equals("TRANSFER"))counterpart+=" ← "+cashboxName(db,c.getLong(3));
                         if(kind.equals("COLLECTION")||kind.equals("LOAN"))counterpart+=" / "+db.debtorName(c.getLong(3));
-                        if(kind.equals("SUPPLIER"))counterpart+=" / "+(c.getLong(3)==1?"شركة الغاز":"شركة النفط");
+                        if(kind.equals("COMPANY_PAYMENT"))counterpart=cashboxName(db,c.getLong(2));
+                        if(kind.equals("SUPPLIER")||kind.equals("COMPANY_PAYMENT"))counterpart+=" / "+(c.getLong(3)==1?"شركة الغاز":"شركة النفط");
                         add(false,ShiftWorkspace.label(kind),c.getString(7),counterpart,section==2?c.getDouble(5):"",c.getDouble(6));total+=c.getDouble(6);
+                        if(kind.equals("FUEL_SUPPLY"))try(Cursor detail=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){detail.moveToFirst();add(false,"أجرة نقل مستحقة",detail.getString(0),"حساب السائق","",detail.getDouble(1));}
+                        if(c.getLong(2)>0)try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT rate FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){fx.moveToFirst();String currency=ShiftWorkspace.boxCurrency(db,c.getLong(2));add(false,"المبلغ الأصلي",c.getDouble(6)/fx.getDouble(0),Db.currencyName(currency),"سعر التحويل",fx.getDouble(0));}
                     }
                 }
                 add(true,"مجموع قيم الحركات (ليس صافي الرصيد)","","","",total);
             }
+            add(true,"الجرد الفعلي","الحساب","المحسوب","الفعلي","الفرق");
+            try(Cursor counts=db.getReadableDatabase().rawQuery("SELECT section,account,expected,actual FROM shift_counts WHERE shift_id=? ORDER BY section,account",new String[]{""+id})){while(counts.moveToNext()){String name=counts.getInt(0)==1?cashboxName(db,Long.parseLong(counts.getString(1))):counts.getString(1);add(false,counts.getInt(0)==1?"نقد":"لترات",name,counts.getDouble(2),counts.getDouble(3),counts.getDouble(3)-counts.getDouble(2));}}
+
         }
     }
     private static String cashboxName(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT name FROM cashboxes WHERE id=?",new String[]{""+id})){return c.moveToFirst()?c.getString(0):"غير محدد";}}

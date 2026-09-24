@@ -70,7 +70,7 @@ public class AccountingDbTest {
         java.io.File target=new java.io.File(context.getCacheDir(),"snapshot-test.db");Backup.snapshot(db,target);
         try(android.database.sqlite.SQLiteDatabase copy=android.database.sqlite.SQLiteDatabase.openDatabase(target.getPath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
             try(Cursor c=copy.rawQuery("SELECT amount,note FROM cashbox_entries",null)){assertTrue(c.moveToFirst());assertEquals(123,c.getDouble(0),0.001);assertEquals("حركة أخيرة",c.getString(1));}
-            assertEquals(21,copy.getVersion());
+            assertEquals(22,copy.getVersion());
         }finally{target.delete();}
     }
     @Test public void backupRejectsFutureSchema()throws Exception{

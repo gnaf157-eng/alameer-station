@@ -20,6 +20,7 @@ public class ShiftActivity extends Activity {
         long requested=getIntent().getLongExtra("openShift",0);
         if(requested>0)shiftId=requested;
         ShiftWorkspace.ensure(db,shiftId);
+        if(getIntent().getBooleanExtra("openSettings",false)){ManagerAccess.run(this,db,()->build(),this::finish);return;}
         build();
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
@@ -72,9 +73,9 @@ public class ShiftActivity extends Activity {
         stationTitle.setAutoSizeTextTypeUniformWithConfiguration(12,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         brandWords.addView(stationTitle,new LinearLayout.LayoutParams(-1,dp(48)));
         refreshStationBrand();
-        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffCFE2FA,false));
+        brandWords.addView(text("طابق ورحّل • مطابقة الورديات",11,0xffE6E6E6,false));
         brand.addView(brandWords,new LinearLayout.LayoutParams(0,-2,1));
-        headerBalance=text("",15,0xffCFE2FA,true);
+        headerBalance=text("",15,0xffE6E6E6,true);
         headerBalance.setGravity(Gravity.CENTER);headerBalance.setPadding(dp(6),dp(6),dp(6),dp(6));
         headerBalance.setMaxLines(3);
         headerBalance.setAutoSizeTextTypeUniformWithConfiguration(11,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
@@ -87,8 +88,8 @@ public class ShiftActivity extends Activity {
         gear.setBackground(new android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(0x33FFFFFF),
                 Util.round(0x22FFFFFF,dp(21)),Util.round(Color.WHITE,dp(21))));
-        gear.setOnClickListener(v->{settingsReturnPage=page==4?0:page;showPage(4);
-            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
+        gear.setOnClickListener(v->ManagerAccess.run(this,db,()->{settingsReturnPage=page==4?0:page;showPage(4);
+            if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}));
         brand.addView(gear,new LinearLayout.LayoutParams(dp(42),dp(42)));
         shell.addView(brand);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -175,7 +176,7 @@ public class ShiftActivity extends Activity {
             final int dest=i==1?1:i==2?2:0;
             TextView step=text(stepNames[i],14,i==2?Util.NAVY:0xff777d84,i==2);
             step.setGravity(Gravity.CENTER);step.setPadding(0,dp(8),0,dp(8));
-            step.setBackground(Util.round(i==2?Util.ACCENT_SOFT:0xffedf0f4,dp(14)));
+            step.setBackground(Util.round(i==2?Util.ACCENT_SOFT:0xffEEEEEE,dp(14)));
             step.setOnClickListener(v->showPage(dest));
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,-2,1);
             sp.setMargins(dp(4),0,dp(4),0);steps.addView(step,sp);
@@ -189,7 +190,7 @@ public class ShiftActivity extends Activity {
         Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
         Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
         Button confirm=action("تأكيد مراجعة مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[2].addView(confirm,space());
-        Button close=action("إغلاق الوردية وترحيل الكل",false);close.setOnClickListener(v->closeShift());pages[2].addView(close,space());
+
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
@@ -220,7 +221,7 @@ public class ShiftActivity extends Activity {
         boolean openSettings=getIntent().getBooleanExtra("openSettings",false);
         // الدخول من ترس الواجهة الرئيسية: الرجوع يخرج إليها مباشرة لا إلى الوردية.
         settingsOnly=openSettings;
-        showPage(openSettings?4:0);loadMovements();
+        showPage(openSettings?4:getIntent().getIntExtra("startPage",0));loadMovements();
         // الشارتان تُملآن بعد اكتمال البناء.
         String code=db.shiftCode(shiftId);
         if(shiftCodeBadge!=null){shiftCodeBadge.setText(code);shiftCodeBadge.setVisibility(code.isEmpty()?View.GONE:View.VISIBLE);}
@@ -238,7 +239,7 @@ public class ShiftActivity extends Activity {
         version.setGravity(Gravity.CENTER);
         pages[4].addView(version,space());
         Button back=action("رجوع إلى الوردية",false);
-        back.setOnClickListener(v->{showPage(settingsReturnPage);
+        back.setOnClickListener(v->{if(settingsOnly){finish();return;}showPage(settingsReturnPage);
             if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);});
         pages[4].addView(back,space());
         final boolean boss=true;
@@ -324,6 +325,7 @@ public class ShiftActivity extends Activity {
             addPump.setOnClickListener(v->pumpDialog(0,"","",0,0));
             pumpSection.addView(addPump,space());
 
+            buildAccountingSettings();
             buildTankSettings();
             buildThresholdSettings();
 
@@ -385,32 +387,39 @@ public class ShiftActivity extends Activity {
     }
 
     /** قفل التطبيق برمز. */
+    private void buildAccountingSettings(){
+        LinearLayout prices=section("سعر الشراء وأجرة النقل");
+        for(String material:Db.MATERIALS){
+            prices.addView(text(material+" • شراء "+money(db.buyPrice(material))+" • نقل "+money(db.freightPrice(material))+" ر.ي / لتر",15,Util.NAVY,true));
+            Button buy=action("سعر شراء "+material,false);buy.setOnClickListener(v->numberDialog("سعر شراء اللتر",db.buyPrice(material),false,value->{if(value<=0)throw new IllegalArgumentException("السعر أكبر من صفر");db.setBuyPrice(material,value);}));prices.addView(buy,space());
+            Button freight=action("أجرة نقل "+material,false);freight.setOnClickListener(v->numberDialog("أجرة نقل اللتر",db.freightPrice(material),false,value->{if(value<0)throw new IllegalArgumentException("الأجرة لا تكون سالبة");db.setFreightPrice(material,value);}));prices.addView(freight,space());
+        }
+        LinearLayout fx=section("أسعار العملات");
+        fx.addView(text("تُحفظ أسعار التحويل مع كل حركة؛ تغيير السعر لا يغيّر الحركات السابقة.",13,Util.NAVY,false));
+        for(String code:new String[]{"SAR","USD"}){Button edit=action(Db.currencyName(code)+" = "+money(db.rate(code))+" ر.ي",false);edit.setOnClickListener(v->numberDialog("سعر "+Db.currencyName(code),db.rate(code),false,value->db.setRate(code,value)));fx.addView(edit,space());}
+        LinearLayout boxes=section("تعريف الصناديق");
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1 ORDER BY name",null)){while(c.moveToNext())boxes.addView(text(c.getString(1)+" • "+Db.currencyName(ShiftWorkspace.boxCurrency(db,c.getLong(0))),15,Util.NAVY,false));}
+        Button add=action("＋ تعريف صندوق",true);add.setOnClickListener(v->newCashboxDialog());boxes.addView(add,space());
+        LinearLayout opening=section("الأرصدة الافتتاحية");
+        opening.addView(text("تُعتمد مرة واحدة عند بدء الحسابات.",13,Util.NAVY,false));
+        Button initial=action("تقييد الأرصدة الافتتاحية",false);initial.setOnClickListener(v->openingDialog());opening.addView(initial,space());
+    }
+    private void newCashboxDialog(){
+        LinearLayout f=column();f.setPadding(dp(20),dp(12),dp(20),dp(12));
+        EditText name=new EditText(this);styleInput(name);name.setHint("اسم الصندوق");f.addView(name);
+        Spinner currency=new Spinner(this);currency.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,Db.CURRENCY_NAMES));f.addView(currency);
+        EditText initial=new EditText(this);styleInput(initial);initial.setHint("الرصيد الافتتاحي بعملة الصندوق");initial.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);f.addView(initial);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("تعريف صندوق").setView(f).setPositiveButton("حفظ",null).setNegativeButton("رجوع",null).create();
+        dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->{try{
+            double amount=Calc.number(initial.getText().toString());if(amount<0||!Double.isFinite(amount))throw new IllegalArgumentException("الرصيد غير صحيح");
+            ShiftWorkspace.addBox(db,name.getText().toString(),Db.CURRENCIES[currency.getSelectedItemPosition()],amount);dialog.dismiss();buildSettingsPage();
+        }catch(RuntimeException e){name.setError(e.getMessage());}}));dialog.show();
+    }
+
     private void buildLockSettings(){
-        LinearLayout box=section("قفل التطبيق");
-        LinearLayout card=panel(Color.WHITE);
-        final boolean on=db.lockOn();
-        card.addView(text(on?"القفل مفعّل":"القفل معطّل",17,on?Util.GREEN:0xff626970,true));
-        card.addView(text("يُطلب الرمز عند فتح التطبيق.",13,0xff626970,false));
-
-        Button pin=action(db.lockPinSet()?"تغيير الرمز":"ضبط الرمز",!db.lockPinSet());
-        pin.setOnClickListener(v->lockPinDialog());
-        card.addView(pin,space());
-
-        final CheckBox toggle=new CheckBox(this);
-        toggle.setText("تفعيل القفل عند فتح التطبيق");
-        toggle.setTextSize(15);
-        toggle.setChecked(on);
-        toggle.setOnCheckedChangeListener((b,checked)->{
-            if(checked&&!db.lockPinSet()){
-                toggle.setChecked(false);
-                Toast.makeText(this,"اضبط الرمز أولًا",Toast.LENGTH_LONG).show();
-                return;
-            }
-            db.setLockOn(checked);
-        });
-        card.addView(toggle);
-        card.addView(text("احفظ الرمز جيدًا؛ بدونه لا يُفتح التطبيق.",12,Util.RED,true));
-        box.addView(card,space());
+        LinearLayout box=section("رمز المدير");
+        box.addView(text("لحماية الإعدادات والتصحيح فقط. يُفتح التطبيق دون رمز.",14,Util.NAVY,false));
+        Button pin=action("تغيير رمز المدير",false);pin.setOnClickListener(v->lockPinDialog());box.addView(pin,space());
     }
 
     private void lockPinDialog(){
@@ -429,9 +438,9 @@ public class ShiftActivity extends Activity {
                 String why=Lock.reject(first.getText().toString(),again.getText().toString());
                 if(!why.isEmpty()){Toast.makeText(this,why,Toast.LENGTH_LONG).show();return;}
                 db.setLockPin(first.getText().toString());
-                db.setLockOn(true);
+                db.setLockOn(false);
                 buildSettingsPage();
-                Toast.makeText(this,"حُفظ الرمز وفُعّل القفل",Toast.LENGTH_LONG).show();
+                Toast.makeText(this,"حُفظ رمز المدير",Toast.LENGTH_LONG).show();
             })
             .setNegativeButton("إلغاء",null).show();
     }
@@ -834,13 +843,15 @@ public class ShiftActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     void workspacePage(int selected){showPage(selected);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}
     private void showPage(int selected){
+        if(selected==5&&(ShiftWorkspace.reviewed(db,shiftId)&1)==0){selected=2;Toast.makeText(this,"أكمل مطابقة العامل أولًا",Toast.LENGTH_SHORT).show();}
+        if(selected==6&&(ShiftWorkspace.reviewed(db,shiftId)&3)!=3){selected=(ShiftWorkspace.reviewed(db,shiftId)&1)==0?2:5;Toast.makeText(this,"أكمل مطابقة الصناديق أولًا",Toast.LENGTH_SHORT).show();}
         page=selected;
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
         movementSummary.setVisibility(selected==1?View.VISIBLE:View.GONE);
         for(int i=0;i<pages.length;i++)pages[i].setVisibility(i==selected?View.VISIBLE:View.GONE);
         // شاشة الإعدادات لا تحتاج شريط التنقّل السفلي.
-        if(navBar!=null)navBar.setVisibility(selected==4?View.GONE:View.VISIBLE);
+        if(navBar!=null)navBar.setVisibility(selected==4||selected==3?View.GONE:View.VISIBLE);
         int active=selected==5?1:selected==6?2:selected<=2?0:-1;
         for(int i=0;i<tabs.length;i++){
             tabs[i].setBackgroundTintList(null);
@@ -988,7 +999,7 @@ public class ShiftActivity extends Activity {
     private LinearLayout.LayoutParams space(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(7),0,dp(7));return p;}
     private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(Math.max(12,size));t.setTextColor(color);t.setTextDirection(View.TEXT_DIRECTION_RTL);t.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,1);return t;}
     private TextView heading(String name){TextView t=text(name,26,0xff141922,true);t.setGravity(Gravity.CENTER);t.setPadding(0,dp(20),0,dp(20));return t;}
-    private Button action(String name,boolean primary){Button b=new Button(this);b.setText(name);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(primary?Color.WHITE:Util.NAVY);b.setTypeface(android.graphics.Typeface.DEFAULT,primary?1:0);b.setMinHeight(dp(50));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setStateListAnimator(null);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33FFFFFF),Util.round(primary?Util.ACCENT:Util.ACCENT_SOFT,dp(12)),null));return b;}
+    private Button action(String name,boolean primary){Button b=new Button(this);b.setText(name);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(Util.NAVY);b.setBackgroundTintList(null);b.setTypeface(android.graphics.Typeface.DEFAULT,primary?1:0);b.setMinHeight(dp(50));b.setPadding(dp(12),dp(8),dp(12),dp(8));b.setStateListAnimator(null);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33FFFFFF),Util.round(primary?Util.ACCENT:Util.ACCENT_SOFT,dp(12)),null));return b;}
     private void styleInput(EditText e){e.setTextSize(18);e.setTextColor(Util.NAVY);e.setSingleLine(true);e.setPadding(dp(12),dp(10),dp(12),dp(10));android.graphics.drawable.GradientDrawable bg=Util.round(Color.WHITE,dp(10));bg.setStroke(dp(1),0xffdedfe2);e.setBackground(bg);e.setMinHeight(dp(48));configureNext(e);}
     private void configureNext(EditText input){
         input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
@@ -1394,7 +1405,7 @@ public class ShiftActivity extends Activity {
             LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(12),0,dp(12));
             LinearLayout words=column();words.addView(text(c.getString(2),17,Util.NAVY,true));
             int color="COLLECTION".equals(type)?Util.GREEN:"EXPENSE".equals(type)?0xffa85a1a:Util.RED;
-            TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round("COLLECTION".equals(type)?0xffe7f1e7:0xfffbebdf,dp(8)));words.addView(badge,space());
+            TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round("COLLECTION".equals(type)?0xffE9F4ED:0xfffbebdf,dp(8)));words.addView(badge,space());
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));TextView amount=text(money(c.getDouble(3))+" ر.ي",17,0xff141922,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
             final long movementId=c.getLong(0);final String movementLabel=c.getString(2);
             boolean locked=!"OPEN".equals(db.shiftStatus(shiftId));
@@ -1448,7 +1459,7 @@ public class ShiftActivity extends Activity {
         if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
         if(headerBalance!=null){
             headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
-            headerBalance.setTextColor(!issue.isEmpty()?0xffCFE2FA:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
+            headerBalance.setTextColor(!issue.isEmpty()?0xffE6E6E6:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);
             headerBalance.setContentDescription("باقي الوردية الحالية "+money(bal)+" ريال");
         }
         refreshFuelLitres();
@@ -1643,6 +1654,7 @@ public class ShiftActivity extends Activity {
         startActivity(Intent.createChooser(intent,"حفظ أو مشاركة الوردية"));
     }
     /** يقفل الوردية الحالية بعد حفظها ويبدأ وردية جديدة بعدادات الإغلاق. */
+    void requestPostShift(){closeShift();}
     private void closeShift(){
         if(!saveReadings())return;
         try{ShiftWorkspace.ready(db,shiftId);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();return;}
@@ -1669,11 +1681,12 @@ public class ShiftActivity extends Activity {
         catch(Exception e){new AlertDialog.Builder(this).setTitle("لم تُغلق الوردية")
             .setMessage("لم يُحفظ ترحيل جزئي. راجع السبب وحاول مجددًا:\n"+e.getMessage())
             .setPositiveButton("حسنًا",null).show();return;}
-        // A new shift is created only when the user explicitly opens one.
+        shiftId=db.openSoloShift(workerId);ShiftWorkspace.ensure(db,shiftId);
+        loadReadings();loadMovements();refreshTotals();
 
         String base="تم ترحيل التبويبات الثلاثة وحفظ التقرير الشامل في الأرشيف.";
         if(!posted.isEmpty())base=base+"\n\nرُحّلت الوردية:\n"+posted;
-        showPage(3);
+        showPage(0);
         final String code=db.shiftCode(closed);
         new AlertDialog.Builder(this).setTitle("أُغلقت الوردية  "+code)
             .setMessage(base+"\nتستطيع حفظ تقرير الوردية الآن أو لاحقًا من الأرشيف.")

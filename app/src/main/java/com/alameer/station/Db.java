@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 21;
+    private static final int DB_VERSION = 22;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -91,7 +91,7 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if(oldVersion<21&&newVersion>=21)ShiftWorkspace.create(db);
+        if(oldVersion<22&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=1,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
@@ -482,7 +482,7 @@ public class Db extends SQLiteOpenHelper {
                 approve(shiftId);
                 String result=postShift(shiftId,unified?ShiftWorkspace.box(this,shiftId):cashboxId);
                 journalShift(shiftId);
-                if(unified){ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
+                if(unified){ShiftWorkspace.convertWorkerCash(this,shiftId,before.get("cashbox_entries"));ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
                 return result;
             }finally{closingWorkspace=false;}
         });

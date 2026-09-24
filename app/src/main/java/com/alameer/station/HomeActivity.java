@@ -1,317 +1,45 @@
 package com.alameer.station.shifts;
-
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.PixelFormat;
+import android.database.Cursor;
+import android.graphics.*;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.view.Gravity;
-import android.view.View;
+import android.view.*;
 import android.widget.*;
 
-/** شاشة البداية: مطابقة العامل أو مطابقة الصناديق المحمية بكلمة سر. */
+/** The official ledgers are read-only. The three bottom actions are the entry workflow. */
 public class HomeActivity extends Activity {
-    private Db db;
-
-    @Override protected void onCreate(Bundle state) {
-        super.onCreate(state);
-        db = new Db(this);
-        Db.signIn(Branding.stationName(db));
-        // القفل قبل أي شيء: لا تُبنى الواجهة قبل تجاوزه.
-        if (db.shouldAskLock()) {
-            askLock();
-            return;
-        }
-        built = true;
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        shell.setBackgroundColor(Util.BG);
-        shell.setPadding(dp(14), dp(18), dp(14), dp(12));
-
-        LinearLayout brand = new LinearLayout(this);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        brand.setPadding(dp(16), dp(18), dp(16), dp(18));
-        brand.setBackground(Util.round(Util.NAVY, dp(20)));
-        ImageView mark = new ImageView(this);
-        android.graphics.Bitmap logo = Branding.logo(this);
-        if (logo != null) mark.setImageBitmap(logo); else mark.setImageResource(R.drawable.ic_wardiya_mark);
-        brand.addView(mark, new LinearLayout.LayoutParams(dp(46), dp(46)));
-        LinearLayout words = new LinearLayout(this);
-        words.setOrientation(LinearLayout.VERTICAL);
-        words.setPadding(dp(12), 0, 0, 0);
-        words.addView(text(Branding.stationName(db), 19, Color.WHITE, true));
-        words.addView(text("واجهة المدير", 12, 0xffCFE2FA, true));
-        brand.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
-
-        // الترس انتقل إلى هنا؛ يفتح صفحة الإعدادات مباشرة بدل أن يزحم شاشة العامل.
-        ImageButton gear = new ImageButton(this);
-        gear.setContentDescription("الضبط");
-        gear.setTooltipText("الضبط");
-        gear.setPadding(dp(11), dp(11), dp(11), dp(11));
-        gear.setImageDrawable(new SettingsGear());
-        gear.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x33FFFFFF),
-                Util.round(0x22FFFFFF, dp(23)), Util.round(Color.WHITE, dp(23))));
-        gear.setOnClickListener(v -> {
-            Intent intent = new Intent(this, ShiftActivity.class);
-            intent.putExtra("openSettings", true);
-            startActivity(intent);
-        });
-        brand.addView(gear, new LinearLayout.LayoutParams(dp(46), dp(46)));
-
-        shell.addView(brand);
-
-        TextView welcome = text("اختر ما تريد فتحه", 20, Util.NAVY, true);
-        welcome.setGravity(Gravity.CENTER);
-        welcome.setPadding(0, dp(14), 0, dp(10));
-        shell.addView(welcome);
-
-        // الوردية: إدخال ومطابقة وترحيل في دورة واحدة.
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setGravity(Gravity.CENTER);
-        row1.addView(tile("فتح / متابعة وردية", "مطابقة العامل • الصناديق • المواد", 0,
-                v -> startActivity(new Intent(this, ShiftActivity.class))), cell());
-        row1.addView(tile("لوحة التحكم", "ملخّص الصناديق والمواد والديون", 2,
-                v -> startActivity(new Intent(this, ControlPanelActivity.class))), cell());
-        shell.addView(row1, rowWeight(false));
-
-        LinearLayout row0 = new LinearLayout(this);
-        row0.setGravity(Gravity.CENTER);
-        // أرصدة حيّة تُقرأ من السجلات مباشرة.
-        double cash = db.cashboxesTotal();
-        double debts = db.debtsTotal();
-        double credits = db.creditsTotal();
-        row0.addView(balanceTile("دفتر الصناديق", money(cash) + " ر.ي",
-                "وارد وصادر النقد", cash < 0 ? Util.RED : Util.GREEN, 3,
-                v -> startActivity(LedgerActivity.intent(this,"cashbox_entries"))), cell());
-        cashValue = lastAmount;
-        row0.addView(balanceTile("دفتر الديون", money(debts) + " ر.ي",
-                credits > 0 ? "لهم عندنا " + money(credits) : "ديون وسداد المدينين",
-                debts > 0 ? Util.RED : Util.GREEN, 4,
-                v -> startActivity(LedgerActivity.intent(this,"debt_entries"))), cell());
-        debtValue = lastAmount; debtNote = lastNote;
-        shell.addView(row0, rowWeight(true));
-
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setGravity(Gravity.CENTER);
-        row2.addView(tile("دفتر المخاريج", "مصروفات المحطة", 5,
-                v -> startActivity(LedgerActivity.intent(this,"expense_entries"))), cell());
-        double litres = 0;
-        for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
-        double stockValue = db.stockValueTotal();
-        row2.addView(balanceTile("دفتر المواد", money(litres) + " لتر",
-                stockValue > 0 ? money(stockValue) + " ر.ي" : "وارد وصادر اللترات",
-                Util.NAVY, 6,
-                v -> startActivity(LedgerActivity.intent(this,"material_entries"))), cell());
-        stockText = lastAmount; stockNote = lastNote;
-        shell.addView(row2, rowWeight(true));
-
-        LinearLayout row3 = new LinearLayout(this);
-        row3.setGravity(Gravity.CENTER);
-        double owed = db.supplierBalance();
-        row3.addView(balanceTile("حسابات الموردين",
-                money(owed) + " ر.ي",
-                owed < -0.009 ? "النفط والغاز" : "الحسابات مسدّدة",
-                owed < -0.009 ? Util.RED : Util.GREEN, 9,
-                v -> startActivity(LedgerActivity.intent(this,"supplier_entries"))), cell());
-        supplierValue = lastAmount; supplierNote = lastNote;
-        row3.addView(tile("الأرشيف", "تقارير الورديات المرحّلة", 8,
-                v -> startActivity(new Intent(this, ArchiveActivity.class))), cell());
-        shell.addView(row3, rowWeight(true));
-
-
-        TextView credit = text(Branding.CREDIT, 12, 0xff626970, false);
-        credit.setGravity(Gravity.CENTER);
-        credit.setPadding(0, dp(12), 0, dp(2));
-        shell.addView(credit);
-
-        setContentView(shell);Util.safeInsets(shell);
-        refreshBalances();
-        new AppUpdater(this).check(false);
-    }
-
-    @Override protected void onPause() {
-        super.onPause();
-        // تُسجَّل لحظة المغادرة فقط عند الخروج من التطبيق كله،
-        // لا عند الانتقال إلى شاشة أخرى داخله.
-        if (!isFinishing()) Db.markLeft();
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        if (db.shouldAskLock()) { askLock(); return; }
-        askingLock = false;
-        // فُتح التطبيق مقفلًا فلم تُبنَ الواجهة؛ تُبنى الآن مرة واحدة.
-        if (!built) { built = true; recreate(); return; }
-        recreateIfBrandChanged();
-        refreshBalances();
-    }
-
-    private boolean askingLock = false;
-    private boolean built = false;
-
-    /** يفتح شاشة القفل مرة واحدة فقط، فلا تتوالد الشاشات. */
-    private void askLock() {
-        if (askingLock) return;
-        askingLock = true;
-        startActivity(new Intent(this, LockActivity.class));
-    }
-
-    /** يحدّث أرقام البطاقات بعد العودة من شاشة عدّلت الأرصدة. */
-    private void refreshBalances() {
-        if (cashValue == null) return;
-        double cash = db.cashboxesTotal();
-        // الرصيد يظهر كما هو، والعجز يُميَّز بلونه.
-        cashValue.setText(money(cash) + " ر.ي");
-        cashValue.setTextColor(cash < -0.009 ? Util.RED : Util.GREEN);
-
-        double debts = db.debtsTotal();
-        double credits = db.creditsTotal();
-        double netDebt = debts - credits;
-        debtValue.setText(money(netDebt) + " ر.ي");
-        debtValue.setTextColor(netDebt < -0.009 ? Util.RED : Util.GREEN);
-        debtNote.setText(credits > 0
-                ? "لنا " + money(debts) + " • علينا " + money(credits)
-                : "ديون وسداد المدينين");
-
-        double litres = 0;
-        for (String m : Db.MATERIALS) litres += Math.max(0, db.materialSummary(m)[3]);
-        double value = db.stockValueTotal();
-        stockText.setText(money(litres) + " لتر");
-        stockNote.setText(value > 0 ? money(value) + " ر.ي" : "وارد وصادر اللترات");
-
-        double owed = db.supplierBalance();
-        supplierValue.setText(money(owed) + " ر.ي");
-        supplierValue.setTextColor(owed < -0.009 ? Util.RED : Util.GREEN);
-        supplierNote.setText(owed < -0.009 ? "النفط والغاز" : "الحسابات مسدّدة");
-    }
-
-    private TextView cashValue, debtValue, debtNote, stockText, stockNote, supplierValue, supplierNote;
-
-    private String lastBrand = null;
-    private void recreateIfBrandChanged() {
-        String now = Branding.stationName(db);
-        if (lastBrand != null && !lastBrand.equals(now)) recreate();
-        lastBrand = now;
-    }
-
-    /** بطاقة كبيرة قابلة للنقر تمثّل أحد المدخلين. */
-    /** البطاقة تملأ ارتفاع صفّها كاملًا حتى تبقى الشاشة بلا تمرير. */
-    private LinearLayout.LayoutParams cell() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1);
-        p.setMargins(dp(5), 0, dp(5), 0);
-        return p;
-    }
-
-    /** الصفوف الثلاثة تتقاسم ما تبقّى من الشاشة بالتساوي. */
-    private LinearLayout.LayoutParams rowWeight(boolean gap) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 0, 1);
-        p.setMargins(0, gap ? dp(10) : 0, 0, 0);
-        return p;
-    }
-
-    /** بطاقة تعرض رصيدًا بارزًا تحت اسمها بدل الوصف. */
-    private TextView lastAmount, lastNote;
-
-    private LinearLayout balanceTile(String title, String value, String note, int tint,
-                                     int icon, View.OnClickListener action) {
-        LinearLayout box = tile(title, note, icon, action);
-        lastNote = (TextView) box.getChildAt(box.getChildCount() - 1);
-        TextView amount = text(value, 17, tint, true);
-        amount.setGravity(Gravity.CENTER);
-        amount.setTextDirection(View.TEXT_DIRECTION_LTR);
-        amount.setMaxLines(1);
-        // الرصيد يوضع بين الاسم والوصف ليكون أول ما تقع عليه العين.
-        box.addView(amount, box.getChildCount() - 1,
-                new LinearLayout.LayoutParams(-1, -2));
-        lastAmount = amount;
-        return box;
-    }
-
-    private LinearLayout tile(String title, String note, int icon, View.OnClickListener action) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER);
-        box.setPadding(dp(8), dp(10), dp(8), dp(10));
-        box.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x22000000), Util.round(Color.WHITE, dp(20)), null));
-        box.setElevation(dp(3));
-        box.setClickable(true);
-        box.setOnClickListener(action);
-
-        FrameLayout disc = new FrameLayout(this);
-        disc.setBackground(Util.round(Util.ACCENT_SOFT, dp(28)));
-        ImageView art = new ImageView(this);
-        HomeIcon drawable = new HomeIcon(icon);
-        drawable.setBounds(0, 0, dp(32), dp(32));
-        art.setImageDrawable(drawable);
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(dp(32), dp(32));
-        ip.gravity = Gravity.CENTER;
-        disc.addView(art, ip);
-        box.addView(disc, new LinearLayout.LayoutParams(dp(56), dp(56)));
-
-        TextView name = text(title, 15, Util.NAVY, true);
-        name.setGravity(Gravity.CENTER);
-        name.setPadding(0, dp(8), 0, dp(2));
-        name.setMaxLines(1);
-        box.addView(name, new LinearLayout.LayoutParams(-1, -2));
-
-        TextView caption = text(note, 11, 0xff626970, false);
-        caption.setGravity(Gravity.CENTER);
-        caption.setMaxLines(2);
-        caption.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        box.addView(caption, new LinearLayout.LayoutParams(-1, -2));
-
-        return box;
-    }
-
-    private TextView text(String value, int size, int color, boolean bold) {
-        TextView t = new TextView(this);
-        t.setText(value);
-        t.setTextSize(Math.max(12,size));
-        t.setTextColor(color);
-        t.setTextDirection(View.TEXT_DIRECTION_RTL);
-        if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, 1);
-        return t;
-    }
-
-    /** ترس الضبط الأبيض في ترويسة الشاشة. */
-    private static class SettingsGear extends Drawable {
-        final Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG);
-        public void draw(Canvas c) {
-            c.save();
-            c.translate(getBounds().left, getBounds().top);
-            c.scale(getBounds().width() / 24f, getBounds().height() / 24f);
-            ink.setColor(Color.WHITE);
-            ink.setStyle(Paint.Style.STROKE);
-            ink.setStrokeWidth(2.1f);
-            ink.setStrokeCap(Paint.Cap.ROUND);
-            c.drawCircle(12, 12, 6.6f, ink);
-            c.drawCircle(12, 12, 2.7f, ink);
-            for (int i = 0; i < 8; i++) {
-                double a = Math.PI * i / 4;
-                c.drawLine(12 + (float) Math.cos(a) * 6.6f, 12 + (float) Math.sin(a) * 6.6f,
-                        12 + (float) Math.cos(a) * 9.4f, 12 + (float) Math.sin(a) * 9.4f, ink);
-            }
-            c.restore();
-        }
-        public void setAlpha(int a) { ink.setAlpha(a); }
-        public void setColorFilter(android.graphics.ColorFilter f) { ink.setColorFilter(f); }
-        public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-    }
-
-    private String money(double value) {
-        return String.format(java.util.Locale.US,
-                value == Math.rint(value) ? "%,.0f" : "%,.2f", value);
-    }
-
-    private int dp(int value) { return (int) (value * getResources().getDisplayMetrics().density); }
-
-    /** أيقونتا الشاشة: طرمبة للعامل وصندوق نقدي للمدير. */
+ private Db db;private LinearLayout nav;
+ @Override protected void onCreate(Bundle state){super.onCreate(state);db=new Db(this);Db.signIn(Branding.stationName(db));build();new AppUpdater(this).check(false);}
+ private int dp(int n){return StationUi.dp(this,n);}
+ private void build(){
+  LinearLayout shell=StationUi.column(this);shell.setBackgroundColor(Util.BG);shell.setPadding(dp(16),dp(12),dp(16),dp(10));
+  LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(4),dp(8),dp(4),dp(8));head.setBackground(Util.round(Color.WHITE,dp(16)));
+  head.addView(StationUi.button(this,"▥\nلوحة التحكم",false,()->startActivity(new Intent(this,ControlPanelActivity.class))),new LinearLayout.LayoutParams(dp(82),-2));
+  TextView title=StationUi.text(this,Branding.stationName(db),21,true);title.setGravity(Gravity.CENTER);title.setMaxLines(2);head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+  head.addView(StationUi.button(this,"⚙\nالإعدادات",false,()->{Intent i=new Intent(this,ShiftActivity.class);i.putExtra("openSettings",true);startActivity(i);}),new LinearLayout.LayoutParams(dp(82),-2));shell.addView(head);
+  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout grid=StationUi.column(this);grid.setGravity(Gravity.CENTER_VERTICAL);grid.setPadding(0,dp(14),0,dp(14));
+  TextView label=StationUi.text(this,"الدفاتر الرسمية",16,true);label.setGravity(Gravity.CENTER);grid.addView(label,StationUi.space(this));
+  LinearLayout row1=new LinearLayout(this);row1.addView(tile("العملاء","الأرصدة وكشوف الحساب",4,()->ledger("debt_entries")),cell());row1.addView(tile("المواد","المخزون وحسابات الشركات",6,()->ledger("material_entries")),cell());grid.addView(row1);
+  LinearLayout row2=new LinearLayout(this);row2.addView(tile("الصناديق","حركة النقد والأرصدة",3,()->ledger("cashbox_entries")),cell());row2.addView(tile("المصاريف","البنود وكشوف المصروفات",5,()->ledger("expense_entries")),cell());grid.addView(row2,StationUi.space(this));
+  LinearLayout archive=tile("الأرشيف","تفاصيل الورديات المرحّلة وتقاريرها",8,()->startActivity(new Intent(this,ArchiveActivity.class)));grid.addView(archive,new LinearLayout.LayoutParams(-1,dp(130)));
+  scroll.addView(grid);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));nav=new LinearLayout(this);nav.setPadding(dp(2),dp(6),dp(2),dp(6));nav.setBackground(Util.round(Color.WHITE,dp(16)));shell.addView(nav);
+  setContentView(shell);Util.safeInsets(shell);refreshNavigation();
+ }
+ private void ledger(String table){startActivity(LedgerActivity.intent(this,table));}
+ private LinearLayout.LayoutParams cell(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(156),1);p.setMargins(dp(4),0,dp(4),0);return p;}
+ private LinearLayout tile(String title,String note,int kind,Runnable action){
+  LinearLayout box=StationUi.card(this);box.setGravity(Gravity.CENTER);box.setOnClickListener(v->action.run());box.setContentDescription(title);box.setFocusable(true);
+  ImageView icon=new ImageView(this);icon.setImageDrawable(new HomeIcon(kind));icon.setPadding(dp(12),dp(12),dp(12),dp(12));icon.setBackground(Util.round(Util.ACCENT,dp(28)));box.addView(icon,new LinearLayout.LayoutParams(dp(56),dp(56)));
+  TextView name=StationUi.text(this,title,18,true);name.setGravity(Gravity.CENTER);name.setPadding(0,dp(7),0,dp(3));box.addView(name);TextView subtitle=StationUi.text(this,note,12,false);subtitle.setGravity(Gravity.CENTER);subtitle.setTextColor(0xff686868);box.addView(subtitle);return box;
+ }
+ private void refreshNavigation(){if(nav==null)return;nav.removeAllViews();int reviewed=0;try(Cursor c=db.getReadableDatabase().rawQuery("SELECT w.reviewed FROM shift_workspace w JOIN shifts s ON s.id=w.shift_id WHERE s.status='OPEN' ORDER BY s.id LIMIT 1",null)){if(c.moveToFirst())reviewed=c.getInt(0);}int stage=(reviewed&1)==0?0:(reviewed&2)==0?1:2;
+  String[] names={"مطابقة العامل","الصناديق","المواد"};int[] pages={0,5,6};
+  for(int k=0;k<3;k++){final int page=pages[k];Button b=StationUi.button(this,names[k],k==stage,()->startActivity(new Intent(this,ShiftActivity.class).putExtra("startPage",page)));b.setTextSize(13);b.setSelected(k==stage);HomeIcon art=new HomeIcon(k==0?0:k==1?3:6);art.setBounds(0,0,dp(24),dp(24));b.setCompoundDrawables(null,art,null,null);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(78),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(b,p);}
+ }
+ @Override protected void onResume(){super.onResume();refreshNavigation();}
+ @Override protected void onDestroy(){if(db!=null)db.close();super.onDestroy();}
     private static class HomeIcon extends Drawable {
         final int kind;
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
