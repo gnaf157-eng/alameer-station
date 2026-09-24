@@ -15,16 +15,16 @@ public class HomeActivity extends Activity {
  private int dp(int n){return StationUi.dp(this,n);}
  private void build(){
   LinearLayout shell=StationUi.column(this);shell.setBackgroundColor(Util.BG);shell.setPadding(dp(16),dp(12),dp(16),dp(10));
-  LinearLayout head=new LinearLayout(this);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(4),dp(8),dp(4),dp(8));head.setBackground(Util.round(Color.WHITE,dp(16)));
+  LinearLayout head=new LinearLayout(this);head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(4),dp(8),dp(4),dp(8));head.setBackground(Util.round(Color.WHITE,dp(16)));
   head.addView(StationUi.button(this,"▥\nلوحة التحكم",false,()->startActivity(new Intent(this,ControlPanelActivity.class))),new LinearLayout.LayoutParams(dp(82),-2));
   TextView title=StationUi.text(this,Branding.stationName(db),21,true);title.setGravity(Gravity.CENTER);title.setMaxLines(2);head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
   head.addView(StationUi.button(this,"⚙\nالإعدادات",false,()->{Intent i=new Intent(this,ShiftActivity.class);i.putExtra("openSettings",true);startActivity(i);}),new LinearLayout.LayoutParams(dp(82),-2));shell.addView(head);
   ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout grid=StationUi.column(this);grid.setGravity(Gravity.CENTER_VERTICAL);grid.setPadding(0,dp(14),0,dp(14));
   TextView label=StationUi.text(this,"الدفاتر الرسمية",16,true);label.setGravity(Gravity.CENTER);grid.addView(label,StationUi.space(this));
-  LinearLayout row1=new LinearLayout(this);row1.addView(tile("العملاء","الأرصدة وكشوف الحساب",4,()->ledger("debt_entries")),cell());row1.addView(tile("المواد","المخزون وحسابات الشركات",6,()->ledger("material_entries")),cell());grid.addView(row1);
-  LinearLayout row2=new LinearLayout(this);row2.addView(tile("الصناديق","حركة النقد والأرصدة",3,()->ledger("cashbox_entries")),cell());row2.addView(tile("المصاريف","البنود وكشوف المصروفات",5,()->ledger("expense_entries")),cell());grid.addView(row2,StationUi.space(this));
-  LinearLayout archive=tile("الأرشيف","تفاصيل الورديات المرحّلة وتقاريرها",8,()->startActivity(new Intent(this,ArchiveActivity.class)));grid.addView(archive,new LinearLayout.LayoutParams(-1,dp(130)));
-  scroll.addView(grid);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));nav=new LinearLayout(this);nav.setPadding(dp(2),dp(6),dp(2),dp(6));nav.setBackground(Util.round(Color.WHITE,dp(16)));shell.addView(nav);
+  LinearLayout row1=new LinearLayout(this);row1.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);row1.addView(tile("العملاء","الأرصدة وكشوف الحساب",4,()->ledger("debt_entries")),cell());row1.addView(tile("المواد","المخزون وحسابات الشركات",6,()->ledger("material_entries")),cell());grid.addView(row1);
+  LinearLayout row2=new LinearLayout(this);row2.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);row2.addView(tile("الصناديق","حركة النقد والأرصدة",3,()->ledger("cashbox_entries")),cell());row2.addView(tile("المصاريف","البنود وكشوف المصروفات",5,()->ledger("expense_entries")),cell());grid.addView(row2,StationUi.space(this));
+  LinearLayout archive=tile("الأرشيف","تفاصيل الورديات المرحّلة وتقاريرها",8,()->startActivity(new Intent(this,ArchiveActivity.class)));archive.getChildAt(2).setVisibility(View.GONE);grid.addView(archive,new LinearLayout.LayoutParams(-1,dp(130)));
+  scroll.addView(grid);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));nav=new LinearLayout(this);nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);nav.setPadding(dp(2),dp(6),dp(2),dp(6));nav.setBackground(Util.round(Color.WHITE,dp(16)));shell.addView(nav);
   setContentView(shell);Util.safeInsets(shell);refreshNavigation();
  }
  private void ledger(String table){startActivity(LedgerActivity.intent(this,table));}

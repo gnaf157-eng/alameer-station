@@ -79,7 +79,7 @@ public final class ShiftWorkspace {
                         if(freight>0){long driver=customer(db,detail.getString(0));db.addDebtEntry(driver,"PAID",freight,"أجرة نقل — "+note,date,id);
                             db.postEntry(Journal.simple("أجرة نقل — "+note,date,"SHIFT_FREIGHT",id,Journal.INVENTORY,Journal.RECEIVABLE,freight,detail.getString(0)));}
                     }
-                }else if(k.equals("EXPENSE")){db.addExpense(c.getString(7).split(" — ",2)[0],a,note,date,0,box);
+                }else if(k.equals("EXPENSE")){db.addExpense(c.getString(7).split(" — ",2)[0],a,note,date,box,0);
                 }else if(section==1){
                     db.addCashTransaction(box,k.equals("COLLECTION")?"IN":"OUT",a,note,date,"YER",k.equals("COLLECTION")||k.equals("LOAN")?"CUSTOMER":k,target);
                 }else if(k.equals("BUY_CREDIT"))db.buyFromSupplier(mat,q,a/q,note,date);

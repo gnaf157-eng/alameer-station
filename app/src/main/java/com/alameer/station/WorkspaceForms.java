@@ -50,9 +50,14 @@ final class WorkspaceForms {
  void countRow(LinearLayout parent,String account,String label,double expected,String unit){
   parent.addView(text(label+" • المحسوب بعد الحركات: "+Calc.money(expected)+" "+unit,15));
   EditText actual=number("الرصيد الفعلي — "+unit);Double previous=ShiftWorkspace.counted(db,shift,section,account);if(previous!=null)actual.setText(Double.toString(previous));parent.addView(actual,StationUi.space(a));
-  TextView difference=text("",13);parent.addView(difference);Runnable update=()->{String raw=actual.getText().toString().trim();if(raw.isEmpty()){difference.setText("أدخل الرصيد الفعلي للمطابقة");difference.setTextColor(Util.NAVY);return;}double gap=Calc.number(raw)-expected;difference.setText("الفرق: "+Calc.money(gap)+" "+unit);difference.setTextColor(Math.abs(gap)<=0.0000001?Util.GREEN:Util.RED);};
-  actual.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int co,int af){}public void onTextChanged(CharSequence s,int st,int be,int co){}public void afterTextChanged(Editable e){update.run();String raw=e.toString().trim();if(raw.isEmpty()){db.getWritableDatabase().delete("shift_counts","shift_id=? AND section=? AND account=?",new String[]{""+shift,""+section,account});db.getWritableDatabase().execSQL("UPDATE shift_workspace SET reviewed=reviewed & ~? WHERE shift_id=?",new Object[]{section==1?6:4,shift});}else try{ShiftWorkspace.count(db,shift,section,account,Calc.number(raw));}catch(RuntimeException ignored){}}});update.run();
+  TextView difference=text("",13);parent.addView(difference);
+  Runnable update=()->{Double value=validCount(actual.getText().toString());if(value==null){difference.setText("أدخل رقمًا صحيحًا للجرد الفعلي");difference.setTextColor(Util.NAVY);}else{double gap=value-expected;difference.setText("الفرق: "+Calc.money(gap)+" "+unit);difference.setTextColor(Math.abs(gap)<=0.0000001?Util.GREEN:Util.RED);}};
+  actual.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int co,int af){}public void onTextChanged(CharSequence s,int st,int be,int co){}public void afterTextChanged(Editable e){update.run();Double value=validCount(e.toString());if(value==null){db.getWritableDatabase().delete("shift_counts","shift_id=? AND section=? AND account=?",new String[]{""+shift,""+section,account});db.getWritableDatabase().execSQL("UPDATE shift_workspace SET reviewed=reviewed & ~? WHERE shift_id=?",new Object[]{section==1?6:4,shift});}else ShiftWorkspace.count(db,shift,section,account,value);}});update.run();
 
+ }
+ static Double validCount(String raw){
+  StringBuilder normalized=new StringBuilder();for(char ch:raw.trim().toCharArray()){if(ch>='٠'&&ch<='٩')normalized.append((char)('0'+ch-'٠'));else if(ch>='۰'&&ch<='۹')normalized.append((char)('0'+ch-'۰'));else if(ch=='٫')normalized.append('.');else if(ch!=','&&ch!='٬')normalized.append(ch);}
+  String value=normalized.toString();if(!value.matches("([0-9]+(\\.[0-9]*)?|\\.[0-9]+)"))return null;try{double n=Double.parseDouble(value);return Double.isFinite(n)&&n>=0?n:null;}catch(NumberFormatException e){return null;}
  }
  LinearLayout form(){LinearLayout f=StationUi.column(a);f.setPadding(dp(18),dp(10),dp(18),dp(10));return f;}
  void label(LinearLayout f,String s){StationUi.label(a,f,s);}

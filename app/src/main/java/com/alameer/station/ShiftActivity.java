@@ -25,7 +25,6 @@ public class ShiftActivity extends Activity {
         new AppUpdater(this).check(false);
         if(askNameOnFirstRun){
             db.setSetting("name_set","1");
-            showPage(4);
             nameDialog();
         }
     }
@@ -187,14 +186,12 @@ public class ShiftActivity extends Activity {
         reconciliationLitresBox=panel(Color.WHITE);pages[2].addView(reconciliationLitresBox,space());
         Button details=action("مراجعة التفاصيل  ▤",false);details.setOnClickListener(v->showPage(0));pages[2].addView(details,space());
         TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
-        Button pdf=action("حفظ الوردية PDF  ▤",true);pdf.setOnClickListener(v->exportPdf());pages[2].addView(pdf,space());
-        Button excel=action("مشاركة Excel",true);excel.setOnClickListener(v->exportExcel());pages[2].addView(excel,space());
         Button confirm=action("تأكيد مراجعة مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[2].addView(confirm,space());
 
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
         buildSettingsPage();
-        LinearLayout nav=new LinearLayout(this);
+        LinearLayout nav=new LinearLayout(this);nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         navBar=nav;
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6),dp(8),dp(6),dp(8));
@@ -1456,7 +1453,7 @@ public class ShiftActivity extends Activity {
         buildTypeTiles();
         double[] values={visibleSales(),db.total(shiftId,"COLLECTION"),db.total(shiftId,"CASH"),db.total(shiftId,"DEBT"),db.total(shiftId,"EXPENSE")};
         double bal=Calc.balance(values[0],values[1],values[2],values[3],values[4]);String issue=db.validateShift(shiftId);
-        if(hasReadingDrafts())issue="مسودة قراءات — احفظ لتأكيد الحساب";
+        if(hasReadingDrafts())issue="قراءات غير مكتملة — أكملها لتأكيد الحساب";
         if(headerBalance!=null){
             headerBalance.setText("الباقي"+System.lineSeparator()+money(bal)+" ر.ي"+(issue.isEmpty()?"":System.lineSeparator()+"غير مكتملة"));
             headerBalance.setTextColor(!issue.isEmpty()?0xffE6E6E6:Math.abs(bal)<0.01?0xffb9e5bd:0xffffb8b8);

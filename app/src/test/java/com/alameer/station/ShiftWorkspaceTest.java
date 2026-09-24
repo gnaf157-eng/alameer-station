@@ -70,4 +70,7 @@ public class ShiftWorkspaceTest {
   ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=7");db.getWritableDatabase().setVersion(21);db.close();db=new Db(context);assertEquals(22,db.getReadableDatabase().getVersion());assertEquals(1,count("shift_operations"));assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);refuse(()->ShiftWorkspace.review(db,shift,1));
  }
 
+ @Test public void countInputDoesNotTreatInvalidTextAsZero(){assertNull(WorkspaceForms.validCount("."));assertNull(WorkspaceForms.validCount("1..0"));assertNull(WorkspaceForms.validCount(""));assertEquals(12.5,WorkspaceForms.validCount("١٢٫٥"),0.00001);assertEquals(0,WorkspaceForms.validCount("0"),0.00001);}
+ @Test public void workerNameDoesNotRewriteEarlierReports(){ShiftWorkspace.nameWorker(db,shift,"سالم");review();close();long next=db.openSoloShift(db.soloWorkerId());ShiftWorkspace.ensure(db,next);ShiftWorkspace.nameWorker(db,next,"علي");assertEquals("سالم",ShiftWorkspace.workerName(db,shift));assertEquals("علي",ShiftWorkspace.workerName(db,next));}
+
 }

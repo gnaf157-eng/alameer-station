@@ -36,7 +36,7 @@ public class ArchiveActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("الأرشيف", 19, Color.WHITE, true));
-        words.addView(text("الورديات المرحّلة — فتح PDF أو مشاركة Excel", 11, 0xffCFE2FA, false));
+        words.addView(text("الورديات المرحّلة — فتح PDF أو مشاركة Excel", 11, 0xffE6E6E6, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
