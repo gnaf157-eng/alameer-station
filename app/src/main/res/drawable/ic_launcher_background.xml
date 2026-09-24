@@ -2,9 +2,9 @@
 <!-- خلفية زرقاء متدرّجة كما في التصميم المطلوب. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
-        android:startColor="#1B6FE0"
-        android:centerColor="#1552C7"
-        android:endColor="#0E3FA8"
+        android:startColor="#232323"
+        android:centerColor="#232323"
+        android:endColor="#232323"
         android:angle="315"
         android:type="linear" />
 </shape>

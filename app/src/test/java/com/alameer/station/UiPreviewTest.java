@@ -22,6 +22,7 @@ public class UiPreviewTest {
   org.robolectric.android.controller.ActivityController<ShiftActivity> work=Robolectric.buildActivity(ShiftActivity.class).setup();work.get().workspacePage(5);assertEquals(5,work.get().page);capture(work.get(),"cash");work.get().workspacePage(6);assertEquals(6,work.get().page);capture(work.get(),"materials");work.pause().stop().destroy();db.close();context.deleteDatabase("alameer_station.db");
  }
  private void capture(Activity a,String name) throws Exception {
+  Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
   View v=a.findViewById(android.R.id.content);v.measure(View.MeasureSpec.makeMeasureSpec(360,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(752,View.MeasureSpec.EXACTLY));v.layout(0,0,360,752);
   Bitmap b=Bitmap.createBitmap(360,752,Bitmap.Config.ARGB_8888);v.draw(new Canvas(b));File dir=new File("build/reports/ui");assertTrue(dir.isDirectory()||dir.mkdirs());try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){assertTrue(b.compress(Bitmap.CompressFormat.PNG,100,out));}b.recycle();
  }
