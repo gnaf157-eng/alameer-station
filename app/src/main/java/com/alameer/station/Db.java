@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 22;
+    private static final int DB_VERSION = 23;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -91,7 +91,7 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if(oldVersion<22&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=1,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
+        if(oldVersion<23&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=1,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
@@ -584,7 +584,7 @@ public class Db extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();v.put("name",clean);v.put("opening",opening);v.put("created_at",Util.now());
         long id=getWritableDatabase().insertWithOnConflict("cashboxes",null,v,SQLiteDatabase.CONFLICT_IGNORE);
         if(id==-1)throw new IllegalArgumentException("يوجد صندوق بهذا الاسم");
-        return id;
+        CashAccounts.seed(getWritableDatabase(),id,opening);return id;
     }
     public void renameCashbox(long id,String name){
         String clean=name.trim();
@@ -599,8 +599,7 @@ public class Db extends SQLiteOpenHelper {
     private void setCashboxOpeningAtomic(long id,double opening){
         if(openingPosted())throw new IllegalStateException("الأرصدة الافتتاحية معتمدة؛ سجّل حركة تصحيح بدل تغيير الأصل.");
         if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
-        ContentValues v=new ContentValues();v.put("opening",opening);
-        getWritableDatabase().update("cashboxes",v,"id=?",new String[]{String.valueOf(id)});
+        CashAccounts.setOpening(this,id,ShiftWorkspace.boxCurrency(this,id),opening/ShiftWorkspace.openingRate(this,id));
     }
     public void setCashboxActive(long id,boolean active){
         ContentValues v=new ContentValues();v.put("active",active?1:0);
@@ -2083,10 +2082,11 @@ public class Db extends SQLiteOpenHelper {
             for(String t:new String[]{"movements","readings","shifts","cashbox_entries",
                     "debt_entries","expense_entries","material_entries","dip_readings",
                     "supplier_entries","journal_lines","journal","posted_shifts",
-                    "period_locks","ledger_audit","audit_log"}){
+                    "period_locks","ledger_audit","audit_log","shift_workspace","shift_operations","shift_counts","shift_links","settlement_links"}){
                 try{db.delete(t,null,null);}catch(Exception ignored){}
             }
             if(!keepOpenings){
+                db.execSQL("UPDATE cashbox_openings SET native_amount=0,yer_amount=0");
                 ContentValues zero=new ContentValues();
                 zero.put("opening",0);
                 try{db.update("cashboxes",zero,null,null);}catch(Exception ignored){}

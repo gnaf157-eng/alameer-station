@@ -120,13 +120,13 @@ final class ReportTable {
                         if(kind.equals("SUPPLIER")||kind.equals("COMPANY_PAYMENT"))counterpart+=" / "+(c.getLong(3)==1?"شركة الغاز":"شركة النفط");
                         add(false,ShiftWorkspace.label(kind),c.getString(7),counterpart,section==2?c.getDouble(5):"",c.getDouble(6));total+=c.getDouble(6);
                         if(kind.equals("FUEL_SUPPLY"))try(Cursor detail=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){detail.moveToFirst();add(false,"أجرة نقل مستحقة",detail.getString(0),"حساب السائق","",detail.getDouble(1));}
-                        if(c.getLong(2)>0)try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT rate FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){fx.moveToFirst();String currency=ShiftWorkspace.boxCurrency(db,c.getLong(2));add(false,"المبلغ الأصلي",c.getDouble(6)/fx.getDouble(0),Db.currencyName(currency),"سعر التحويل",fx.getDouble(0));}
+                        if(c.getLong(2)>0)try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT rate,currency FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){fx.moveToFirst();String currency=fx.getString(1);add(false,"المبلغ الأصلي",c.getDouble(6)/fx.getDouble(0),Db.currencyName(currency),"سعر التحويل",fx.getDouble(0));}
                     }
                 }
                 add(true,"مجموع قيم الحركات (ليس صافي الرصيد)","","","",total);
             }
             add(true,"الجرد الفعلي","الحساب","المحسوب","الفعلي","الفرق");
-            try(Cursor counts=db.getReadableDatabase().rawQuery("SELECT section,account,expected,actual FROM shift_counts WHERE shift_id=? ORDER BY section,account",new String[]{""+id})){while(counts.moveToNext()){String name=counts.getInt(0)==1?cashboxName(db,Long.parseLong(counts.getString(1))):counts.getString(1);add(false,counts.getInt(0)==1?"نقد":"لترات",name,counts.getDouble(2),counts.getDouble(3),counts.getDouble(3)-counts.getDouble(2));}}
+            try(Cursor counts=db.getReadableDatabase().rawQuery("SELECT section,account,expected,actual FROM shift_counts WHERE shift_id=? ORDER BY section,account",new String[]{""+id})){while(counts.moveToNext()){String name=counts.getInt(0)==1?cashboxName(db,CashAccounts.box(counts.getString(1)))+" • "+Db.currencyName(CashAccounts.code(db,counts.getString(1))):counts.getString(1);add(false,counts.getInt(0)==1?"نقد":"لترات",name,counts.getDouble(2),counts.getDouble(3),counts.getDouble(3)-counts.getDouble(2));}}
 
         }
     }

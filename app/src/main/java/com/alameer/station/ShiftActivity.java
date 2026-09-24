@@ -395,12 +395,24 @@ public class ShiftActivity extends Activity {
         fx.addView(text("تُحفظ أسعار التحويل مع كل حركة؛ تغيير السعر لا يغيّر الحركات السابقة.",13,Util.NAVY,false));
         for(String code:new String[]{"SAR","USD"}){Button edit=action(Db.currencyName(code)+" = "+money(db.rate(code))+" ر.ي",false);edit.setOnClickListener(v->numberDialog("سعر "+Db.currencyName(code),db.rate(code),false,value->db.setRate(code,value)));fx.addView(edit,space());}
         LinearLayout boxes=section("تعريف الصناديق");
-        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1 ORDER BY name",null)){while(c.moveToNext())boxes.addView(text(c.getString(1)+" • "+Db.currencyName(ShiftWorkspace.boxCurrency(db,c.getLong(0))),15,Util.NAVY,false));}
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1 ORDER BY name",null)){while(c.moveToNext()){final long id=c.getLong(0);Button edit=action(c.getString(1)+" • تعديل الأرصدة الافتتاحية",false);edit.setOnClickListener(v->cashOpeningDialog(id));boxes.addView(edit,space());}}
         Button add=action("＋ تعريف صندوق",true);add.setOnClickListener(v->newCashboxDialog());boxes.addView(add,space());
         LinearLayout opening=section("الأرصدة الافتتاحية");
-        opening.addView(text("تُعتمد مرة واحدة عند بدء الحسابات.",13,Util.NAVY,false));
+        opening.addView(text("يمكن إدخال وتعديل رصيد كل صندوق وعملة من تعريف الصناديق أعلاه. يحفظ سجل التدقيق كل تعديل، ويُقيد فرقه عند تعديل رصيد معتمد.",13,Util.NAVY,false));
         Button initial=action("تقييد الأرصدة الافتتاحية",false);initial.setOnClickListener(v->openingDialog());opening.addView(initial,space());
     }
+    void cashOpeningDialog(long box){
+        LinearLayout form=column();form.setPadding(dp(20),dp(12),dp(20),dp(12));
+        form.addView(text(CashAccounts.name(db,box),20,Util.NAVY,true));
+        Spinner currency=new Spinner(this);ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,Db.CURRENCY_NAMES);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);currency.setAdapter(adapter);currency.setTag("opening-currency");form.addView(currency,new LinearLayout.LayoutParams(-1,dp(48)));
+        EditText amount=new EditText(this);styleInput(amount);amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL|InputType.TYPE_NUMBER_FLAG_SIGNED);amount.setTag("opening-amount");form.addView(text("الرصيد الافتتاحي",14,Util.NAVY,true));form.addView(amount);
+        TextView info=text("",14,Util.NAVY,false);form.addView(info);
+        Runnable load=()->{String code=Db.CURRENCIES[currency.getSelectedItemPosition()];double[] opening=CashAccounts.opening(db,box,code);amount.setText(Double.toString(opening[0]));info.setText("الرصيد الحالي: "+Calc.money(CashAccounts.posted(db,box,code))+" "+Db.currencyName(code)+"\nسعر التحويل المحفوظ: "+Calc.money(opening[1])+" ر.ي");};
+        CashEntryCard.changed(currency,load);currency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(ShiftWorkspace.boxCurrency(db,box)));load.run();
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("تعديل الرصيد الافتتاحي").setView(form).setPositiveButton("حفظ التعديل",null).setNegativeButton("إلغاء",null).create();
+        d.setOnShowListener(x->d.getButton(-1).setOnClickListener(v->{try{String raw=amount.getText().toString().trim();boolean negative=raw.startsWith("-");Double n=WorkspaceForms.validCount(negative?raw.substring(1):raw);if(n==null)throw new IllegalArgumentException("أدخل رقمًا صحيحًا");CashAccounts.setOpening(db,box,Db.CURRENCIES[currency.getSelectedItemPosition()],negative?-n:n);d.dismiss();buildSettingsPage();Toast.makeText(this,"حُفظ الرصيد الافتتاحي",Toast.LENGTH_SHORT).show();}catch(RuntimeException e){amount.setError(e.getMessage());}}));d.show();
+    }
+
     private void newCashboxDialog(){
         LinearLayout f=column();f.setPadding(dp(20),dp(12),dp(20),dp(12));
         EditText name=new EditText(this);styleInput(name);name.setHint("اسم الصندوق");f.addView(name);
@@ -1346,7 +1358,7 @@ public class ShiftActivity extends Activity {
     }
 
     /** أيقونات أنواع الحركات الأربعة. */
-    private class MoveIcon extends android.graphics.drawable.Drawable{
+    static class MoveIcon extends android.graphics.drawable.Drawable{
         final int kind,tint;final android.graphics.Paint paint=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         MoveIcon(int kind,int tint){this.kind=kind;this.tint=tint;}
         public void draw(android.graphics.Canvas c){
@@ -1376,6 +1388,8 @@ public class ShiftActivity extends Activity {
                 c.drawLine(19,6,21.5f,8.5f,paint);
                 c.drawLine(19,6,14.5f,10.5f,paint);
                 c.drawLine(21.5f,8.5f,17,13,paint);
+            }else if(kind==4){
+                c.drawLine(3,7,21,7,paint);c.drawLine(17,3,21,7,paint);c.drawLine(17,11,21,7,paint);c.drawLine(21,17,3,17,paint);c.drawLine(7,13,3,17,paint);c.drawLine(7,21,3,17,paint);
             }else{
                 // مخاريج: فاتورة بحافة مسنّنة.
                 android.graphics.Path r=new android.graphics.Path();
