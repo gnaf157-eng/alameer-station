@@ -58,7 +58,7 @@ final class LedgerPdf {
   String[] values={statement.balanceLabel(statement.opening),LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease),statement.balanceLabel(statement.closing)};
   for(int i=0;i<4;i++){int left=WIDTH-MARGIN-(i+1)*134+5;p.setColor(i==3?0xffFFF5CC:0xffF1F1F1);c.drawRoundRect(left,summaryTop,left+128,summaryTop+56,6,6,p);draw(c,layout(labels[i],120,9,false,MUTED,false),left+4,summaryTop+7);draw(c,layout(values[i],120,12,true,INK,true),left+4,summaryTop+25);}
   p.setColor(0xffE9E9E9);c.drawRect(MARGIN,tableTop,WIDTH-MARGIN,bodyTop,p);
-  String[] headings={"التاريخ","البيان",statement.increaseLabel,statement.decreaseLabel,"الرصيد"};int right=WIDTH-MARGIN;
+  String[] headings={"التاريخ","البيان",statement.source.equals("supplier_entries")?"إضافة":statement.increaseLabel,statement.source.equals("supplier_entries")?"خصم":statement.decreaseLabel,"الرصيد"};int right=WIDTH-MARGIN;
   for(int i=0;i<5;i++){right-=WIDTHS[i];draw(c,layout(headings[i],WIDTHS[i]-12,9,true,INK,false),right+6,tableTop+7);}
   y=bodyTop;int stripe=0;
   for(Block block:pages.get(index)){
