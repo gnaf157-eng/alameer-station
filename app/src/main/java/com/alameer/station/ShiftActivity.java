@@ -1410,30 +1410,31 @@ public class ShiftActivity extends Activity {
         try(Cursor c=db.movements(shiftId)){while(c.moveToNext()){
             String type=c.getString(1);count++;
             int color=typeColor(type);
-            android.graphics.drawable.GradientDrawable rowBackground=Util.round(typeSoft(type),dp(12));
-            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(8),dp(12),dp(8),dp(12));
-            row.setBackground(rowBackground);
-            LinearLayout words=column();words.addView(text(c.getString(2),17,Util.NAVY,true));
-            TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round(Color.WHITE,dp(8)));words.addView(badge,space());
-            row.addView(words,new LinearLayout.LayoutParams(0,-2,1));TextView amount=text(money(c.getDouble(3))+" ر.ي",17,color,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
+            LinearLayout row=new LinearLayout(this);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(4),0,dp(4),0);row.setMinimumHeight(dp(48));
+            row.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x14000000),Util.round(Color.WHITE,dp(4)),null));
+            View mark=new View(this);mark.setBackground(Util.round(color,dp(2)));row.addView(mark,new LinearLayout.LayoutParams(dp(3),dp(18)));
+            TextView badge=StationUi.text(this,arabicType(type),12,true);badge.setTextColor(color);badge.setSingleLine(true);badge.setPadding(dp(6),0,dp(6),0);row.addView(badge);
             final long movementId=c.getLong(0);final String movementLabel=c.getString(2);
-            boolean locked=!"OPEN".equals(db.shiftStatus(shiftId));
-            if(!locked){
-                // الضغط على السطر يفتح التعديل، والعلامة تحذف.
-                row.setBackground(new android.graphics.drawable.RippleDrawable(
-                        android.content.res.ColorStateList.valueOf(0x14000000),rowBackground,null));
-                row.setClickable(true);
-                row.setOnClickListener(v->editMovement(movementId));
-                TextView remove=text("✕",18,Util.RED,true);remove.setPadding(dp(14),dp(4),dp(6),dp(4));
-                remove.setContentDescription("حذف الحركة");
-                remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(d,w)->{try{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}).setNegativeButton("إلغاء",null).show());
-                row.addView(remove);
-            }
+            TextView name=StationUi.text(this,movementLabel.replace('\n',' ').replace('\r',' '),13,false);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setPadding(dp(6),0,0,0);row.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+            final String amountLabel=money(c.getDouble(3))+" ر.ي";
+            TextView amount=StationUi.text(this,amountLabel,13,true);amount.setSingleLine(true);row.addView(amount);
+            final boolean locked=!"OPEN".equals(db.shiftStatus(shiftId));
+            final String details=arabicType(type)+"\n"+movementLabel+"\n"+amountLabel;
+            row.setFocusable(true);row.setContentDescription(details+"، اضغط للتفاصيل");
+            row.setOnClickListener(v->{
+                AlertDialog.Builder detail=new AlertDialog.Builder(this).setTitle("تفاصيل الحركة").setMessage(details).setPositiveButton("إغلاق",null);
+                if(!locked){
+                    detail.setNeutralButton("تعديل",(d,w)->editMovement(movementId));
+                    detail.setNegativeButton("حذف الحركة",(d,w)->new AlertDialog.Builder(this).setTitle("حذف الحركة").setMessage("سيُحذف \""+movementLabel+"\" نهائيًا من هذه الوردية.").setPositiveButton("حذف",(confirm,which)->{try{db.deleteMovement(movementId);loadMovements();refreshTotals();Toast.makeText(this,"حُذفت الحركة",Toast.LENGTH_SHORT).show();}catch(Exception e){Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();}}).setNegativeButton("إلغاء",null).show());
+                }
+                detail.show();
+            });
             movementsBox.addView(row);View line=new View(this);line.setBackgroundColor(0xffeceef0);movementsBox.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
         }}
         if(count==0)movementsBox.addView(text("لا توجد حركات في هذه القائمة",15,0xff777d84,false));
         else if("OPEN".equals(db.shiftStatus(shiftId)))
-            movementsBox.addView(text("اضغط على أي حركة لتعديلها",12,0xff626970,false));
+            movementsBox.addView(text("اضغط على أي حركة للتفاصيل والتعديل",12,0xff626970,false));
     }
     private Double visibleCurrent(Cursor c){
         String key=draftKey(c.getLong(0),"current");
