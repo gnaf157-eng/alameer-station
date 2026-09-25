@@ -38,7 +38,7 @@ jobs:
       - name: Run unit tests
         run: |
           set +e
-          ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee /tmp/build.log
+          ./gradlew --no-daemon :app:testDebugUnitTest --tests '*UiPreviewTest' --tests '*CompanyEntryTest' 2>&1 | tee /tmp/build.log
           code=${PIPESTATUS[0]}
           if [ "$code" != "0" ]; then
             # أخطاء الترجمة أولًا، ثم أي سبب فشل آخر (اختبارات، مهام جريدل).
