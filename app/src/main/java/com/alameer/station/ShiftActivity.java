@@ -334,6 +334,7 @@ public class ShiftActivity extends Activity {
             backupSection.addView(backupBtn,space());
             Button importBtn=action("استيراد الأرصدة الافتتاحية من ملف",true);
             importBtn.setOnClickListener(v->OpeningImport.pick(this));backupSection.addView(importBtn);
+            if(Capital.enabled(db)){Button safety=action("استعادة نسخة الأمان قبل الاستيراد",false);safety.setOnClickListener(v->OpeningImport.restoreSafety(this));backupSection.addView(safety,space());}
             Button restoreBtn=action("استعادة نسخة احتياطية",false);
             restoreBtn.setOnClickListener(v->new Backup(this).pickForRestore());
             backupSection.addView(restoreBtn,space());

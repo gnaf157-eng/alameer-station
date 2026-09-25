@@ -102,7 +102,7 @@ public class ControlPanelActivity extends Activity {
         final double cash = db.cashboxesTotal();
         final double debts = db.debtsTotal();
         final double credits = db.creditsTotal();
-        final double netDebt = debts - credits;
+        final double netDebt = Capital.enabled(db)?Capital.debts(db):debts-credits;
         final double stock = db.stockValueTotal();
         // القاعدة الموحّدة: الموجب لنا والسالب علينا، فالرصيد يُجمع كما هو.
         final double owed = db.supplierBalance();
@@ -119,7 +119,7 @@ public class ControlPanelActivity extends Activity {
         box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
         if(Capital.enabled(db)){TextView checks=text("سجل مطابقة رأس المال",15,Color.WHITE,true);checks.setOnClickListener(v->new android.app.AlertDialog.Builder(this).setTitle("مطابقة رأس المال").setMessage(Capital.history(db)).setPositiveButton("حسنًا",null).show());box.addView(checks);}
 
-        box.addView(text("صافي الأصول التقديري", 13, 0xffE6E6E6, false));
+        box.addView(text(Capital.enabled(db)?"رأس المال الفعلي — أرصدة الدفاتر":"صافي الأصول التقديري", 13, 0xffE6E6E6, false));
         TextView grand = text(Calc.money(capital) + "  ر.ي", 30,
                 capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);

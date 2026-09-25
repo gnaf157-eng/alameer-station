@@ -17,6 +17,14 @@ import org.json.*;
 final class OpeningImport {
  static final int REQUEST=4202;
  static void pick(Activity a){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("*/*");i.addCategory(Intent.CATEGORY_OPENABLE);a.startActivityForResult(i,REQUEST);}
+ static void restoreSafety(Activity a){
+  File[] files=a.getFilesDir().listFiles((dir,n)->n.startsWith("backup-before-opening-")&&n.endsWith(".db"));
+  if(files==null||files.length==0){error(a,new Exception("لا توجد نسخة أمان قبل الاستيراد"));return;}
+  Arrays.sort(files,Comparator.comparingLong(File::lastModified).reversed());File last=files[0];
+  new AlertDialog.Builder(a).setTitle("الرجوع إلى ما قبل الاستيراد")
+   .setMessage("ستُستعاد البيانات السابقة للنقل وتُستبدل البيانات الحالية. ستُحفظ نسخة أمان أخرى من البيانات الحالية عند إعادة تشغيل التطبيق.")
+   .setNegativeButton("إلغاء",null).setPositiveButton("استعادة",(d,w)->ManagerAccess.run(a,new Db(a),()->new Backup(a).restoreFrom(Uri.fromFile(last)))).show();
+ }
  static String digest(String text)throws Exception{byte[] b=MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));StringBuilder s=new StringBuilder();for(byte x:b)s.append(String.format(Locale.US,"%02x",x&255));return s.toString();}
  static double number(JSONObject o,String key)throws JSONException{double n=o.getDouble(key);if(!Double.isFinite(n)||Math.abs(n)>1e12)throw new IllegalArgumentException("قيمة غير صالحة: "+key);return n;}
  static String name(JSONObject o,String key)throws JSONException{String n=o.getString(key).trim();if(n.isEmpty()||n.length()>500)throw new IllegalArgumentException("اسم غير صالح");return n;}
@@ -90,7 +98,7 @@ final class OpeningImport {
    db.setSetting("capital_enabled","1");double actual=Capital.actual(db),reference=number(p,"capital");
    if(Capital.money(actual-reference)!=0)throw new IllegalStateException("فشل فحص الافتتاح؛ فرق رأس المال: "+Calc.money(actual-reference)+" ر.ي. لم تتغير البيانات السابقة.");
    double gasProfit=nonnegative(p,"gasOpeningProfit");line(entry,"أرباح تسوية افتتاح الغاز",-gasProfit,"ضمن رأس المال الافتتاحي؛ لا تُضاف مرة ثانية");line(entry,Journal.EQUITY,-actual+gasProfit,"");db.postEntry(entry);
-   db.setSetting("capital_opening",""+actual);db.setSetting("opening_date",date);db.setSetting("opening_gas_profit",""+gasProfit);db.setSetting("opening_import_hash",hash);
+   db.setSetting("capital_opening",""+actual);db.setSetting("opening_date",date);db.setSetting("opening_gas_profit",""+gasProfit);db.setSetting("opening_import_hash",hash);db.setSetting("opening_import_document",p.toString());
    db.audit("device",0,"IMPORT_OPENING","",Calc.money(actual),"نقل افتتاحي مع استبعاد أرصدة العمال والعهدة من رأس المال");s.setTransactionSuccessful();
   }finally{s.endTransaction();}
  }

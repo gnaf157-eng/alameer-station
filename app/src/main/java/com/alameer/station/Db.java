@@ -487,8 +487,9 @@ public class Db extends SQLiteOpenHelper {
                 approve(shiftId);
                 String result=postShift(shiftId,unified?ShiftWorkspace.box(this,shiftId):cashboxId);
                 journalShift(shiftId);
-                if(unified){ShiftWorkspace.convertWorkerCash(this,shiftId,before.get("cashbox_entries"));ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
+                if(unified){ShiftWorkspace.convertWorkerCash(this,shiftId,before.get("cashbox_entries"));ShiftWorkspace.post(this,shiftId);}
                 Capital.finish(this,shiftId,capitalPlan,reason,capitalOverride);
+                if(unified)ShiftWorkspace.link(this,shiftId,before);
                 return result;
             }finally{closingWorkspace=false;}
         });
@@ -2683,5 +2684,4 @@ public class Db extends SQLiteOpenHelper {
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }
-
 

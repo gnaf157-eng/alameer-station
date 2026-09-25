@@ -52,7 +52,7 @@ public class OpeningImportTest {
   ShiftWorkspace.addSupply(db,id,"غاز",10,"سائق تجريبي","");ShiftWorkspace.addSupply(db,id,"بترول",10,"سائق تجريبي","");
   ShiftWorkspace.add(db,id,1,"EXPENSE",db.defaultCashbox(),0,"",0,2,"كهرباء");
   long second=(long)scalar("SELECT id FROM cashboxes WHERE name='صندوق ب'");ShiftWorkspace.add(db,id,1,"TRANSFER",db.defaultCashbox(),second,"",0,10,"تحويل");
-  review(id);post(id);assertEquals(1003,Capital.actual(db),0.000001);assertEquals(0,scalar("SELECT gap FROM capital_checks"),0);assertEquals(10,scalar("SELECT profit FROM capital_checks"),0);assertEquals(7,scalar("SELECT expenses FROM capital_checks"),0);
+  review(id);Capital.Plan plan=Capital.plan(db,id);assertEquals(1003,Capital.projected(db,id,plan),0.000001);assertTrue(Capital.preview(db,id).contains("مطابق مبدئيًا"));post(id);assertEquals(1003,Capital.actual(db),0.000001);assertEquals(0,scalar("SELECT gap FROM capital_checks"),0);assertEquals(10,scalar("SELECT profit FROM capital_checks"),0);assertEquals(7,scalar("SELECT expenses FROM capital_checks"),0);
   long next=shift();sell(next,"غاز",2);db.addMovement(next,"CASH","استلام",8);review(next);post(next);assertEquals(1005,Capital.actual(db),0.000001);
   assertEquals(0,scalar("SELECT SUM(abs(gap)) FROM capital_checks"),0);assertEquals(2,scalar("SELECT COUNT(*) FROM capital_checks"),0);
  }
@@ -70,5 +70,11 @@ public class OpeningImportTest {
   imported();long id=shift();db.setBuyPrice("بترول",8);db.setFreightPrice("بترول",2);assertEquals(1000,Capital.actual(db),0.000001);
   sell(id,"بترول",10);db.addMovement(id,"CASH","استلام",40);ShiftWorkspace.addSupply(db,id,"بترول",10,"السائق","");review(id);post(id);
   assertEquals(1010,Capital.actual(db),0.000001);assertEquals(3.7,Capital.cost(db,"بترول"),0.000001);assertEquals(0,scalar("SELECT gap FROM capital_checks"),0);
+  assertEquals(db.stockValueTotal(),scalar("SELECT SUM(CASE WHEN side='DEBIT' THEN amount ELSE -amount END) FROM journal_lines WHERE account='مخزون الوقود'"),0.000001);
+ }
+ @Test public void dateBeforeOpeningCannotPostAndWorkerBalancesNeverAffectCapital()throws Exception{
+  imported();long id=shift();db.getWritableDatabase().execSQL("UPDATE shifts SET shift_date='2026-01-01' WHERE id=?",new Object[]{id});review(id);
+  try{post(id);fail();}catch(IllegalStateException expected){}assertTrue(db.isOpen(id));
+  db.getWritableDatabase().execSQL("UPDATE worker_accounts SET opening=99999");assertEquals(1000,Capital.actual(db),0.000001);
  }
 }
