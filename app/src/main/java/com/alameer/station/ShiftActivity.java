@@ -332,6 +332,8 @@ public class ShiftActivity extends Activity {
             Button backupBtn=action("حفظ نسخة احتياطية",true);
             backupBtn.setOnClickListener(v->new Backup(this).export());
             backupSection.addView(backupBtn,space());
+            Button importBtn=action("استيراد الأرصدة الافتتاحية من ملف",true);
+            importBtn.setOnClickListener(v->OpeningImport.pick(this));backupSection.addView(importBtn);
             Button restoreBtn=action("استعادة نسخة احتياطية",false);
             restoreBtn.setOnClickListener(v->new Backup(this).pickForRestore());
             backupSection.addView(restoreBtn,space());
@@ -763,6 +765,7 @@ public class ShiftActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==OpeningImport.REQUEST){if(result==RESULT_OK&&data!=null&&data.getData()!=null)OpeningImport.from(this,data.getData());return;}
         // استعادة نسخة احتياطية مختارة من الملفات.
         if(request==Backup.REQUEST_RESTORE){
             if(result==RESULT_OK&&data!=null&&data.getData()!=null)
@@ -1680,11 +1683,19 @@ public class ShiftActivity extends Activity {
             .setPositiveButton("مراجعة الوردية",null).show();
     }
     /** يؤرشف الوردية الحالية ويبدأ واحدة جديدة، ثم يعرض حفظ التقرير. */
-    private void finishShift(String reason){
+    private void finishShift(String reason){finishShift(reason,false);}
+    private void finishShift(String reason,boolean capitalOverride){
         final long closed=shiftId;
         final boolean historical=db.isHistorical(closed);
         String posted;
-        try{ posted=db.closeAndPostShift(closed,workerId,reason,db.defaultCashbox()); }
+        try{ posted=db.closeAndPostShift(closed,workerId,reason,db.defaultCashbox(),capitalOverride); }
+        catch(Capital.Check e){
+            new AlertDialog.Builder(this).setTitle("رأس المال غير مطابق").setMessage(e.getMessage()).setNegativeButton("مراجعة الحركات",null).setPositiveButton("اعتماد المدير مع سبب",(d,w)->ManagerAccess.run(this,db,()->{
+                EditText why=new EditText(this);why.setHint("سبب اعتماد الفرق — خمسة أحرف على الأقل");
+                AlertDialog dialog=new AlertDialog.Builder(this).setTitle("سيبقى الفرق محفوظًا كغير مطابق").setView(why).setNegativeButton("إلغاء",null).setPositiveButton("اعتماد",null).create();
+                dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->{String value=why.getText().toString().trim();if(value.length()<5){why.setError("اكتب سببًا واضحًا");return;}dialog.dismiss();finishShift(value,true);}));dialog.show();
+            })).show();return;
+        }
         catch(Exception e){new AlertDialog.Builder(this).setTitle("لم تُغلق الوردية")
             .setMessage("لم يُحفظ ترحيل جزئي. راجع السبب وحاول مجددًا:\n"+e.getMessage())
             .setPositiveButton("حسنًا",null).show();return;}

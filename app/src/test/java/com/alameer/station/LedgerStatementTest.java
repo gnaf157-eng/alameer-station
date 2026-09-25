@@ -53,7 +53,7 @@ public class LedgerStatementTest {
  @Test public void unpostedCompanyOperationsAreAbsentAndExportDoesNotWriteLedgers(){
   long shift=db.openSoloShift(db.soloWorkerId());ShiftWorkspace.ensure(db,shift);ShiftWorkspace.addCash(db,shift,2,"COMPANY_PAYMENT",box,0,10,"قيد الوردية");
   LedgerStatement s=LedgerStatement.load(db,"supplier_entries","OIL","شركة النفط","",ShiftDates.today());assertTrue(s.rows.isEmpty());assertEquals(0,s.closing,0.00001);
-  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT (SELECT COUNT(*) FROM supplier_entries),(SELECT COUNT(*) FROM shift_operations),(SELECT COUNT(*) FROM journal)",null)){c.moveToFirst();assertEquals(0,c.getInt(0));assertEquals(1,c.getInt(1));assertEquals(0,c.getInt(2));}assertEquals(25,db.getReadableDatabase().getVersion());
+  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT (SELECT COUNT(*) FROM supplier_entries),(SELECT COUNT(*) FROM shift_operations),(SELECT COUNT(*) FROM journal)",null)){c.moveToFirst();assertEquals(0,c.getInt(0));assertEquals(1,c.getInt(1));assertEquals(0,c.getInt(2));}assertEquals(26,db.getReadableDatabase().getVersion());
  }
  @Test public void invalidRangeOrAccountCannotExportAnUnfilteredLedger(){
   reject(()->LedgerStatement.validateRange("2026-02-01","2026-01-01"));reject(()->LedgerStatement.validateRange("2026-02-30","2026-03-01"));reject(()->LedgerStatement.load(db,"journal","1","القيود","","2026-01-01"));reject(()->LedgerStatement.load(db,"cashbox_entries","","كل الصناديق","","2026-01-01"));reject(()->load("material_entries","غير موجود"));

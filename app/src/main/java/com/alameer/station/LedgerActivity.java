@@ -22,11 +22,21 @@ public final class LedgerActivity extends Activity {
  private void accounts(){rows.removeAllViews();
   if(table.equals("cashbox_entries")){title.setText("دفتر الصناديق");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes ORDER BY name",null)){while(c.moveToNext())for(String code:CashAccounts.currencies(db,c.getLong(0),0))account(c.getString(1)+" • "+Db.currencyName(code),CashAccounts.posted(db,c.getLong(0),code),Db.currencyName(code),table,"box_id",CashAccounts.key(c.getLong(0),code));}}
   else if(table.equals("debt_entries")){title.setText("دفتر العملاء والسائقين");rows.addView(StationUi.text(this,"الموجب لنا • السالب علينا",14,false));try(Cursor c=db.getReadableDatabase().rawQuery("SELECT d.id,d.name,d.opening+COALESCE(SUM(CASE WHEN e.direction='DEBT' THEN e.amount ELSE -e.amount END),0) FROM debtors d LEFT JOIN debt_entries e ON e.debtor_id=d.id GROUP BY d.id ORDER BY d.name",null)){while(c.moveToNext())account(c.getString(1),c.getDouble(2),"ر.ي",table,"debtor_id",c.getString(0));}}
-  else if(table.equals("material_entries")){title.setText("دفتر المواد والشركات");for(String m:Db.MATERIALS)account(m,db.materialSummary(m)[3],"لتر",table,"material",m);rows.addView(StationUi.text(this,"حسابات الشركات — الموجب لنا والسالب علينا",15,true));for(String s:new String[]{"OIL","GAS"})account(Db.supplierName(s),db.supplierBalance(s),"ر.ي","supplier_entries","supplier",s);}
-  else if(table.equals("expense_entries")){title.setText("دفتر المصاريف");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT category,SUM(amount) FROM expense_entries GROUP BY category ORDER BY category",null)){while(c.moveToNext())account(c.getString(0),c.getDouble(1),"ر.ي",table,"category",c.getString(0));}}
+  else if(table.equals("material_entries")){title.setText("دفتر المواد والشركات");for(String m:Db.MATERIALS)account(m,db.materialSummary(m)[3],"لتر",table,"material",m);rows.addView(StationUi.text(this,"حسابات الشركات — الموجب لنا والسالب علينا",15,true));for(String s:new String[]{"OIL","GAS"})account(Db.supplierName(s),db.supplierBalance(s),"ر.ي","supplier_entries","supplier",s);
+   rows.addView(StationUi.button(this,"المخزون الخارجي والعهدة",false,this::offsite),StationUi.space(this));}
+  else if(table.equals("expense_entries")){title.setText("دفتر المصاريف");rows.addView(StationUi.button(this,"حسابات العمال — خارج رأس المال",false,this::workerAccounts),StationUi.space(this));try(Cursor c=db.getReadableDatabase().rawQuery("SELECT category,SUM(amount) FROM expense_entries GROUP BY category ORDER BY category",null)){while(c.moveToNext())account(c.getString(0),c.getDouble(1),"ر.ي",table,"category",c.getString(0));}}
   else if(table.equals("supplier_entries")){title.setText("حسابات الشركات");for(String company:Db.SUPPLIERS)account(Db.supplierName(company),db.supplierBalance(company),"ر.ي",table,"supplier",company);}
   else {statement(table,null,null,table.equals("journal")?"دفتر القيود":"حسابات الشركات",0,"ر.ي");return;}
   if(rows.getChildCount()==0)rows.addView(StationUi.text(this,"لا توجد حسابات بعد",16,false));
+ }
+ private void workerAccounts(){
+  rows.removeAllViews();title.setText("حسابات العمال");rows.addView(StationUi.text(this,"أرصدة افتتاحية للمتابعة فقط — خارج رأس المال والمخاريج الجديدة. الموجب لنا والسالب علينا.",15,false));
+  rows.addView(StationUi.button(this,"رجوع إلى المصاريف",false,this::accounts),StationUi.space(this));
+  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT name,opening FROM worker_accounts ORDER BY name",null)){while(c.moveToNext()){LinearLayout card=StationUi.card(this);card.addView(StationUi.text(this,c.getString(0)+"\n"+Calc.money(c.getDouble(1))+" ر.ي",17,true));rows.addView(card,StationUi.space(this));}}
+ }
+ private void offsite(){
+  rows.removeAllViews();title.setText("المخزون الخارجي والعهدة");rows.addView(StationUi.button(this,"رجوع إلى المواد",false,this::accounts),StationUi.space(this));
+  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT material,location,quantity,unit_cost,owned FROM opening_stock ORDER BY owned DESC,id",null)){while(c.moveToNext()){boolean owned=c.getInt(4)==1;LinearLayout card=StationUi.card(this);card.addView(StationUi.text(this,c.getString(0)+" — "+c.getString(1)+"\n"+Calc.money(c.getDouble(2))+" لتر\n"+(owned?"مملوك لنا • التكلفة: "+Calc.money(c.getDouble(2)*c.getDouble(3))+" ر.ي":"عهدة للشركة — خارج رأس المال والمخزون المتاح للبيع"),16,false));rows.addView(card,StationUi.space(this));}}
  }
  private void statement(String source,String field,String key,String name,double balance,String unit){
   rows.removeAllViews();title.setText(name);rows.addView(StationUi.text(this,"الرصيد: "+Calc.money(balance)+" "+unit,18,true));

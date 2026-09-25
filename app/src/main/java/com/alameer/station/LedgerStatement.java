@@ -36,6 +36,7 @@ final class LedgerStatement {
     unit="لتر";where="e.material=?";args=new String[]{key};amount="e.litres";increaseLabel="وارد";decreaseLabel="صادر";signedAccount=false;legend="الكميات باللترات";break;
    case "supplier_entries":
     if(!Arrays.asList(Db.SUPPLIERS).contains(key))throw new IllegalArgumentException("الشركة غير موجودة");
+    initial=Capital.scalar(db,"SELECT balance FROM supplier_openings WHERE supplier=?",key);
     unit="ر.ي";where="COALESCE(e.supplier,'OIL')=? AND e.voided=0";args=new String[]{key};direction="e.kind";increaseLabel="إضافة للرصيد";decreaseLabel="خصم من الرصيد";signedAccount=true;legend="الموجب لنا لدى الشركة • السالب علينا للشركة";break;
    case "expense_entries":
     unit="ر.ي";where="e.category=?";args=new String[]{key};direction="'EXPENSE'";increaseLabel="مصروف";decreaseLabel="مردود";signedAccount=false;legend="الرصيد يمثل المصروف المتراكم";break;

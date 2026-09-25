@@ -44,6 +44,13 @@ final class ReportTable {
         add(false,"تاريخ الوردية",db.shiftDate(id),ShiftDates.day(db.shiftDate(id)),"","");
         add(false,"تاريخ الإدخال",opened,"وقت الإغلاق",closed,"");
         add(false,"الحالة",state,"سبب الفرق",reason,"");
+        try(Cursor c=db.getReadableDatabase().rawQuery("SELECT previous,profit,expenses,expected,actual,gap,reason FROM capital_checks WHERE shift_id=?",new String[]{""+id})){if(c.moveToFirst()){
+            add(true,"مطابقة رأس المال",c.getDouble(5)==0?"مطابق":"غير مطابق","","","");
+            add(false,"السابق",c.getDouble(0),"ربح المبيعات",c.getDouble(1),"");
+            add(false,"المخاريج",c.getDouble(2),"المتوقع",c.getDouble(3),"");
+            add(false,"الفعلي",c.getDouble(4),"الفرق",c.getDouble(5),"");
+            add(false,"سبب اعتماد الفرق",c.getString(6),"","","");
+        }}
         add(true,"سعر البترول","سعر الديزل","سعر الغاز","","");
         int priceRow=add(false,price(prices.get("بترول")),price(prices.get("ديزل")),price(prices.get("غاز")),"ريال / لتر","");
         if(!note.isEmpty())add(false,"ملاحظة المدير",note,"","","");

@@ -39,7 +39,7 @@ public class ShiftWorkspaceTest {
   android.database.sqlite.SQLiteDatabase sql=db.getWritableDatabase();
   for(String table:new String[]{"readings","movements","shift_operations"})for(String event:new String[]{"INSERT","UPDATE","DELETE"})sql.execSQL("DROP TRIGGER IF EXISTS review_"+table+"_"+event);
   sql.execSQL("DROP TABLE shift_operations");sql.execSQL("DROP TABLE shift_workspace");sql.execSQL("DROP TABLE shift_links");sql.setVersion(20);db.close();db=new Db(context);
-  assertEquals(25,db.getWritableDatabase().getVersion());assertEquals(123.45,db.cashboxBalance(box),0.000001);assertEquals(1,count("journal"));assertEquals(0,count("shift_operations"));assertEquals(0,count("shift_workspace"));
+  assertEquals(26,db.getWritableDatabase().getVersion());assertEquals(123.45,db.cashboxBalance(box),0.000001);assertEquals(1,count("journal"));assertEquals(0,count("shift_operations"));assertEquals(0,count("shift_workspace"));
  }
  @Test public void mobileTabsAndReadOnlyLedgerCanOpen(){
   db.setSetting("name_set","1");
@@ -67,7 +67,7 @@ public class ShiftWorkspaceTest {
  }
  @Test public void addedMaterialsPaymentInvalidatesOnlyMaterialsReview(){review();ShiftWorkspace.addCash(db,shift,2,"COMPANY_PAYMENT",box,0,1,"سداد");assertEquals(3,ShiftWorkspace.reviewed(db,shift));refuse(this::close);ShiftWorkspace.review(db,shift,2);close();}
  @Test public void schema21UpgradeRetainsOperationsWithoutRequiringCounts(){
-  ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=7");db.getWritableDatabase().setVersion(21);db.close();db=new Db(context);assertEquals(25,db.getReadableDatabase().getVersion());assertEquals(1,count("shift_operations"));assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);ShiftWorkspace.review(db,shift,2);close();
+  ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=7");db.getWritableDatabase().setVersion(21);db.close();db=new Db(context);assertEquals(26,db.getReadableDatabase().getVersion());assertEquals(1,count("shift_operations"));assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);ShiftWorkspace.review(db,shift,2);close();
  }
 
  @Test public void countInputDoesNotTreatInvalidTextAsZero(){assertNull(WorkspaceForms.validCount("."));assertNull(WorkspaceForms.validCount("1..0"));assertNull(WorkspaceForms.validCount(""));assertEquals(12.5,WorkspaceForms.validCount("١٢٫٥"),0.00001);assertEquals(0,WorkspaceForms.validCount("0"),0.00001);}

@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 25;
+    private static final int DB_VERSION = 26;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -35,6 +35,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(POSTED_SQL);
         db.execSQL(SUPPLIER_SQL);
         ShiftWorkspace.create(db);
+        Capital.create(db);
         seed(db);
     }
 
@@ -91,6 +92,7 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<26)Capital.create(db);
         if(oldVersion<25&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
         if(oldVersion<25&&newVersion>=25)db.execSQL("DELETE FROM shift_counts WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
         if(oldVersion<19){
@@ -464,7 +466,8 @@ public class Db extends SQLiteOpenHelper {
     }
     /** Status, pump handover, ledgers and journal commit together. */
     private boolean closingWorkspace=false;
-    public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){
+    public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){return closeAndPostShift(shiftId,workerId,reason,cashboxId,false);}
+    String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId,boolean capitalOverride){
         return atomic(()->{
             if(!isOpen(shiftId))throw new IllegalStateException("الوردية مغلقة بالفعل");
             requireDate(shiftDate(shiftId));
@@ -477,6 +480,7 @@ public class Db extends SQLiteOpenHelper {
             ShiftWorkspace.ready(this,shiftId);
             boolean unified=ShiftWorkspace.exists(this,shiftId);
             Map<String,Long> before=unified?ShiftWorkspace.before(this):null;
+            Capital.Plan capitalPlan=Capital.plan(this,shiftId);
             closingWorkspace=true;
             try{
                 submit(shiftId,workerId,why);
@@ -484,6 +488,7 @@ public class Db extends SQLiteOpenHelper {
                 String result=postShift(shiftId,unified?ShiftWorkspace.box(this,shiftId):cashboxId);
                 journalShift(shiftId);
                 if(unified){ShiftWorkspace.convertWorkerCash(this,shiftId,before.get("cashbox_entries"));ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
+                Capital.finish(this,shiftId,capitalPlan,reason,capitalOverride);
                 return result;
             }finally{closingWorkspace=false;}
         });
@@ -2205,7 +2210,7 @@ public class Db extends SQLiteOpenHelper {
                 "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0 AND COALESCE(supplier,'OIL')=?",
                 new String[]{supplier})){
-            return c.moveToFirst()?c.getDouble(0):0;
+            return (c.moveToFirst()?c.getDouble(0):0)+Capital.scalar(this,"SELECT COALESCE(SUM(balance),0) FROM supplier_openings WHERE supplier=?",supplier);
         }
     }
 
@@ -2214,7 +2219,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0",null)){
-            return c.moveToFirst()?c.getDouble(0):0;
+            return (c.moveToFirst()?c.getDouble(0):0)+Capital.scalar(this,"SELECT COALESCE(SUM(balance),0) FROM supplier_openings");
         }
     }
 
@@ -2497,12 +2502,12 @@ public class Db extends SQLiteOpenHelper {
 
     /** قيمة مخزون مادة بسعر التكلفة. */
     public double stockValue(String material){
-        return Math.max(0,materialSummary(material)[3])*unitCost(material);
+        return Capital.enabled(this)?materialSummary(material)[3]*Capital.cost(this,material):Math.max(0,materialSummary(material)[3])*unitCost(material);
     }
 
     /** قيمة كل المخزون بسعر التكلفة. */
     public double stockValueTotal(){
-        double total=0;
+        double total=Capital.external(this);
         for(String m:MATERIALS)total+=stockValue(m);
         return total;
     }

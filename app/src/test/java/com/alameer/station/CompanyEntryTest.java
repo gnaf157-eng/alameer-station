@@ -56,6 +56,6 @@ public class CompanyEntryTest {
  }
  @Test public void schema24UpgradePreservesMoneyAndOperationsAndHistoricalCounts(){
   db.paySupplier("OIL",box,100,"قديم",db.shiftDate(shift));ShiftWorkspace.addCompanySupply(db,shift,"GAS","غاز",5,"سالم","");ShiftWorkspace.count(db,shift,2,"غاز",90);db.getWritableDatabase().execSQL("INSERT INTO shift_counts VALUES(999,2,'غاز',25,25)");db.getWritableDatabase().setVersion(24);db.close();db=new Db(context);
-  assertEquals(25,db.getReadableDatabase().getVersion());assertEquals(100,db.supplierBalance("OIL"),0.00001);assertEquals(9900,db.cashboxBalance(box),0.00001);assertEquals(1,rows("shift_operations"));assertNull(ShiftWorkspace.counted(db,shift,2,"غاز"));assertEquals(25,ShiftWorkspace.counted(db,999,2,"غاز"),0.00001);assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);close();assertEquals(-100,db.supplierBalance("GAS"),0.00001);
+  assertEquals(26,db.getReadableDatabase().getVersion());assertEquals(100,db.supplierBalance("OIL"),0.00001);assertEquals(9900,db.cashboxBalance(box),0.00001);assertEquals(1,rows("shift_operations"));assertNull(ShiftWorkspace.counted(db,shift,2,"غاز"));assertEquals(25,ShiftWorkspace.counted(db,999,2,"غاز"),0.00001);assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);close();assertEquals(-100,db.supplierBalance("GAS"),0.00001);
  }
 }

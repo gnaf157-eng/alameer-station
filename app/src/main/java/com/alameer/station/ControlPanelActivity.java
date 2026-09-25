@@ -117,9 +117,10 @@ public class ControlPanelActivity extends Activity {
         box.setElevation(dp(3));
         box.setClickable(true);
         box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
+        if(Capital.enabled(db)){TextView checks=text("سجل مطابقة رأس المال",15,Color.WHITE,true);checks.setOnClickListener(v->new android.app.AlertDialog.Builder(this).setTitle("مطابقة رأس المال").setMessage(Capital.history(db)).setPositiveButton("حسنًا",null).show());box.addView(checks);}
 
         box.addView(text("صافي الأصول التقديري", 13, 0xffE6E6E6, false));
-        TextView grand = text(whole(capital) + "  ر.ي", 30,
+        TextView grand = text(Calc.money(capital) + "  ر.ي", 30,
                 capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
@@ -162,6 +163,7 @@ public class ControlPanelActivity extends Activity {
         }
         sb.append("\n");
         // كل مورّد في جانبه: الموجب موجودات والسالب مطلوبات.
+        if(Capital.external(db)!=0)sb.append("\nمخزوننا خارج المحطة: ").append(Calc.money(Capital.external(db))).append(" ر.ي\n");
         double oil = db.supplierBalance("OIL"), gas = db.supplierBalance("GAS");
         double assetSide = cash + netDebt + stock + Math.max(0, oil) + Math.max(0, gas);
         if (oil > 0.009)

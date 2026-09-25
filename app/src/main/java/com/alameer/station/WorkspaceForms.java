@@ -19,6 +19,7 @@ final class WorkspaceForms {
   root.removeAllViews();root.addView(StationUi.text(a,section==1?"حركة الصناديق":"حركة المواد",23,true));
   root.addView(text(db.shiftCode(shift)+"  •  "+db.shiftDate(shift),13));
   root.addView(text("تُرحّل بيانات الوردية كاملة من تبويب المواد بعد المراجعة.",13));
+  if(Capital.enabled(db)){LinearLayout capital=card("رأس المال");capital.addView(text(Capital.preview(db,shift),14));}
   if(section==1){
    LinearLayout receipt=card("استلام نقد العامل");receipt.addView(text("النقد المسلّم: "+Calc.money(db.total(shift,"CASH"))+" ر.ي",17));
    Choices boxes=new Choices("cashboxes");Spinner pick=boxes.spinner();int chosen=boxes.ids.indexOf(ShiftWorkspace.box(db,shift));if(chosen>=0)pick.setSelection(chosen);LinearLayout receiveRow=new LinearLayout(a);receiveRow.addView(pick,new LinearLayout.LayoutParams(0,dp(48),1));receipt.addView(receiveRow);Spinner receiveCurrency=spinner(Db.CURRENCY_NAMES);receiveCurrency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(CashAccounts.receiptCurrency(db,shift)));receiveRow.addView(receiveCurrency,new LinearLayout.LayoutParams(0,dp(48),1));

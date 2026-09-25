@@ -77,6 +77,6 @@ public class CashDirectionTest {
  @Test public void upgrade23KeepsLedgersAndHistoricalCountsAndDropsOpenCounts(){
   db.addCashTransaction(box,"IN",35,"قديم",db.shiftDate(shift),"YER","SALE",0);ShiftWorkspace.count(db,shift,1,""+box,999);ShiftWorkspace.count(db,shift,2,"بترول",0);
   db.getWritableDatabase().execSQL("INSERT INTO shift_counts VALUES(999,1,'1:YER',55,55)");db.getWritableDatabase().setVersion(23);db.close();db=new Db(context);
-  assertEquals(25,db.getReadableDatabase().getVersion());assertEquals(1035,db.cashboxBalance(box),0.00001);assertEquals(1,rows("cashbox_entries"));assertNull(ShiftWorkspace.counted(db,shift,1,""+box));assertNull(ShiftWorkspace.counted(db,shift,2,"بترول"));assertEquals(55,ShiftWorkspace.counted(db,999,1,"1:YER"),0.00001);ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);
+  assertEquals(26,db.getReadableDatabase().getVersion());assertEquals(1035,db.cashboxBalance(box),0.00001);assertEquals(1,rows("cashbox_entries"));assertNull(ShiftWorkspace.counted(db,shift,1,""+box));assertNull(ShiftWorkspace.counted(db,shift,2,"بترول"));assertEquals(55,ShiftWorkspace.counted(db,999,1,"1:YER"),0.00001);ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);
  }
 }
