@@ -1413,17 +1413,19 @@ public class ShiftActivity extends Activity {
         movementsBox.removeAllViews();int count=0;
         try(Cursor c=db.movements(shiftId)){while(c.moveToNext()){
             String type=c.getString(1);count++;
-            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(12),0,dp(12));
+            int color=typeColor(type);
+            android.graphics.drawable.GradientDrawable rowBackground=Util.round(typeSoft(type),dp(12));
+            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(8),dp(12),dp(8),dp(12));
+            row.setBackground(rowBackground);
             LinearLayout words=column();words.addView(text(c.getString(2),17,Util.NAVY,true));
-            int color="COLLECTION".equals(type)?Util.GREEN:"EXPENSE".equals(type)?0xffa85a1a:Util.RED;
-            TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round("COLLECTION".equals(type)?0xffE9F4ED:0xfffbebdf,dp(8)));words.addView(badge,space());
-            row.addView(words,new LinearLayout.LayoutParams(0,-2,1));TextView amount=text(money(c.getDouble(3))+" ر.ي",17,0xff141922,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
+            TextView badge=text(arabicType(type),12,color,false);badge.setPadding(dp(8),dp(4),dp(8),dp(4));badge.setBackground(Util.round(Color.WHITE,dp(8)));words.addView(badge,space());
+            row.addView(words,new LinearLayout.LayoutParams(0,-2,1));TextView amount=text(money(c.getDouble(3))+" ر.ي",17,color,true);amount.setTextDirection(View.TEXT_DIRECTION_LTR);row.addView(amount);
             final long movementId=c.getLong(0);final String movementLabel=c.getString(2);
             boolean locked=!"OPEN".equals(db.shiftStatus(shiftId));
             if(!locked){
                 // الضغط على السطر يفتح التعديل، والعلامة تحذف.
                 row.setBackground(new android.graphics.drawable.RippleDrawable(
-                        android.content.res.ColorStateList.valueOf(0x14000000),null,null));
+                        android.content.res.ColorStateList.valueOf(0x14000000),rowBackground,null));
                 row.setClickable(true);
                 row.setOnClickListener(v->editMovement(movementId));
                 TextView remove=text("✕",18,Util.RED,true);remove.setPadding(dp(14),dp(4),dp(6),dp(4));

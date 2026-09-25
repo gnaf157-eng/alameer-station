@@ -19,7 +19,17 @@ public class UiPreviewTest {
   long shift=db.openSoloShift(db.soloWorkerId());ShiftWorkspace.ensure(db,shift);db.getWritableDatabase().execSQL("UPDATE readings SET current=previous,price=100,sales=0 WHERE shift_id=?",new Object[]{shift});
   for(String mat:Db.MATERIALS)ShiftWorkspace.count(db,shift,2,mat,0);ShiftWorkspace.count(db,shift,1,""+box,0);
   org.robolectric.android.controller.ActivityController<HomeActivity> home=Robolectric.buildActivity(HomeActivity.class).setup();capture(home.get(),"home");home.pause().stop().destroy();ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);
-  org.robolectric.android.controller.ActivityController<ShiftActivity> work=Robolectric.buildActivity(ShiftActivity.class).setup();work.get().workspacePage(5);assertEquals(5,work.get().page);capture(work.get(),"cash");CashAccounts.setOpening(db,box,"SAR",500);WorkspaceForms host=new WorkspaceForms(work.get(),work.get().pages[5],1);CashEntryCard entry=new CashEntryCard(host,2);entry.show();entry.from.setSelection(entry.boxes.ids.indexOf(box));Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();entry.currency.setSelection(1);Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();entry.category.setText("كهرباء");entry.amount.setText("50");captureView(entry.dialog.getWindow().getDecorView(),"cash-entry");entry.dialog.dismiss();for(String code:CashAccounts.currencies(db,box,shift))ShiftWorkspace.count(db,shift,1,CashAccounts.key(box,code),CashAccounts.expected(db,shift,box,code));ShiftWorkspace.review(db,shift,1);work.get().workspacePage(6);assertEquals(6,work.get().page);capture(work.get(),"materials");work.pause().stop().destroy();db.close();context.deleteDatabase("alameer_station.db");
+  org.robolectric.android.controller.ActivityController<ShiftActivity> work=Robolectric.buildActivity(ShiftActivity.class).setup();work.get().workspacePage(5);assertEquals(5,work.get().page);capture(work.get(),"cash");CashAccounts.setOpening(db,box,"SAR",500);WorkspaceForms host=new WorkspaceForms(work.get(),work.get().pages[5],1);CashEntryCard entry=new CashEntryCard(host,2);entry.show();entry.from.setSelection(entry.boxes.ids.indexOf(box));Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();entry.currency.setSelection(1);Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();entry.category.setText("كهرباء");entry.amount.setText("50");captureView(entry.dialog.getWindow().getDecorView(),"cash-entry");entry.dialog.dismiss();for(String code:CashAccounts.currencies(db,box,shift))ShiftWorkspace.count(db,shift,1,CashAccounts.key(box,code),CashAccounts.expected(db,shift,box,code));ShiftWorkspace.review(db,shift,1);work.get().workspacePage(6);assertEquals(6,work.get().page);capture(work.get(),"materials");
+  db.addMovement(shift,"COLLECTION","محمد — تحصيل",400);
+  db.addMovement(shift,"CASH","تسليم العامل",250);
+  db.addMovement(shift,"DEBT","أحمد — آجل",100);
+  db.addMovement(shift,"EXPENSE","كهرباء",50);
+  work.pause().resume();work.get().workspacePage(1);capture(work.get(),"worker-entry-icons");
+  android.graphics.Rect movementBounds=new android.graphics.Rect(0,0,work.get().movementsBox.getWidth(),work.get().movementsBox.getHeight());
+  work.get().screenScroll.offsetDescendantRectToMyCoords(work.get().movementsBox,movementBounds);
+  work.get().screenScroll.scrollTo(0,Math.max(0,movementBounds.top-28));
+  capture(work.get(),"worker-movements");
+  work.pause().stop().destroy();db.close();context.deleteDatabase("alameer_station.db");
  }
  private void capture(Activity a,String name) throws Exception {
   Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
