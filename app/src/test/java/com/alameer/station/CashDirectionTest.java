@@ -15,7 +15,7 @@ public class CashDirectionTest {
  Context context;Db db;long shift,box;
  @Before public void setUp(){
   context=RuntimeEnvironment.getApplication();context.deleteDatabase("alameer_station.db");db=new Db(context);db.setSetting("name_set","1");db.setTelegramOn(false);
-  box=db.addCashbox("المحطة",1000);db.setDefaultCashbox(box);db.setRate("SAR",100);db.setRate("USD",400);
+  box=db.addCashbox("المحطة",1000);db.setDefaultCashbox(box);db.setRate("SAR",100);db.setRate("USD",400);for(String material:Db.MATERIALS)db.setFuelPrice(material,100);
   shift=db.openSoloShift(db.soloWorkerId());ShiftWorkspace.ensure(db,shift);
   db.getWritableDatabase().execSQL("UPDATE readings SET current=previous,price=100,sales=0 WHERE shift_id=?",new Object[]{shift});
  }

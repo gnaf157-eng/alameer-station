@@ -92,7 +92,7 @@ public class Db extends SQLiteOpenHelper {
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if(oldVersion<24&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=1,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
-        if(oldVersion<24)db.execSQL("DELETE FROM shift_counts WHERE section=1 AND shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
+        if(oldVersion<24&&newVersion>=24)db.execSQL("DELETE FROM shift_counts WHERE section=1 AND shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
