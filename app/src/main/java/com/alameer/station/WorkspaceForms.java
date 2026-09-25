@@ -52,10 +52,35 @@ final class WorkspaceForms {
  }
  void operations(){LinearLayout list=card("الحركات المسجّلة في الوردية");try(Cursor c=ShiftWorkspace.operations(db,shift,section)){
   if(!c.moveToFirst()){list.addView(text("لا توجد حركات إضافية",14));return;}
-  do{long row=c.getLong(0);String kind=c.getString(1);String line=ShiftWorkspace.label(kind)+" • "+c.getString(7)+"\n"+(c.getDouble(5)>0?c.getString(4)+" • "+Calc.money(c.getDouble(5))+" لتر\n":"")+Calc.money(c.getDouble(6))+" ر.ي";
+  do{long row=c.getLong(0);String kind=c.getString(1);if(section==1){cashOperation(list,c);continue;}String line=ShiftWorkspace.label(kind)+" • "+c.getString(7)+"\n"+(c.getDouble(5)>0?c.getString(4)+" • "+Calc.money(c.getDouble(5))+" لتر\n":"")+Calc.money(c.getDouble(6))+" ر.ي";
    if(kind.equals("FUEL_SUPPLY"))try(Cursor f=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+row})){f.moveToFirst();line+="\nأجرة "+f.getString(0)+": "+Calc.money(f.getDouble(1))+" ر.ي";}
    list.addView(text(line,15));button(list,"حذف الحركة",false,()->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(d,w)->{ShiftWorkspace.delete(db,shift,row);render();}).setNegativeButton("رجوع",null).show());
   }while(c.moveToNext());}}
+ void cashOperation(LinearLayout list,Cursor c){
+  final long id=c.getLong(0);String kind=c.getString(1),box=CashAccounts.name(db,c.getLong(2)),note=c.getString(7);
+  String unit="YER";double rate=1;
+  try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT currency,rate FROM shift_operations WHERE id=?",new String[]{""+id})){if(fx.moveToFirst()){unit=fx.getString(0);rate=fx.getDouble(1);}}
+  String amount=Calc.money(c.getDouble(6)/(rate>0?rate:1))+" "+Db.currencyName(unit);
+  boolean incoming=kind.equals("COLLECTION"),transfer=kind.equals("TRANSFER");
+  String type=transfer?"تحويل":incoming?"وارد":"صادر";
+  int tint=transfer?0xff626870:incoming?Util.GREEN:Util.RED;
+  String description=box+" · "+(note==null?"":note);
+  final String details=ShiftWorkspace.label(kind)+"\nالصندوق: "+box
+    +(transfer?"\nإلى: "+CashAccounts.name(db,c.getLong(3)):"")+"\nالمبلغ: "+amount
+    +(note==null||note.isEmpty()?"":"\n"+note);
+  LinearLayout row=new LinearLayout(a);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setGravity(Gravity.CENTER_VERTICAL);
+  row.setPadding(dp(4),0,dp(4),0);row.setMinimumHeight(dp(48));row.setTag("cash-operation-"+id);
+  row.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x12000000),Util.round(android.graphics.Color.WHITE,dp(4)),null));
+  View mark=new View(a);mark.setBackground(Util.round(tint,dp(2)));row.addView(mark,new LinearLayout.LayoutParams(dp(3),dp(18)));
+  TextView label=StationUi.text(a,type,12,true);label.setTextColor(tint);label.setSingleLine(true);label.setPadding(dp(6),0,dp(6),0);row.addView(label);
+  TextView name=StationUi.text(a,description.replace('\n',' ').replace('\r',' '),13,false);name.setSingleLine(true);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(6),0,0,0);row.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+  TextView value=StationUi.text(a,amount,13,true);value.setSingleLine(true);row.addView(value);
+  row.setFocusable(true);row.setContentDescription(details+"، اضغط للتفاصيل");
+  row.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("تفاصيل الحركة").setMessage(details).setPositiveButton("إغلاق",null)
+    .setNegativeButton("حذف الحركة",(d,w)->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(confirm,which)->{try{ShiftWorkspace.delete(db,shift,id);render();}catch(RuntimeException e){error(e);}}).setNegativeButton("رجوع",null).show()).show());
+  list.addView(row,new LinearLayout.LayoutParams(-1,-2));
+  View divider=new View(a);divider.setBackgroundColor(0xffEEEEEE);list.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+ }
  static Double validCount(String raw){
   StringBuilder normalized=new StringBuilder();for(char ch:raw.trim().toCharArray()){if(ch>='٠'&&ch<='٩')normalized.append((char)('0'+ch-'٠'));else if(ch>='۰'&&ch<='۹')normalized.append((char)('0'+ch-'۰'));else if(ch=='٫')normalized.append('.');else if(ch!=','&&ch!='٬')normalized.append(ch);}
   String value=normalized.toString();if(!value.matches("([0-9]+(\\.[0-9]*)?|\\.[0-9]+)"))return null;try{double n=Double.parseDouble(value);return Double.isFinite(n)&&n>=0?n:null;}catch(NumberFormatException e){return null;}
