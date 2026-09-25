@@ -26,7 +26,7 @@ final class LedgerExportDialog {
   progress=StationUi.text(a,"",13,false);form.addView(progress);ScrollView scroll=new ScrollView(a);scroll.addView(form);
   dialog=new AlertDialog.Builder(a).setTitle("كشف حركة الحساب").setView(scroll).setNegativeButton("إلغاء",null).create();dialog.setOnDismissListener(d->cancel.cancel());dates();
  }
- void show(){dialog.show();}
+ void show(){dialog.show();dialog.getButton(-2).setTextColor(Util.NAVY);}
  void dates(){fromButton.setText(from.isEmpty()?"من: بداية الحساب":"من: "+from);toButton.setText("إلى: "+to);}
  void pick(boolean start){LocalDate current=LocalDate.parse(start&&!from.isEmpty()?from:to);DatePickerDialog picker=new DatePickerDialog(a,(view,y,m,d)->{String value=String.format(Locale.US,"%04d-%02d-%02d",y,m+1,d);if(start)from=value;else to=value;dates();},current.getYear(),current.getMonthValue()-1,current.getDayOfMonth());picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();}
  void enabled(boolean value){busy=!value;for(Button b:new Button[]{printButton,shareButton,fromButton,toButton,allButton})b.setEnabled(value);}

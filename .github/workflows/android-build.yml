@@ -66,8 +66,9 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            ./gradlew --no-daemon -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true :app:connectedDebugAndroidTest
             mkdir -p app/build/reports/pdf
+            adb shell run-as com.alameer.station.shifts.v2.preview ls files/ledger-qa
             adb exec-out run-as com.alameer.station.shifts.v2.preview tar -C files/ledger-qa -cf - . > "$RUNNER_TEMP/ledger-qa.tar"
             tar -xf "$RUNNER_TEMP/ledger-qa.tar" -C app/build/reports/pdf
 
