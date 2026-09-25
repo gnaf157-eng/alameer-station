@@ -39,7 +39,7 @@ public class ShiftWorkspaceTest {
   android.database.sqlite.SQLiteDatabase sql=db.getWritableDatabase();
   for(String table:new String[]{"readings","movements","shift_operations"})for(String event:new String[]{"INSERT","UPDATE","DELETE"})sql.execSQL("DROP TRIGGER IF EXISTS review_"+table+"_"+event);
   sql.execSQL("DROP TABLE shift_operations");sql.execSQL("DROP TABLE shift_workspace");sql.execSQL("DROP TABLE shift_links");sql.setVersion(20);db.close();db=new Db(context);
-  assertEquals(23,db.getWritableDatabase().getVersion());assertEquals(123.45,db.cashboxBalance(box),0.000001);assertEquals(1,count("journal"));assertEquals(0,count("shift_operations"));assertEquals(0,count("shift_workspace"));
+  assertEquals(24,db.getWritableDatabase().getVersion());assertEquals(123.45,db.cashboxBalance(box),0.000001);assertEquals(1,count("journal"));assertEquals(0,count("shift_operations"));assertEquals(0,count("shift_workspace"));
  }
  @Test public void mobileTabsAndReadOnlyLedgerCanOpen(){
   db.setSetting("name_set","1");
@@ -48,7 +48,7 @@ public class ShiftWorkspaceTest {
   org.robolectric.android.controller.ActivityController<LedgerActivity> ledger=Robolectric.buildActivity(LedgerActivity.class,LedgerActivity.intent(context,"cashbox_entries")).create().start().resume();ledger.pause().stop().destroy();
  }
  @Test public void reportCannotPresentUnpostedDraftAsOfficial(){refuse(()->new ReportTable(db,shift));}
- @Test public void physicalCountsAreMandatoryAndMustMatch(){ShiftWorkspace.review(db,shift,0);refuse(()->ShiftWorkspace.review(db,shift,1));counts();ShiftWorkspace.count(db,shift,1,""+box,799);refuse(()->ShiftWorkspace.review(db,shift,1));counts();ShiftWorkspace.review(db,shift,1);ShiftWorkspace.count(db,shift,2,"بترول",1000);refuse(()->ShiftWorkspace.review(db,shift,2));}
+ @Test public void onlyMaterialCountsAreMandatoryAndMustMatch(){ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);refuse(()->ShiftWorkspace.review(db,shift,2));counts();ShiftWorkspace.count(db,shift,1,""+box,799);ShiftWorkspace.review(db,shift,1);ShiftWorkspace.count(db,shift,2,"بترول",1000);refuse(()->ShiftWorkspace.review(db,shift,2));}
  @Test public void supplyAndCompanyPaymentPostFreightOnce(){
   db.setBuyPrice("بترول",20);db.setFreightPrice("بترول",2);
   ShiftWorkspace.addCash(db,shift,2,"COMPANY_PAYMENT",box,0,300,"دفع للشركة");
@@ -66,8 +66,8 @@ public class ShiftWorkspaceTest {
   assertEquals(6,ShiftWorkspace.expectedCash(db,shift,sar),0.00001);assertEquals(1,ShiftWorkspace.expectedCash(db,shift,usd),0.00001);review();close();assertEquals(6,ShiftWorkspace.nativeCash(db,sar),0.00001);assertEquals(1,ShiftWorkspace.nativeCash(db,usd),0.00001);
  }
  @Test public void addedMaterialsPaymentInvalidatesCashAndMaterialsReview(){review();ShiftWorkspace.addCash(db,shift,2,"COMPANY_PAYMENT",box,0,1,"سداد");assertEquals(1,ShiftWorkspace.reviewed(db,shift));refuse(this::close);}
- @Test public void schema21UpgradeRetainsDraftOperationsButRequiresCounts(){
-  ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=7");db.getWritableDatabase().setVersion(21);db.close();db=new Db(context);assertEquals(23,db.getReadableDatabase().getVersion());assertEquals(1,count("shift_operations"));assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);refuse(()->ShiftWorkspace.review(db,shift,1));
+ @Test public void schema21UpgradeRetainsDraftOperationsButRequiresMaterialCounts(){
+  ShiftWorkspace.add(db,shift,1,"EXPENSE",box,0,"",0,20,"كهرباء");db.getWritableDatabase().execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=7");db.getWritableDatabase().setVersion(21);db.close();db=new Db(context);assertEquals(24,db.getReadableDatabase().getVersion());assertEquals(1,count("shift_operations"));assertEquals(0,ShiftWorkspace.reviewed(db,shift));ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);refuse(()->ShiftWorkspace.review(db,shift,2));
  }
 
  @Test public void countInputDoesNotTreatInvalidTextAsZero(){assertNull(WorkspaceForms.validCount("."));assertNull(WorkspaceForms.validCount("1..0"));assertNull(WorkspaceForms.validCount(""));assertEquals(12.5,WorkspaceForms.validCount("١٢٫٥"),0.00001);assertEquals(0,WorkspaceForms.validCount("0"),0.00001);}

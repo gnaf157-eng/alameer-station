@@ -16,22 +16,33 @@ final class WorkspaceForms {
  Button button(LinearLayout parent,String title,boolean primary,Runnable r){Button b=StationUi.button(a,title,primary,()->{try{r.run();}catch(RuntimeException e){error(e);}});parent.addView(b,StationUi.space(a));return b;}
  LinearLayout card(String title){LinearLayout c=StationUi.card(a);c.addView(StationUi.text(a,title,18,true));root.addView(c,StationUi.space(a));return c;}
  void render(){
-  root.removeAllViews();root.addView(StationUi.text(a,section==1?"مطابقة الصناديق":"مطابقة المواد",23,true));
+  root.removeAllViews();root.addView(StationUi.text(a,section==1?"حركة الصناديق":"مطابقة المواد",23,true));
   root.addView(text(db.shiftCode(shift)+"  •  "+db.shiftDate(shift),13));
-  root.addView(text("تُرحّل بيانات الوردية كاملة بعد اكتمال المطابقات الثلاث.",13));
+  root.addView(text("تُرحّل بيانات الوردية كاملة من تبويب المواد بعد المراجعة.",13));
   if(section==1){
    LinearLayout receipt=card("استلام نقد العامل");receipt.addView(text("النقد المسلّم: "+Calc.money(db.total(shift,"CASH"))+" ر.ي",17));
    Choices boxes=new Choices("cashboxes");Spinner pick=boxes.spinner();int chosen=boxes.ids.indexOf(ShiftWorkspace.box(db,shift));if(chosen>=0)pick.setSelection(chosen);LinearLayout receiveRow=new LinearLayout(a);receiveRow.addView(pick,new LinearLayout.LayoutParams(0,dp(48),1));receipt.addView(receiveRow);Spinner receiveCurrency=spinner(Db.CURRENCY_NAMES);receiveCurrency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(CashAccounts.receiptCurrency(db,shift)));receiveRow.addView(receiveCurrency,new LinearLayout.LayoutParams(0,dp(48),1));
    button(receipt,"اعتماد صندوق الاستلام",false,()->{if(boxes.id(pick)==0)throw new IllegalArgumentException("اختر صندوق الاستلام");ShiftWorkspace.selectBox(db,shift,boxes.id(pick),Db.CURRENCIES[receiveCurrency.getSelectedItemPosition()]);render();});
-   LinearLayout entry=card("حركة الصناديق");entry.addView(text("القبض والصرف والتحويل بين الصناديق. نقد العامل محسوب أعلاه مرة واحدة.",13));for(int row=0;row<2;row++){LinearLayout tiles=new LinearLayout(a);for(int col=0;col<2;col++){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(108),1);p.setMargins(dp(5),dp(5),dp(5),dp(5));tiles.addView(CashEntryCard.tile(this,row*2+col),p);}entry.addView(tiles);}root.removeView(entry);root.addView(entry,3,StationUi.space(a));
+   LinearLayout entry=card("اختر الصندوق");entry.addView(text("الرصيد يشمل الحركات المسجّلة. اضغط الصندوق لإضافة وارد أو صادر أو تحويل.",13));
+   for(int i=1;i<boxes.ids.size();i+=2){
+    LinearLayout tiles=new LinearLayout(a);tiles.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+    for(int col=0;col<2;col++){
+     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(4),dp(4),dp(4),dp(4));
+     if(i+col<boxes.ids.size())tiles.addView(CashEntryCard.tile(this,boxes.ids.get(i+col)),p);
+     else tiles.addView(new View(a),new LinearLayout.LayoutParams(0,0,1));
+    }
+    entry.addView(tiles,new LinearLayout.LayoutParams(-1,-2));
+   }
+   if(boxes.ids.size()==1)entry.addView(text("أضف الصناديق من الضبط ← تعريف الصناديق.",14));
+   root.removeView(entry);root.addView(entry,3,StationUi.space(a));
   }else{
    LinearLayout companies=card("١  حسابات الشركات");
    for(String company:new String[]{"OIL","GAS"}){double balance=ShiftWorkspace.expectedCompany(db,shift,company);companies.addView(text(Db.supplierName(company)+"  •  "+(balance>=0?"لنا ":"علينا ")+Calc.money(Math.abs(balance))+" ر.ي",16));}
    button(companies,"توريد مبلغ للشركة",true,this::companyPayment);
    button(companies,"توريد مواد من الشركة",true,this::supplyEntry);
   }
-  operations();counts();
-  if(section==1)button(root,"تأكيد مطابقة الصناديق والمتابعة إلى المواد",true,()->{ShiftWorkspace.review(db,shift,1);a.workspacePage(6);});
+  operations();if(section==2)counts();
+  if(section==1)button(root,"متابعة إلى المواد",true,()->{ShiftWorkspace.review(db,shift,1);a.workspacePage(6);});
   else{
    button(root,"تأكيد مطابقة المواد / لا توجد حركة أخرى",false,()->{ShiftWorkspace.review(db,shift,2);render();});
    button(root,"ترحيل الوردية بالكامل",true,()->{ShiftWorkspace.review(db,shift,2);a.requestPostShift();});
@@ -43,9 +54,8 @@ final class WorkspaceForms {
    if(kind.equals("FUEL_SUPPLY"))try(Cursor f=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+row})){f.moveToFirst();line+="\nأجرة "+f.getString(0)+": "+Calc.money(f.getDouble(1))+" ر.ي";}
    list.addView(text(line,15));button(list,"حذف الحركة",false,()->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(d,w)->{ShiftWorkspace.delete(db,shift,row);render();}).setNegativeButton("رجوع",null).show());
   }while(c.moveToNext());}}
- void counts(){LinearLayout c=card(section==1?"الأرصدة الفعلية للصناديق":"٢  الجرد الفعلي باللترات");
-  if(section==1)try(Cursor boxes=db.getReadableDatabase().rawQuery("SELECT id,name FROM cashboxes WHERE active=1 ORDER BY name",null)){while(boxes.moveToNext()){long box=boxes.getLong(0);for(String code:CashAccounts.currencies(db,box,shift))countRow(c,CashAccounts.key(box,code),boxes.getString(1),CashAccounts.expected(db,shift,box,code),Db.currencyName(code));}}
-  else for(String mat:Db.MATERIALS)countRow(c,mat,mat,ShiftWorkspace.expectedMaterial(db,shift,mat),"لتر");
+ void counts(){LinearLayout c=card("٢  الجرد الفعلي باللترات");
+  for(String mat:Db.MATERIALS)countRow(c,mat,mat,ShiftWorkspace.expectedMaterial(db,shift,mat),"لتر");
  }
  void countRow(LinearLayout parent,String account,String label,double expected,String unit){
   parent.addView(text(label+" • المحسوب بعد الحركات: "+Calc.money(expected)+" "+unit,15));
@@ -63,7 +73,7 @@ final class WorkspaceForms {
  void label(LinearLayout f,String s){StationUi.label(a,f,s);}
  EditText number(String hint){EditText e=new EditText(a);StationUi.input(a,e);e.setHint(hint);e.setSingleLine(true);e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);e.setTextDirection(View.TEXT_DIRECTION_LTR);return e;}
  EditText note(){EditText e=new EditText(a);StationUi.input(a,e);e.setHint("ملاحظة اختيارية");return e;}
- AutoCompleteTextView name(String hint){AutoCompleteTextView e=new AutoCompleteTextView(a);StationUi.input(a,e);e.setHint(hint);e.setThreshold(1);ArrayList<String> names=new ArrayList<>();try(Cursor c=db.getReadableDatabase().rawQuery("SELECT name FROM debtors UNION SELECT driver_name AS name FROM shift_operations WHERE driver_name<>'' ORDER BY name",null)){while(c.moveToNext())names.add(c.getString(0));}e.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_dropdown_item_1line,names));return e;}
+ AutoCompleteTextView name(String hint){AutoCompleteTextView e=new AutoCompleteTextView(a);StationUi.input(a,e);e.setHint(hint);e.setThreshold(1);ArrayList<String> names=NameDirectory.names(db);e.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_dropdown_item_1line,names));return e;}
  Spinner spinner(String[] values){Spinner s=new Spinner(a);s.setMinimumHeight(dp(48));ArrayAdapter<String> adapter=new ArrayAdapter<>(a,android.R.layout.simple_spinner_item,values);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);s.setAdapter(adapter);s.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));return s;}
  void dialog(String title,LinearLayout f,Runnable save){ScrollView scroll=new ScrollView(a);scroll.addView(f);AlertDialog d=new AlertDialog.Builder(a).setTitle(title).setView(scroll).setPositiveButton("موافق",null).setNegativeButton("رجوع",null).create();d.setOnShowListener(x->d.getButton(-1).setOnClickListener(v->{try{save.run();d.dismiss();render();}catch(RuntimeException e){error(e);}}));d.show();}
  void companyPayment(){LinearLayout f=form();Spinner company=spinner(new String[]{"شركة النفط","شركة الغاز"});Choices choices=new Choices("cashboxes");Spinner box=choices.spinner(),currency=spinner(Db.CURRENCY_NAMES);CashEntryCard.changed(box,()->{if(choices.id(box)>0)currency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(ShiftWorkspace.boxCurrency(db,choices.id(box))));});EditText amount=number("مبلغ السداد بعملة الصندوق"),note=note();label(f,"الشركة");f.addView(company);label(f,"صندوق السداد");f.addView(box);label(f,"العملة");f.addView(currency);label(f,"المبلغ");f.addView(amount);label(f,"البيان");f.addView(note);
@@ -75,5 +85,5 @@ final class WorkspaceForms {
   mat.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){calculate.run();}});qty.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int co,int af){}public void onTextChanged(CharSequence s,int st,int be,int co){}public void afterTextChanged(Editable e){calculate.run();}});calculate.run();
   dialog("توريد مواد من الشركة",f,()->ShiftWorkspace.addSupply(db,shift,(String)mat.getSelectedItem(),Calc.number(qty.getText().toString()),driver.getText().toString(),note.getText().toString()));
  }
- final class Choices {final ArrayList<Long> ids=new ArrayList<>();final ArrayList<String> names=new ArrayList<>();Choices(String table){ids.add(0L);names.add("اختر الصندوق");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM "+table+" WHERE active=1 ORDER BY name",null)){while(c.moveToNext()){ids.add(c.getLong(0));names.add(c.getString(1));}}}Spinner spinner(){return WorkspaceForms.this.spinner(names.toArray(new String[0]));}long id(Spinner s){return ids.get(s.getSelectedItemPosition());}}
+ final class Choices {final ArrayList<Long> ids=new ArrayList<>();final ArrayList<String> names=new ArrayList<>();Choices(String table){this(table,0); }Choices(String table,long excluded){ids.add(0L);names.add("اختر الصندوق");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM "+table+" WHERE active=1 ORDER BY name",null)){while(c.moveToNext()){if(c.getLong(0)==excluded)continue;ids.add(c.getLong(0));names.add(c.getString(1));}}}Spinner spinner(){return WorkspaceForms.this.spinner(names.toArray(new String[0]));}long id(Spinner s){return ids.get(s.getSelectedItemPosition());}}
 }

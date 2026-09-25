@@ -1046,13 +1046,7 @@ public class ShiftActivity extends Activity {
      * بين المقبوضات والديون والمخاريج. أسماء النوع الحالي تُقترح أولًا.
      */
     private ArrayList<String> rememberedNames(String type){
-        ArrayList<String> names=new ArrayList<>();
-        try(Cursor c=db.getReadableDatabase().rawQuery(
-                "SELECT name,MAX(CASE WHEN type=? THEN 1 ELSE 0 END) AS same FROM remembered_names "+
-                "GROUP BY name ORDER BY same DESC,name",new String[]{type})){
-            while(c.moveToNext())names.add(c.getString(0));
-        }
-        return names;
+        return NameDirectory.names(db);
     }
     private void loadReadings(){
         refreshShiftDate();
