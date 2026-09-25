@@ -42,6 +42,13 @@ final class LedgerPdf {
   }
   if(statement.rows.isEmpty())blocks.add(cash?new Block(new String[]{"","","","لا توجد حركات خلال الفترة المختارة",""},0,statement.opening,widths):new Block(new String[]{"","لا توجد حركات خلال الفترة المختارة","","",""},0,statement.opening));
   blocks.add(cash?new Block(new String[]{LedgerStatement.number(statement.expenses()),LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease-statement.expenses()),"إجمالي الفترة",""},2,statement.closing,widths):new Block(new String[]{"","إجمالي الفترة",LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease),LedgerStatement.number(statement.closing)},2,statement.closing));
+  if(cash&&!statement.rows.isEmpty()){
+   blocks.add(new Block(new String[]{"","","","تفاصيل الحركات",""},1,statement.closing,widths));
+   for(LedgerStatement.Row row:statement.rows){String detail=row.cash.person+" • "+row.date
+      +(row.note.equals(row.cash.person)?"":"\n"+row.note)+(row.code.isEmpty()||row.note.contains(row.code)?"":"\n"+row.code);
+    cashTextBlocks(blocks,new String[]{"","","",detail,row.cash.box},statement.closing);
+   }
+  }
   ArrayList<Block> page=new ArrayList<>();int y=bodyTop;double carried=statement.opening;
   for(Block block:blocks){if(y+block.height>BOTTOM){pages.add(page);page=new ArrayList<>();Block carry=balanceBlock("رصيد منقول",carried,1);page.add(carry);y=bodyTop+carry.height;}
    if(y+block.height>BOTTOM)throw new IllegalArgumentException("تعذر تنسيق إحدى الحركات للطباعة");page.add(block);y+=block.height;carried=block.balance;
@@ -51,12 +58,15 @@ final class LedgerPdf {
  String[] headings(){return cash?new String[]{"المخاريج","وارد","صادر","البيان","الجهة"}:new String[]{"التاريخ","البيان",statement.source.equals("supplier_entries")?"إضافة":statement.increaseLabel,statement.source.equals("supplier_entries")?"خصم":statement.decreaseLabel,"الرصيد"};}
  void cashBlocks(ArrayList<Block> blocks,LedgerStatement.Row row){
   String[] values={row.expense()==0?"":LedgerStatement.number(row.expense()),row.increase==0?"":LedgerStatement.number(row.increase),row.outgoing()==0?"":LedgerStatement.number(row.outgoing()),row.cash.person+(row.expense()>0?" — صادر":""),row.cash.box};
+  cashTextBlocks(blocks,values,row.balance);
+ }
+ void cashTextBlocks(ArrayList<Block> blocks,String[] values,double balance){
   StaticLayout[] wrapped=new StaticLayout[values.length];int lines=1;
   for(int i=0;i<values.length;i++){wrapped[i]=layout(values[i],widths[i]-10,10,false,INK,i<3);lines=Math.max(lines,wrapped[i].getLineCount());}
   int maxLines=Math.max(1,Math.min(20,(BOTTOM-bodyTop-85)/14));
   for(int line=0;line<lines;line+=maxLines){String[] part=new String[values.length];
    for(int i=0;i<values.length;i++){StaticLayout w=wrapped[i];part[i]=line>=w.getLineCount()?"":values[i].substring(w.getLineStart(line),w.getLineEnd(Math.min(w.getLineCount(),line+maxLines)-1)).trim();}
-   blocks.add(new Block(part,0,row.balance,widths));
+   blocks.add(new Block(part,0,balance,widths));
   }
  }
  static TextPaint paint(int size,boolean bold,int color){TextPaint p=new TextPaint(Paint.ANTI_ALIAS_FLAG);p.setTextSize(size);p.setColor(color);p.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));return p;}

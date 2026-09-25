@@ -7,7 +7,7 @@ import java.io.File;
 
 /**
  * تقرير حركة الصناديق في ملف Excel واحد حسب المدى التاريخي.
- * الأعمدة من اليمين إلى اليسار كما تُقرأ: وارد، صادر، البيان، اسم الصندوق.
+ * الأعمدة من اليمين إلى اليسار: المخاريج، وارد، صادر، البيان، الجهة.
  */
 public final class CashboxReport {
     private final Context context;
@@ -25,14 +25,14 @@ public final class CashboxReport {
         book.row(false, "الصندوق", boxId > 0 ? boxName : "كل الصناديق",
                 "تاريخ الطباعة", ShiftDates.today(), "");
 
-        // ترويسة الجدول: التاريخ ثم الأعمدة الأربعة المطلوبة.
+        // خمسة أعمدة فقط؛ معلومات الفترة أعلى الجدول والتفاصيل أسفله.
         book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة");
         book.row(false,"المبالغ في الأعمدة الثلاثة بالريال اليمني", "", "", "", "");
 
         int first = book.nextRow();
         int rows = 0;
         double totalIn = 0, totalOut = 0, totalExpense=0;
-        String lastDate = "";
+        java.util.ArrayList<String[]> details=new java.util.ArrayList<>();
 
         try (Cursor c = db.cashboxRange(from, to, boxId)) {
             while (c.moveToNext()) {
@@ -50,15 +50,12 @@ public final class CashboxReport {
                     if (!code.isEmpty() && !note.contains(code)) note = note + "  [" + code + "]";
                 }
 
-                // التاريخ يُكتب مرة واحدة لكل يوم فيسهل تتبّع الأيام.
-                String shown = date.equals(lastDate) ? "" : date;
-                lastDate = date;
-
                 CashReportDetails detail=CashReportDetails.load(db,c.getLong(6));
                 boolean expense=!in&&detail.expense;
                 double original=c.getDouble(8)!=0?c.getDouble(8):amount/(c.getDouble(9)>0?c.getDouble(9):1);
                 book.row(false,expense?amount:null,in?amount:null,!in&&!expense?amount:null,
                         detail.person+(expense?" — صادر":""),box);
+                details.add(new String[]{detail.person+" • "+date+"\n"+note+"\n"+Calc.money(original)+" "+Db.currencyName(c.getString(7)),box});
                 rows++;
                 if(in)totalIn+=amount;else if(expense)totalExpense+=amount;else totalOut+=amount;
             }
@@ -71,6 +68,8 @@ public final class CashboxReport {
                 new XlsxWorkbook.Formula("SUM(B"+first+":B"+last+")",totalIn),
                 new XlsxWorkbook.Formula("SUM(C"+first+":C"+last+")",totalOut),"الإجمالي",rows+" حركة");
         book.row(true,"الصافي",new XlsxWorkbook.Formula("B"+(last+1)+"-C"+(last+1)+"-A"+(last+1),totalIn-totalOut-totalExpense),"","وارد ناقص صادر ومخاريج","");
+        book.row(true,"","","","تفاصيل الحركات","");
+        for(String[] detail:details)book.row(false,"","","",detail[0],detail[1]);
         book.row(false, Branding.CREDIT, "", "", "", "");
 
         File dir = new File(context.getCacheDir(), "exports");
