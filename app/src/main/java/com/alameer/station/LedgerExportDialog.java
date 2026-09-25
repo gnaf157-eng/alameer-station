@@ -44,5 +44,5 @@ final class LedgerExportDialog {
    }catch(Exception e){if(file!=null)file.delete();a.runOnUiThread(()->{if(!cancel.isCanceled()&&!a.isFinishing()&&!a.isDestroyed()){enabled(true);progress.setText("تعذر تجهيز الكشف: "+e.getMessage());}});}
   },"ledger-export").start();
  }
- static Intent shareIntent(Context context,File file,String name){Uri uri=androidx.core.content.FileProvider.getUriForFile(context,context.getPackageName()+".files",file);return new Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,"كشف حركة "+name).setClipData(ClipData.newRawUri("كشف حساب",uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);}
+ static Intent shareIntent(Context context,File file,String name){Uri uri=androidx.core.content.FileProvider.getUriForFile(context,context.getPackageName()+".files",file);Intent intent=new Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM,uri).putExtra(Intent.EXTRA_SUBJECT,"كشف حركة "+name).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);intent.setClipData(ClipData.newRawUri("كشف حساب",uri));return intent;}
 }
