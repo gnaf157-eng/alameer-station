@@ -46,7 +46,7 @@ public class CashboxFlowTest {
  @Test public void upgradeFrom22PreservesAmountsAndRetiresOpenCashCounts(){
   long sar=ShiftWorkspace.addBox(db,"صندوق سعودي","SAR",10);ShiftWorkspace.addCash(db,shift,1,"EXPENSE",sar,0,"SAR","YER",2,"قديم");ShiftWorkspace.count(db,shift,1,CashAccounts.key(sar,"SAR"),8);
   db.getWritableDatabase().execSQL("UPDATE shift_counts SET account=? WHERE account=?",new Object[]{""+sar,CashAccounts.key(sar,"SAR")});db.getWritableDatabase().execSQL("UPDATE shift_operations SET currency='',target_currency=''");db.getWritableDatabase().execSQL("DROP TABLE cashbox_openings");db.getWritableDatabase().setVersion(22);db.close();db=new Db(context);
-  assertEquals(24,db.getReadableDatabase().getVersion());assertEquals(1000,db.cashboxBalance(sar),0.00001);assertEquals(10,CashAccounts.posted(db,sar,"SAR"),0.00001);assertEquals(8,CashAccounts.expected(db,shift,sar,"SAR"),0.00001);assertNull(ShiftWorkspace.counted(db,shift,1,CashAccounts.key(sar,"SAR")));
+  assertEquals(25,db.getReadableDatabase().getVersion());assertEquals(1000,db.cashboxBalance(sar),0.00001);assertEquals(10,CashAccounts.posted(db,sar,"SAR"),0.00001);assertEquals(8,CashAccounts.expected(db,shift,sar,"SAR"),0.00001);assertNull(ShiftWorkspace.counted(db,shift,1,CashAccounts.key(sar,"SAR")));
  }
  @Test public void openingEditorSavesTheChosenCurrencyAfterApproval(){
   db.postOpeningBalances(ShiftDates.today());

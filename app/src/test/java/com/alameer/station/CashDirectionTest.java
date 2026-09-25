@@ -74,9 +74,9 @@ public class CashDirectionTest {
   card.to.setSelection(card.boxes.ids.indexOf(other));Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();card.amount.setText("200");card.dialog.getButton(-1).performClick();assertEquals(1,rows("shift_operations"));assertEquals(0,rows("debtors"));assertEquals(800,CashAccounts.expected(db,shift,box,"YER"),0.00001);assertEquals(200,CashAccounts.expected(db,shift,other,"YER"),0.00001);card.dialog.dismiss();controller.pause().stop().destroy();
   finishShift();assertEquals(800,db.cashboxBalance(box),0.00001);assertEquals(200,db.cashboxBalance(other),0.00001);assertEquals(0,rows("debt_entries"));assertEquals(0,rows("expense_entries"));assertEquals(db.journalDebit(),db.journalCredit(),0.00001);
  }
- @Test public void upgrade23KeepsLedgerAmountsAndDropsOnlyObsoleteOpenCashCounts(){
+ @Test public void upgrade23KeepsLedgersAndHistoricalCountsAndDropsOpenCounts(){
   db.addCashTransaction(box,"IN",35,"قديم",db.shiftDate(shift),"YER","SALE",0);ShiftWorkspace.count(db,shift,1,""+box,999);ShiftWorkspace.count(db,shift,2,"بترول",0);
   db.getWritableDatabase().execSQL("INSERT INTO shift_counts VALUES(999,1,'1:YER',55,55)");db.getWritableDatabase().setVersion(23);db.close();db=new Db(context);
-  assertEquals(24,db.getReadableDatabase().getVersion());assertEquals(1035,db.cashboxBalance(box),0.00001);assertEquals(1,rows("cashbox_entries"));assertNull(ShiftWorkspace.counted(db,shift,1,""+box));assertEquals(0,ShiftWorkspace.counted(db,shift,2,"بترول"),0.00001);assertEquals(55,ShiftWorkspace.counted(db,999,1,"1:YER"),0.00001);ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);
+  assertEquals(25,db.getReadableDatabase().getVersion());assertEquals(1035,db.cashboxBalance(box),0.00001);assertEquals(1,rows("cashbox_entries"));assertNull(ShiftWorkspace.counted(db,shift,1,""+box));assertNull(ShiftWorkspace.counted(db,shift,2,"بترول"));assertEquals(55,ShiftWorkspace.counted(db,999,1,"1:YER"),0.00001);ShiftWorkspace.review(db,shift,0);ShiftWorkspace.review(db,shift,1);
  }
 }

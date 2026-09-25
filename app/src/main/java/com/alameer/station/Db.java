@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 24;
+    private static final int DB_VERSION = 25;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -91,8 +91,8 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if(oldVersion<24&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=1,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
-        if(oldVersion<24&&newVersion>=24)db.execSQL("DELETE FROM shift_counts WHERE section=1 AND shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
+        if(oldVersion<25&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
+        if(oldVersion<25&&newVersion>=25)db.execSQL("DELETE FROM shift_counts WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.

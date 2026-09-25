@@ -129,7 +129,7 @@ public final class Backup {
     }
     static boolean validDatabase(File file){
         try(android.database.sqlite.SQLiteDatabase probe=android.database.sqlite.SQLiteDatabase.openDatabase(file.getPath(),null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY)){
-            if(probe.getVersion()<1||probe.getVersion()>24)return false;
+            if(probe.getVersion()<1||probe.getVersion()>25)return false;
             try(android.database.Cursor c=probe.rawQuery("PRAGMA integrity_check",null)){
                 if(!c.moveToFirst()||!"ok".equals(c.getString(0)))return false;
             }

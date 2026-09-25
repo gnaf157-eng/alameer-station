@@ -853,7 +853,7 @@ public class ShiftActivity extends Activity {
     void workspacePage(int selected){showPage(selected);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}
     private void showPage(int selected){
         if(selected==5&&(ShiftWorkspace.reviewed(db,shiftId)&1)==0){selected=2;Toast.makeText(this,"أكمل مطابقة العامل أولًا",Toast.LENGTH_SHORT).show();}
-        if(selected==6&&(ShiftWorkspace.reviewed(db,shiftId)&3)!=3){selected=(ShiftWorkspace.reviewed(db,shiftId)&1)==0?2:5;Toast.makeText(this,"أكمل مطابقة الصناديق أولًا",Toast.LENGTH_SHORT).show();}
+        if(selected==6&&(ShiftWorkspace.reviewed(db,shiftId)&3)!=3){selected=(ShiftWorkspace.reviewed(db,shiftId)&1)==0?2:5;Toast.makeText(this,"أكمل حركات الصناديق أولًا",Toast.LENGTH_SHORT).show();}
         page=selected;
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
