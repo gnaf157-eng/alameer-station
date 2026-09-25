@@ -55,6 +55,19 @@ public class LedgerStatementTest {
   LedgerStatement s=LedgerStatement.load(db,"supplier_entries","OIL","شركة النفط","",ShiftDates.today());assertTrue(s.rows.isEmpty());assertEquals(0,s.closing,0.00001);
   try(Cursor c=db.getReadableDatabase().rawQuery("SELECT (SELECT COUNT(*) FROM supplier_entries),(SELECT COUNT(*) FROM shift_operations),(SELECT COUNT(*) FROM journal)",null)){c.moveToFirst();assertEquals(0,c.getInt(0));assertEquals(1,c.getInt(1));assertEquals(0,c.getInt(2));}assertEquals(26,db.getReadableDatabase().getVersion());
  }
+ @Test public void cashExpensesUseOneColumnAndNamesComeFromLinkedAccounts()throws Exception{
+  db.addCashTransaction(box,"IN",1000,"إيداع","2026-01-10","YER","SALE",0);
+  db.addExpense("كهرباء",100,"ملاحظة","2026-01-11",box,0);
+  db.addCashTransaction(box,"OUT",50,"ماء","2026-01-12","YER","EXPENSE",0);
+  db.addCashTransaction(box,"OUT",200,"مخاريج في نص حر ليست تصنيفًا","2026-01-13","YER","CUSTOMER",customer);
+  LedgerStatement s=load("cashbox_entries",CashAccounts.key(box,"YER"));
+  assertEquals(150,s.expenses(),0.00001);assertEquals(200,s.decrease-s.expenses(),0.00001);assertEquals(650,s.closing,0.00001);
+  assertEquals("كهرباء",s.rows.get(1).cash.person);assertEquals("سالم",s.rows.get(3).cash.person);assertEquals("الصراف",s.rows.get(3).cash.box);
+  for(LedgerStatement.Row row:s.rows){assertEquals(row.decrease,row.expense()+row.outgoing(),0.00001);assertFalse(row.expense()!=0&&row.outgoing()!=0);}
+  LedgerPdf pdf=new LedgerPdf(context,s);assertArrayEquals(new String[]{"المخاريج","وارد","صادر","البيان","الجهة","التاريخ","الرصيد","تفاصيل / مرجع"},pdf.headings());
+  java.io.File file=new CashboxReport(context,db).build("2026-01-01","2026-01-31",box,"الصراف");
+  try(java.util.zip.ZipFile zip=new java.util.zip.ZipFile(file)){String xml=new String(zip.getInputStream(zip.getEntry("xl/worksheets/sheet1.xml")).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);assertTrue(xml.contains("rightToLeft=\"1\""));assertTrue(xml.contains("A1:J"));assertTrue(xml.contains("SUM(A"));assertTrue(xml.contains("<v>150.0</v>"));assertTrue(xml.contains("سالم"));}
+ }
  @Test public void invalidRangeOrAccountCannotExportAnUnfilteredLedger(){
   reject(()->LedgerStatement.validateRange("2026-02-01","2026-01-01"));reject(()->LedgerStatement.validateRange("2026-02-30","2026-03-01"));reject(()->LedgerStatement.load(db,"journal","1","القيود","","2026-01-01"));reject(()->LedgerStatement.load(db,"cashbox_entries","","كل الصناديق","","2026-01-01"));reject(()->load("material_entries","غير موجود"));
  }

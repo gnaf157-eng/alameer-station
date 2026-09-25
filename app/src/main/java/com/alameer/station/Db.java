@@ -857,7 +857,7 @@ public class Db extends SQLiteOpenHelper {
         args.add(from);args.add(to);
         if(boxId>0){where.append("AND e.box_id=? ");args.add(String.valueOf(boxId));}
         return getReadableDatabase().rawQuery(
-            "SELECT e.entry_date,e.direction,e.amount,e.note,b.name,e.source_shift "+
+            "SELECT e.entry_date,e.direction,e.amount,e.note,b.name,e.source_shift,e.id,e.currency,e.orig_amount,e.rate "+
             "FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+where+
             "ORDER BY e.entry_date,e.id",args.toArray(new String[0]));
     }

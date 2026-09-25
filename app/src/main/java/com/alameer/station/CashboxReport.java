@@ -26,11 +26,12 @@ public final class CashboxReport {
                 "تاريخ الطباعة", ShiftDates.today(), "");
 
         // ترويسة الجدول: التاريخ ثم الأعمدة الأربعة المطلوبة.
-        book.row(true, "التاريخ", "وارد", "صادر", "البيان", "اسم الصندوق");
+        book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة", "التاريخ", "نوع الحركة", "ملاحظات", "المبلغ الأصلي", "العملة");
+        book.row(false,"المبالغ في الأعمدة الثلاثة بالريال اليمني", "", "", "", "");
 
         int first = book.nextRow();
         int rows = 0;
-        double totalIn = 0, totalOut = 0;
+        double totalIn = 0, totalOut = 0, totalExpense=0;
         String lastDate = "";
 
         try (Cursor c = db.cashboxRange(from, to, boxId)) {
@@ -53,25 +54,23 @@ public final class CashboxReport {
                 String shown = date.equals(lastDate) ? "" : date;
                 lastDate = date;
 
-                book.row(false, shown,
-                        in ? (Object) amount : null,
-                        in ? null : (Object) amount,
-                        note, box);
+                CashReportDetails detail=CashReportDetails.load(db,c.getLong(6));
+                boolean expense=!in&&detail.expense;
+                double original=c.getDouble(8)!=0?c.getDouble(8):amount/(c.getDouble(9)>0?c.getDouble(9):1);
+                book.row(false,expense?amount:null,in?amount:null,!in&&!expense?amount:null,
+                        detail.person,box,shown,in?"وارد":expense?"صادر — مخاريج":"صادر",note,original,Db.currencyName(c.getString(7)));
                 rows++;
-                if (in) totalIn += amount; else totalOut += amount;
+                if(in)totalIn+=amount;else if(expense)totalExpense+=amount;else totalOut+=amount;
             }
         }
 
         if (rows == 0) throw new IllegalStateException("لا توجد حركات في هذا المدى.");
 
         int last = book.nextRow() - 1;
-        book.row(true, "الإجمالي",
-                new XlsxWorkbook.Formula("SUM(B" + first + ":B" + last + ")", totalIn),
-                new XlsxWorkbook.Formula("SUM(C" + first + ":C" + last + ")", totalOut),
-                rows + " حركة", "");
-        book.row(true, "الصافي",
-                new XlsxWorkbook.Formula("B" + (last + 1) + "-C" + (last + 1), totalIn - totalOut),
-                "", "وارد ناقص صادر", "");
+        book.row(true,new XlsxWorkbook.Formula("SUM(A"+first+":A"+last+")",totalExpense),
+                new XlsxWorkbook.Formula("SUM(B"+first+":B"+last+")",totalIn),
+                new XlsxWorkbook.Formula("SUM(C"+first+":C"+last+")",totalOut),"الإجمالي",rows+" حركة");
+        book.row(true,"الصافي",new XlsxWorkbook.Formula("B"+(last+1)+"-C"+(last+1)+"-A"+(last+1),totalIn-totalOut-totalExpense),"","وارد ناقص صادر ومخاريج","");
         book.row(false, Branding.CREDIT, "", "", "", "");
 
         File dir = new File(context.getCacheDir(), "exports");

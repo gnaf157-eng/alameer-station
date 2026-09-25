@@ -10,6 +10,9 @@ import java.util.*;
 final class LedgerStatement {
  static final class Row {
   final long id;final String date,note,code;final double increase,decrease,balance;
+  CashReportDetails cash;
+  double expense(){return cash!=null&&cash.expense?decrease:0;}
+  double outgoing(){return decrease-expense();}
   Row(long id,String date,String note,String code,double increase,double decrease,double balance){this.id=id;this.date=date;this.note=note;this.code=code;this.increase=increase;this.decrease=decrease;this.balance=balance;}
  }
  final String source,key,name,station,unit,from,to,increaseLabel,decreaseLabel,legend;
@@ -60,7 +63,9 @@ final class LedgerStatement {
     double add=Math.max(0,delta),subtract=Math.max(0,-delta);plus+=add;minus+=subtract;
     String note=c.getString(2);if(note==null||note.trim().isEmpty())note=delta>=0?increaseLabel:decreaseLabel;
     if(source.equals("supplier_entries")&&!c.getString(6).isEmpty())note="توريد "+c.getString(6)+" • "+number(c.getDouble(7))+" لتر\n"+note;
-    result.add(new Row(c.getLong(0),date,note,c.getString(5),add,subtract,balance));
+    Row row=new Row(c.getLong(0),date,note,c.getString(5),add,subtract,balance);
+    if(source.equals("cashbox_entries"))row.cash=CashReportDetails.load(db,row.id);
+    result.add(row);
    }
   }
   opening=brought;increase=plus;decrease=minus;closing=balance;rows=Collections.unmodifiableList(result);
@@ -74,6 +79,7 @@ final class LedgerStatement {
   try{if(from==null||to==null||to.isEmpty())throw new IllegalArgumentException();LocalDate end=LocalDate.parse(to);if(!end.toString().equals(to))throw new IllegalArgumentException();if(!from.isEmpty()){LocalDate start=LocalDate.parse(from);if(!start.toString().equals(from)||start.isAfter(end))throw new IllegalArgumentException();}}
   catch(RuntimeException e){throw new IllegalArgumentException("اختر فترة صحيحة؛ تاريخ البداية يجب ألا يتجاوز النهاية");}
  }
+ double expenses(){double total=0;for(Row row:rows)total+=row.expense();return total;}
  String period(){return (from.isEmpty()?"من بداية الحساب":"من "+from)+" إلى "+to;}
  String balanceLabel(double value){return signedAccount?(value<0?"علينا ":"لنا ")+number(Math.abs(value)):number(value);}
  static String number(double value){if(Math.abs(value)<0.0000001)value=0;return new DecimalFormat("#,##0.###",DecimalFormatSymbols.getInstance(Locale.US)).format(value);}

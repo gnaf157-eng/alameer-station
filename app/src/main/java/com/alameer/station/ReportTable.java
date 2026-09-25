@@ -112,8 +112,9 @@ final class ReportTable {
         add(false,"سبب الفرق",reason,"","","");
         if(ShiftWorkspace.exists(db,id)){
             add(true,"حركة الصناديق","","","","");
-            add(false,"نقد العامل (تلقائي)",cashboxName(db,ShiftWorkspace.box(db,id)),db.total(id,"CASH"),"ر.ي","دون تكرار");
+
             for(int section=1;section<=2;section++){
+                if(section==1){cashSection(db,id);continue;}
                 if(section==2)add(true,"حركة المواد الإضافية","","","","");
                 add(true,"الحركة","البيان","الحساب / المادة","الكمية","القيمة ر.ي");
                 double total=0;
@@ -136,6 +137,25 @@ final class ReportTable {
             try(Cursor counts=db.getReadableDatabase().rawQuery("SELECT section,account,expected,actual FROM shift_counts WHERE shift_id=? ORDER BY section,account",new String[]{""+id})){while(counts.moveToNext()){String name=counts.getInt(0)==1?cashboxName(db,CashAccounts.box(counts.getString(1)))+" • "+Db.currencyName(CashAccounts.code(db,counts.getString(1))):counts.getString(1);add(false,counts.getInt(0)==1?"نقد":"لترات",name,counts.getDouble(2),counts.getDouble(3),counts.getDouble(3)-counts.getDouble(2));}}
 
         }
+    }
+    private void cashSection(Db db,long id){
+        add(false,"المبالغ بالريال اليمني","","","","");
+        add(true,"المخاريج","وارد","صادر","البيان","الجهة");
+        double incoming=db.total(id,"CASH"),outgoing=0,expenses=0;
+        if(incoming!=0)add(false,"",incoming,"",ShiftWorkspace.workerName(db,id),cashboxName(db,ShiftWorkspace.box(db,id)));
+        try(Cursor c=ShiftWorkspace.operations(db,id,1)){while(c.moveToNext()){
+            String kind=c.getString(1),person=c.getString(7);double amount=c.getDouble(6);
+            try(Cursor d=db.getReadableDatabase().rawQuery("SELECT party_name FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){if(d.moveToFirst()&&!d.getString(0).isEmpty())person=d.getString(0);}
+            if(kind.equals("COLLECTION")||kind.equals("LOAN"))person=db.debtorName(c.getLong(3));
+            boolean expense=kind.equals("EXPENSE"),in=kind.equals("COLLECTION");
+            if(kind.equals("TRANSFER"))person=cashboxName(db,c.getLong(3));
+            add(false,expense?amount:"",in?amount:"",!expense&&!in?amount:"",person,cashboxName(db,c.getLong(2)));
+            if(expense)expenses+=amount;else if(in)incoming+=amount;else outgoing+=amount;
+            if(kind.equals("TRANSFER")){add(false,"",amount,"",cashboxName(db,c.getLong(2)),cashboxName(db,c.getLong(3)));incoming+=amount;}
+            add(false,"نوع الحركة",ShiftWorkspace.label(kind),"ملاحظات",c.getString(7),"");
+        }}
+        add(true,expenses,incoming,outgoing,"الإجمالي","");
+        add(true,"صافي الحركة",incoming-outgoing-expenses,"","وارد − صادر − مخاريج","");
     }
     private static String cashboxName(Db db,long id){try(Cursor c=db.getReadableDatabase().rawQuery("SELECT name FROM cashboxes WHERE id=?",new String[]{""+id})){return c.moveToFirst()?c.getString(0):"غير محدد";}}
     /** عمود كل نوع حركة: مخاريج، مقبوضات، ديون، ثم الفلوس في آخر عمود. */
