@@ -22,11 +22,11 @@ final class LedgerPdf {
   final StaticLayout[] cells;final int height,kind;final double balance;
   Block(String[] text,int kind,double balance){this(text,kind,balance,WIDTHS);}
   Block(String[] text,int kind,double balance,int[] widths){this.kind=kind;this.balance=balance;cells=new StaticLayout[text.length];int h=30;
-   for(int i=0;i<text.length;i++){cells[i]=layout(text[i],widths[i]-10,text.length>5?8:10,kind!=0,INK,text.length>5?(i<3||i==6):i!=1);h=Math.max(h,cells[i].getHeight()+14);}height=h;
+   for(int i=0;i<text.length;i++){cells[i]=layout(text[i],widths[i]-10,10,kind!=0,INK,widths[0]==75?i<3:i!=1);h=Math.max(h,cells[i].getHeight()+14);}height=h;
   }
  }
  LedgerPdf(Context context,LedgerStatement statement){
-  this.statement=statement;cash=statement.source.equals("cashbox_entries");widths=cash?new int[]{55,55,55,85,65,60,65,91}:WIDTHS;logo=Branding.logo(context);station=layout(statement.station,WIDTH-2*MARGIN-48,13,true,INK,false);
+  this.statement=statement;cash=statement.source.equals("cashbox_entries");widths=cash?new int[]{75,75,75,180,126}:WIDTHS;logo=Branding.logo(context);station=layout(statement.station,WIDTH-2*MARGIN-48,13,true,INK,false);
   account=layout(statement.name,WIDTH-2*MARGIN,16,true,INK,false);period=layout(statement.period(),WIDTH-2*MARGIN,10,false,MUTED,false);legend=layout(statement.legend+" • الوحدة: "+statement.unit,WIDTH-2*MARGIN,9,false,MUTED,false);
   summaryTop=83+account.getHeight()+period.getHeight()+legend.getHeight()+15;tableTop=summaryTop+66;bodyTop=tableTop+30;
   if(bodyTop>BOTTOM-160)throw new IllegalArgumentException("اسم الحساب طويل جدًا للطباعة؛ اختصر اسمه من الضبط");
@@ -40,21 +40,19 @@ final class LedgerPdf {
     blocks.add(new Block(new String[]{first?row.date:"",first?part:"تابع البيان: "+part,first&&row.increase!=0?LedgerStatement.number(row.increase):"",first&&row.decrease!=0?LedgerStatement.number(row.decrease):"",first?LedgerStatement.number(row.balance):""},0,row.balance));first=false;line=end;
    }
   }
-  if(statement.rows.isEmpty())blocks.add(cash?new Block(new String[]{"","","","لا توجد حركات خلال الفترة المختارة","","","",""},0,statement.opening,widths):new Block(new String[]{"","لا توجد حركات خلال الفترة المختارة","","",""},0,statement.opening));
-  blocks.add(cash?new Block(new String[]{LedgerStatement.number(statement.expenses()),LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease-statement.expenses()),"إجمالي الفترة","","",LedgerStatement.number(statement.closing),""},2,statement.closing,widths):new Block(new String[]{"","إجمالي الفترة",LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease),LedgerStatement.number(statement.closing)},2,statement.closing));
+  if(statement.rows.isEmpty())blocks.add(cash?new Block(new String[]{"","","","لا توجد حركات خلال الفترة المختارة",""},0,statement.opening,widths):new Block(new String[]{"","لا توجد حركات خلال الفترة المختارة","","",""},0,statement.opening));
+  blocks.add(cash?new Block(new String[]{LedgerStatement.number(statement.expenses()),LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease-statement.expenses()),"إجمالي الفترة",""},2,statement.closing,widths):new Block(new String[]{"","إجمالي الفترة",LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease),LedgerStatement.number(statement.closing)},2,statement.closing));
   ArrayList<Block> page=new ArrayList<>();int y=bodyTop;double carried=statement.opening;
   for(Block block:blocks){if(y+block.height>BOTTOM){pages.add(page);page=new ArrayList<>();Block carry=balanceBlock("رصيد منقول",carried,1);page.add(carry);y=bodyTop+carry.height;}
    if(y+block.height>BOTTOM)throw new IllegalArgumentException("تعذر تنسيق إحدى الحركات للطباعة");page.add(block);y+=block.height;carried=block.balance;
   }pages.add(page);
  }
- Block balanceBlock(String label,double value,int kind){return cash?new Block(new String[]{"","","",label,"","",LedgerStatement.number(value),""},kind,value,widths):new Block(new String[]{"",label,"","",LedgerStatement.number(value)},kind,value);}
- String[] headings(){return cash?new String[]{"المخاريج","وارد","صادر","البيان","الجهة","التاريخ","الرصيد","تفاصيل / مرجع"}:new String[]{"التاريخ","البيان",statement.source.equals("supplier_entries")?"إضافة":statement.increaseLabel,statement.source.equals("supplier_entries")?"خصم":statement.decreaseLabel,"الرصيد"};}
+ Block balanceBlock(String label,double value,int kind){return cash?new Block(new String[]{"","","",label,LedgerStatement.number(value)},kind,value,widths):new Block(new String[]{"",label,"","",LedgerStatement.number(value)},kind,value);}
+ String[] headings(){return cash?new String[]{"المخاريج","وارد","صادر","البيان","الجهة"}:new String[]{"التاريخ","البيان",statement.source.equals("supplier_entries")?"إضافة":statement.increaseLabel,statement.source.equals("supplier_entries")?"خصم":statement.decreaseLabel,"الرصيد"};}
  void cashBlocks(ArrayList<Block> blocks,LedgerStatement.Row row){
-  String detail=(row.increase>0?"وارد":row.expense()>0?"صادر — مخاريج":"صادر")
-    +(row.note.equals(row.cash.person)?"":"\n"+row.note)+(row.code.isEmpty()||row.note.contains(row.code)?"":"\n"+row.code);
-  String[] values={row.expense()==0?"":LedgerStatement.number(row.expense()),row.increase==0?"":LedgerStatement.number(row.increase),row.outgoing()==0?"":LedgerStatement.number(row.outgoing()),row.cash.person,row.cash.box,row.date,LedgerStatement.number(row.balance),detail};
+  String[] values={row.expense()==0?"":LedgerStatement.number(row.expense()),row.increase==0?"":LedgerStatement.number(row.increase),row.outgoing()==0?"":LedgerStatement.number(row.outgoing()),row.cash.person+(row.expense()>0?" — صادر":""),row.cash.box};
   StaticLayout[] wrapped=new StaticLayout[values.length];int lines=1;
-  for(int i=0;i<values.length;i++){wrapped[i]=layout(values[i],widths[i]-10,8,false,INK,i<3||i==6);lines=Math.max(lines,wrapped[i].getLineCount());}
+  for(int i=0;i<values.length;i++){wrapped[i]=layout(values[i],widths[i]-10,10,false,INK,i<3);lines=Math.max(lines,wrapped[i].getLineCount());}
   int maxLines=Math.max(1,Math.min(20,(BOTTOM-bodyTop-85)/14));
   for(int line=0;line<lines;line+=maxLines){String[] part=new String[values.length];
    for(int i=0;i<values.length;i++){StaticLayout w=wrapped[i];part[i]=line>=w.getLineCount()?"":values[i].substring(w.getLineStart(line),w.getLineEnd(Math.min(w.getLineCount(),line+maxLines)-1)).trim();}
@@ -75,7 +73,7 @@ final class LedgerPdf {
   for(int i=0;i<4;i++){int left=WIDTH-MARGIN-(i+1)*134+5;p.setColor(i==3?0xffFFF5CC:0xffF1F1F1);c.drawRoundRect(left,summaryTop,left+128,summaryTop+56,6,6,p);draw(c,layout(labels[i],120,9,false,MUTED,false),left+4,summaryTop+7);draw(c,layout(values[i],120,12,true,INK,true),left+4,summaryTop+25);}
   p.setColor(0xffE9E9E9);c.drawRect(MARGIN,tableTop,WIDTH-MARGIN,bodyTop,p);
   String[] headings=headings();int right=WIDTH-MARGIN;
-  for(int i=0;i<widths.length;i++){right-=widths[i];draw(c,layout(headings[i],widths[i]-10,cash?8:9,true,INK,false),right+6,tableTop+7);}
+  for(int i=0;i<widths.length;i++){right-=widths[i];draw(c,layout(headings[i],widths[i]-10,9,true,INK,false),right+6,tableTop+7);}
   y=bodyTop;int stripe=0;
   for(Block block:pages.get(index)){
    if(block.kind!=0||stripe%2==1){p.setColor(block.kind==2?0xffFFF5CC:block.kind==1?0xffF0F0F0:0xffFAFAFA);c.drawRect(MARGIN,y,WIDTH-MARGIN,y+block.height,p);}

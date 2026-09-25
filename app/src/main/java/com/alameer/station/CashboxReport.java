@@ -26,7 +26,7 @@ public final class CashboxReport {
                 "تاريخ الطباعة", ShiftDates.today(), "");
 
         // ترويسة الجدول: التاريخ ثم الأعمدة الأربعة المطلوبة.
-        book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة", "التاريخ", "نوع الحركة", "ملاحظات", "المبلغ الأصلي", "العملة");
+        book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة");
         book.row(false,"المبالغ في الأعمدة الثلاثة بالريال اليمني", "", "", "", "");
 
         int first = book.nextRow();
@@ -58,7 +58,7 @@ public final class CashboxReport {
                 boolean expense=!in&&detail.expense;
                 double original=c.getDouble(8)!=0?c.getDouble(8):amount/(c.getDouble(9)>0?c.getDouble(9):1);
                 book.row(false,expense?amount:null,in?amount:null,!in&&!expense?amount:null,
-                        detail.person,box,shown,in?"وارد":expense?"صادر — مخاريج":"صادر",note,original,Db.currencyName(c.getString(7)));
+                        detail.person+(expense?" — صادر":""),box);
                 rows++;
                 if(in)totalIn+=amount;else if(expense)totalExpense+=amount;else totalOut+=amount;
             }

@@ -64,9 +64,9 @@ public class LedgerStatementTest {
   assertEquals(150,s.expenses(),0.00001);assertEquals(200,s.decrease-s.expenses(),0.00001);assertEquals(650,s.closing,0.00001);
   assertEquals("كهرباء",s.rows.get(1).cash.person);assertEquals("سالم",s.rows.get(3).cash.person);assertEquals("الصراف",s.rows.get(3).cash.box);
   for(LedgerStatement.Row row:s.rows){assertEquals(row.decrease,row.expense()+row.outgoing(),0.00001);assertFalse(row.expense()!=0&&row.outgoing()!=0);}
-  LedgerPdf pdf=new LedgerPdf(context,s);assertArrayEquals(new String[]{"المخاريج","وارد","صادر","البيان","الجهة","التاريخ","الرصيد","تفاصيل / مرجع"},pdf.headings());
+  LedgerPdf pdf=new LedgerPdf(context,s);assertArrayEquals(new String[]{"المخاريج","وارد","صادر","البيان","الجهة"},pdf.headings());
   java.io.File file=new CashboxReport(context,db).build("2026-01-01","2026-01-31",box,"الصراف");
-  try(java.util.zip.ZipFile zip=new java.util.zip.ZipFile(file)){String xml=new String(zip.getInputStream(zip.getEntry("xl/worksheets/sheet1.xml")).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);assertTrue(xml.contains("rightToLeft=\"1\""));assertTrue(xml.contains("A1:J"));assertTrue(xml.contains("SUM(A"));assertTrue(xml.contains("<v>150.0</v>"));assertTrue(xml.contains("سالم"));}
+  try(java.util.zip.ZipFile zip=new java.util.zip.ZipFile(file)){String xml=new String(zip.getInputStream(zip.getEntry("xl/worksheets/sheet1.xml")).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);assertTrue(xml.contains("rightToLeft=\"1\""));assertTrue(xml.contains("A1:E"));assertTrue(xml.contains("SUM(A"));assertTrue(xml.contains("<v>150.0</v>"));assertTrue(xml.contains("سالم"));}
  }
  @Test public void invalidRangeOrAccountCannotExportAnUnfilteredLedger(){
   reject(()->LedgerStatement.validateRange("2026-02-01","2026-01-01"));reject(()->LedgerStatement.validateRange("2026-02-30","2026-03-01"));reject(()->LedgerStatement.load(db,"journal","1","القيود","","2026-01-01"));reject(()->LedgerStatement.load(db,"cashbox_entries","","كل الصناديق","","2026-01-01"));reject(()->load("material_entries","غير موجود"));
