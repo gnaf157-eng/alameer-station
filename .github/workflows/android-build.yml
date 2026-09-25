@@ -53,6 +53,24 @@ jobs:
           fi
           exit $code
 
+      - name: Enable Android emulator acceleration
+        run: sudo setfacl -m u:$(whoami):rw /dev/kvm
+
+      - name: Test real Android PDF generation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: default
+          arch: x86_64
+          profile: Nexus 6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            mkdir -p app/build/reports/pdf
+            adb exec-out run-as com.alameer.station.shifts.v2.preview tar -C files/ledger-qa -cf - . > "$RUNNER_TEMP/ledger-qa.tar"
+            tar -xf "$RUNNER_TEMP/ledger-qa.tar" -C app/build/reports/pdf
+
       - name: Summarize accounting tests
         if: always()
         run: |
@@ -74,6 +92,7 @@ jobs:
           name: test-results
           path: |
             app/build/test-results/testDebugUnitTest/
+            app/build/outputs/androidTest-results/connected/
             app/build/reports/ui/
             app/build/reports/pdf/
 
