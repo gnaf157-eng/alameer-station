@@ -24,17 +24,20 @@ public final class LedgerActivity extends Activity {
   else if(table.equals("debt_entries")){title.setText("دفتر العملاء والسائقين");rows.addView(StationUi.text(this,"الموجب لنا • السالب علينا",14,false));try(Cursor c=db.getReadableDatabase().rawQuery("SELECT d.id,d.name,d.opening+COALESCE(SUM(CASE WHEN e.direction='DEBT' THEN e.amount ELSE -e.amount END),0) FROM debtors d LEFT JOIN debt_entries e ON e.debtor_id=d.id GROUP BY d.id ORDER BY d.name",null)){while(c.moveToNext())account(c.getString(1),c.getDouble(2),"ر.ي",table,"debtor_id",c.getString(0));}}
   else if(table.equals("material_entries")){title.setText("دفتر المواد والشركات");for(String m:Db.MATERIALS)account(m,db.materialSummary(m)[3],"لتر",table,"material",m);rows.addView(StationUi.text(this,"حسابات الشركات — الموجب لنا والسالب علينا",15,true));for(String s:new String[]{"OIL","GAS"})account(Db.supplierName(s),db.supplierBalance(s),"ر.ي","supplier_entries","supplier",s);}
   else if(table.equals("expense_entries")){title.setText("دفتر المصاريف");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT category,SUM(amount) FROM expense_entries GROUP BY category ORDER BY category",null)){while(c.moveToNext())account(c.getString(0),c.getDouble(1),"ر.ي",table,"category",c.getString(0));}}
+  else if(table.equals("supplier_entries")){title.setText("حسابات الشركات");for(String company:Db.SUPPLIERS)account(Db.supplierName(company),db.supplierBalance(company),"ر.ي",table,"supplier",company);}
   else {statement(table,null,null,table.equals("journal")?"دفتر القيود":"حسابات الشركات",0,"ر.ي");return;}
   if(rows.getChildCount()==0)rows.addView(StationUi.text(this,"لا توجد حسابات بعد",16,false));
  }
  private void statement(String source,String field,String key,String name,double balance,String unit){
   rows.removeAllViews();title.setText(name);rows.addView(StationUi.text(this,"الرصيد: "+Calc.money(balance)+" "+unit,18,true));
+  if(key!=null){Button print=StationUi.button(this,"طباعة كشف الحركة",true,()->new LedgerExportDialog(this,source,key,name).show());print.setTag("ledger-export");rows.addView(print,StationUi.space(this));}
   rows.addView(StationUi.button(this,"رجوع إلى الحسابات",false,this::accounts),StationUi.space(this));
   String amount=source.equals("material_entries")?"e.litres":source.equals("journal")?"e.total":"e.amount";
   String note=source.equals("journal")?"e.memo":"e.note";
   String direction=source.equals("cashbox_entries")||source.equals("debt_entries")||source.equals("material_entries")?"e.direction":source.equals("supplier_entries")?"e.kind":"''";
   String code="COALESCE((SELECT s.shift_code FROM shift_links l JOIN shifts s ON s.id=l.shift_id WHERE l.entity='"+source+"' AND l.row_id=e.id),'سجل سابق')";
   String where=field==null?"":" WHERE e."+field+"=?";String[] args=field==null?null:new String[]{key};if(source.equals("cashbox_entries")&&key!=null){where=" WHERE e.box_id=? AND e.currency=?";args=new String[]{""+CashAccounts.box(key),CashAccounts.code(db,key)};}
+  if(source.equals("supplier_entries"))where+=(where.isEmpty()?" WHERE ":" AND ")+"e.voided=0";
   String fx=source.equals("cashbox_entries")?",e.currency,e.orig_amount,e.rate":",'YER',0,1";
   try(Cursor c=db.getReadableDatabase().rawQuery("SELECT e.entry_date,"+amount+","+note+","+direction+","+code+fx+" FROM "+source+" e"+where+" ORDER BY e.entry_date DESC,e.id DESC LIMIT 500",args)){
    rows.addView(StationUi.text(this,"آخر 500 حركة — الرصيد أعلاه يشمل كامل الحساب",12,false));
