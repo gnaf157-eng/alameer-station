@@ -43,10 +43,12 @@ final class WorkspaceForms {
    companies.addView(tiles,new LinearLayout.LayoutParams(-1,-2));
   }
   operations();
-  if(section==1)button(root,"متابعة إلى المواد",true,()->{ShiftWorkspace.review(db,shift,1);a.workspacePage(6);});
-  else{
-   button(root,"ترحيل الوردية بالكامل",true,()->{ShiftWorkspace.review(db,shift,2);a.requestPostShift();});
-  }
+  int checked=ShiftWorkspace.reviewed(db,shift);
+  root.addView(text("تأكيدات الوردية\n"+((checked&1)!=0?"✓":"○")+" مطابقة العامل\n"+((checked&2)!=0?"✓":"○")+" مراجعة الصناديق\n"+((checked&4)!=0?"✓":"○")+" مراجعة المواد",15));
+  root.addView(text(section==1?"راجع رصيد الصندوق الظاهر مع رصيد الصراف في مجموعة الواتساب، ثم أكد المراجعة. لا يُشترط فرق صفري هنا.":"سجّل حركات المواد وراجعها، ثم أكد المراجعة. شرط تصفير فرق العامل مستقل.",13));
+  button(root,section==1?"تأكيد مراجعة الصناديق":"تأكيد مراجعة المواد",false,()->{ShiftWorkspace.review(db,shift,section);render();});
+  if(section==1)button(root,"متابعة إلى المواد",true,()->a.workspacePage(6));
+  else button(root,"ترحيل الوردية بالكامل",true,()->a.requestPostShift());
  }
  void operations(){LinearLayout list=card("الحركات المسجّلة في الوردية");try(Cursor c=ShiftWorkspace.operations(db,shift,section)){
   if(!c.moveToFirst()){list.addView(text("لا توجد حركات إضافية",14));return;}

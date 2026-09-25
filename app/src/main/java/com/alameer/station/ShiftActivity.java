@@ -210,7 +210,7 @@ public class ShiftActivity extends Activity {
             NavIcon icon=new NavIcon(i);icon.setBounds(0,0,dp(25),dp(25));
             tab.setCompoundDrawables(null,icon,null,null);tab.setCompoundDrawablePadding(dp(4));
             tab.setContentDescription(names[i]);
-            tab.setOnClickListener(v->{if(page==0&&n!=0&&!saveReadings())return;showPage(n);scroll.smoothScrollTo(0,0);});
+            tab.setOnClickListener(v->{if(page==0&&n!=0)saveReadings();showPage(n);scroll.smoothScrollTo(0,0);});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(70),1);
             lp.setMargins(dp(3),0,dp(3),0);nav.addView(tab,lp);
         }
@@ -856,8 +856,6 @@ public class ShiftActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     void workspacePage(int selected){showPage(selected);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}
     private void showPage(int selected){
-        if(selected==5&&(ShiftWorkspace.reviewed(db,shiftId)&1)==0){selected=2;Toast.makeText(this,"أكمل مطابقة العامل أولًا",Toast.LENGTH_SHORT).show();}
-        if(selected==6&&(ShiftWorkspace.reviewed(db,shiftId)&3)!=3){selected=(ShiftWorkspace.reviewed(db,shiftId)&1)==0?2:5;Toast.makeText(this,"أكمل حركات الصناديق أولًا",Toast.LENGTH_SHORT).show();}
         page=selected;
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);

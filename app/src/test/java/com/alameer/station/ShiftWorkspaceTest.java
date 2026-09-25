@@ -44,8 +44,36 @@ public class ShiftWorkspaceTest {
  @Test public void mobileTabsAndReadOnlyLedgerCanOpen(){
   db.setSetting("name_set","1");
   org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).create().start().resume();
-  ShiftActivity screen=controller.get();assertEquals(3,screen.tabs.length);assertEquals("مطابقة العامل",screen.tabs[0].getText().toString());screen.workspacePage(5);screen.workspacePage(6);screen.workspacePage(2);controller.pause().stop().destroy();
+  ShiftActivity screen=controller.get();assertEquals(3,screen.tabs.length);assertEquals("مطابقة العامل",screen.tabs[0].getText().toString());screen.tabs[1].performClick();assertTrue(screen.tabs[1].isSelected());assertEquals(0,ShiftWorkspace.reviewed(db,shift));screen.tabs[2].performClick();assertTrue(screen.tabs[2].isSelected());assertEquals(0,ShiftWorkspace.reviewed(db,shift));screen.tabs[0].performClick();assertTrue(screen.tabs[0].isSelected());screen.workspacePage(2);controller.pause().stop().destroy();
   org.robolectric.android.controller.ActivityController<LedgerActivity> ledger=Robolectric.buildActivity(LedgerActivity.class,LedgerActivity.intent(context,"cashbox_entries")).create().start().resume();ledger.pause().stop().destroy();
+ }
+ @Test public void independentReviewsAllowAnyOrderButNeverPartialPosting(){
+  ShiftWorkspace.review(db,shift,2);assertEquals(4,ShiftWorkspace.reviewed(db,shift));refuse(this::close);
+  ShiftWorkspace.review(db,shift,1);assertEquals(6,ShiftWorkspace.reviewed(db,shift));refuse(this::close);
+  assertEquals(0,count("shift_counts"));assertEquals(0,count("journal"));
+  ShiftWorkspace.review(db,shift,0);assertEquals(7,ShiftWorkspace.reviewed(db,shift));close();assertFalse(db.isOpen(shift));
+ }
+ @Test public void cashAndMaterialsCanBeConfirmedWhileWorkerHasDifference(){
+  db.addMovement(shift,"EXPENSE","فرق",1);
+  ShiftWorkspace.review(db,shift,1);ShiftWorkspace.review(db,shift,2);
+  assertEquals(6,ShiftWorkspace.reviewed(db,shift));refuse(()->ShiftWorkspace.review(db,shift,0));refuse(this::close);
+  assertTrue(db.isOpen(shift));assertEquals(0,count("journal"));
+ }
+ @Test public void navigationAndPostingButtonsNeverConfirmReviewsImplicitly(){
+  db.setSetting("name_set","1");
+  org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).create().start().resume();
+  ShiftActivity screen=controller.get();screen.workspacePage(5);
+  clickText(screen.pages[5],"متابعة إلى المواد");assertTrue(screen.tabs[2].isSelected());assertEquals(0,ShiftWorkspace.reviewed(db,shift));
+  clickText(screen.pages[6],"ترحيل الوردية بالكامل");assertEquals(0,ShiftWorkspace.reviewed(db,shift));assertTrue(db.isOpen(shift));
+  clickText(screen.pages[6],"تأكيد مراجعة المواد");assertEquals(4,ShiftWorkspace.reviewed(db,shift));
+  screen.workspacePage(5);clickText(screen.pages[5],"تأكيد مراجعة الصناديق");assertEquals(6,ShiftWorkspace.reviewed(db,shift));
+  controller.pause().stop().destroy();
+ }
+ void clickText(android.view.View root,String label){android.view.View found=findText(root,label);assertNotNull(label,found);found.performClick();}
+ android.view.View findText(android.view.View root,String label){
+  if(root instanceof android.widget.TextView&&label.equals(((android.widget.TextView)root).getText().toString()))return root;
+  if(root instanceof android.view.ViewGroup){android.view.ViewGroup group=(android.view.ViewGroup)root;for(int i=0;i<group.getChildCount();i++){android.view.View found=findText(group.getChildAt(i),label);if(found!=null)return found;}}
+  return null;
  }
  @Test public void reportCannotPresentUnpostedDraftAsOfficial(){refuse(()->new ReportTable(db,shift));}
  @Test public void finalPostingDoesNotRequirePhysicalCounts(){for(int i=0;i<3;i++)ShiftWorkspace.review(db,shift,i);assertEquals(0,count("shift_counts"));close();assertFalse(db.isOpen(shift));}

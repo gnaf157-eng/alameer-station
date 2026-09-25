@@ -38,10 +38,8 @@ public final class ShiftWorkspace {
 
     static void review(Db db,long id,int section){openOnly(db,id);if(section<0||section>2)throw new IllegalArgumentException();
         if(section==0){String issue=db.validateShift(id);if(!issue.isEmpty()||Math.abs(db.balance(id))>0.0000001)throw new IllegalStateException(issue.isEmpty()?"يجب تصفير فرق العامل":issue);}
-        if(section==1&&(reviewed(db,id)&1)==0)throw new IllegalStateException("أكمل مطابقة العامل أولًا");
-        if(section==2&&(reviewed(db,id)&3)!=3)throw new IllegalStateException("أكمل حركات الصناديق أولًا");
         if(section==1&&db.total(id,"CASH")>0)CashAccounts.requireBox(db,box(db,id));db.getWritableDatabase().execSQL("UPDATE shift_workspace SET reviewed=reviewed|? WHERE shift_id=?",new Object[]{1<<section,id});}
-    static void ready(Db db,long id){if(exists(db,id)){if(db.total(id,"CASH")>0)CashAccounts.requireBox(db,box(db,id));if(reviewed(db,id)!=7)throw new IllegalStateException("أكمل مطابقة العامل وحركات الصناديق، ثم رحّل الوردية من المواد.");}}
+    static void ready(Db db,long id){if(exists(db,id)){if(db.total(id,"CASH")>0)CashAccounts.requireBox(db,box(db,id));if(reviewed(db,id)!=7)throw new IllegalStateException("أكد مطابقة العامل ومراجعة الصناديق ومراجعة المواد جميعًا قبل الترحيل.");}}
     static Cursor operations(Db db,long id,int section){return db.getReadableDatabase().rawQuery("SELECT id,kind,box_id,target_id,material,quantity,amount,note,posted FROM shift_operations WHERE shift_id=? AND section=? ORDER BY id",new String[]{""+id,""+section});}
     static long add(Db db,long id,int section,String kind,long box,long target,String material,double quantity,double amount,String note){
         openOnly(db,id);
