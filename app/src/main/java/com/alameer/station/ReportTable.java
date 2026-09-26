@@ -148,8 +148,9 @@ final class ReportTable {
             try(Cursor d=db.getReadableDatabase().rawQuery("SELECT party_name FROM shift_operations WHERE id=?",new String[]{""+c.getLong(0)})){if(d.moveToFirst()&&!d.getString(0).isEmpty())person=d.getString(0);}
             if(kind.equals("COLLECTION")||kind.equals("LOAN"))person=db.debtorName(c.getLong(3));
             boolean expense=kind.equals("EXPENSE"),in=kind.equals("COLLECTION");
+            if(kind.equals("COMPANY_PAYMENT"))person=Db.supplierName(c.getLong(3)==1?"GAS":"OIL");
             if(kind.equals("TRANSFER"))person=cashboxName(db,c.getLong(3));
-            add(false,expense?amount:"",in?amount:"",!expense&&!in?amount:"",person+"\n"+(kind.equals("TRANSFER")?"صادر — تحويل":ShiftWorkspace.label(kind)),cashboxName(db,c.getLong(2)));
+            add(false,expense?amount:"",in?amount:"",!expense&&!in?amount:"",person+"\n"+((kind.equals("TRANSFER")||kind.equals("COMPANY_PAYMENT"))?"صادر — تحويل":ShiftWorkspace.label(kind)),cashboxName(db,c.getLong(2)));
             if(expense)expenses+=amount;else if(in)incoming+=amount;else outgoing+=amount;
             if(kind.equals("TRANSFER")){add(false,"",amount,"",cashboxName(db,c.getLong(2))+"\nوارد — تحويل",cashboxName(db,c.getLong(3)));incoming+=amount;}
         }}

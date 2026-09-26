@@ -61,12 +61,12 @@ final class WorkspaceForms {
   String unit="YER";double rate=1;
   try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT currency,rate FROM shift_operations WHERE id=?",new String[]{""+id})){if(fx.moveToFirst()){unit=fx.getString(0);rate=fx.getDouble(1);}}
   String amount=Calc.money(c.getDouble(6)/(rate>0?rate:1))+" "+Db.currencyName(unit);
-  boolean incoming=kind.equals("COLLECTION"),transfer=kind.equals("TRANSFER");
+  boolean incoming=kind.equals("COLLECTION"),company=kind.equals("COMPANY_PAYMENT"),transfer=kind.equals("TRANSFER")||company;
   String type=transfer?"تحويل":incoming?"وارد":"صادر";
   int tint=transfer?0xff626870:incoming?Util.GREEN:Util.RED;
   String description=box+" · "+(note==null?"":note);
   final String details=ShiftWorkspace.label(kind)+"\nالصندوق: "+box
-    +(transfer?"\nإلى: "+CashAccounts.name(db,c.getLong(3)):"")+"\nالمبلغ: "+amount
+    +(transfer?"\nإلى: "+(company?Db.supplierName(c.getLong(3)==1?"GAS":"OIL"):CashAccounts.name(db,c.getLong(3))):"")+"\nالمبلغ: "+amount
     +(note==null||note.isEmpty()?"":"\n"+note);
   LinearLayout row=new LinearLayout(a);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setGravity(Gravity.CENTER_VERTICAL);
   row.setPadding(dp(4),0,dp(4),0);row.setMinimumHeight(dp(48));row.setTag("cash-operation-"+id);

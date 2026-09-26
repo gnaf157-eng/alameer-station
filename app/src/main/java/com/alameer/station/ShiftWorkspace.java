@@ -44,8 +44,9 @@ public final class ShiftWorkspace {
     static long add(Db db,long id,int section,String kind,long box,long target,String material,double quantity,double amount,String note){
         openOnly(db,id);
         if(!Double.isFinite(amount)||amount<=0||note==null||note.trim().isEmpty())throw new IllegalArgumentException("أدخل البيان والمبلغ الصحيح");
+        if(kind.equals("COMPANY_PAYMENT")&&target!=0&&target!=1)throw new IllegalArgumentException("اختر الشركة");
         if(section==1){
-            if(!Arrays.asList("EXPENSE","COLLECTION","LOAN","TRANSFER","SUPPLIER").contains(kind)||box<=0)throw new IllegalArgumentException("اختر الصندوق ونوع الحركة");
+            if(!Arrays.asList("EXPENSE","COLLECTION","LOAN","TRANSFER","SUPPLIER","COMPANY_PAYMENT").contains(kind)||box<=0)throw new IllegalArgumentException("اختر الصندوق ونوع الحركة");
             if(Arrays.asList("COLLECTION","LOAN","TRANSFER").contains(kind)&&target<=0)throw new IllegalArgumentException("اختر الحساب المقابل");
             if(kind.equals("TRANSFER")&&box==target)throw new IllegalArgumentException("اختر صندوقًا آخر");
         }else if(section==2){
@@ -145,7 +146,7 @@ public final class ShiftWorkspace {
     static long addCash(Db db,long shift,int section,String kind,long box,long target,double nativeAmount,String note){return addCash(db,shift,section,kind,box,target,boxCurrency(db,box),boxCurrency(db,target),nativeAmount,note);}
     static long addCash(Db db,long shift,int section,String kind,long box,long target,String code,String targetCode,double nativeAmount,String note){
         CashAccounts.currency(code);CashAccounts.currency(targetCode);CashAccounts.requireBox(db,box);if(kind.equals("TRANSFER"))CashAccounts.requireBox(db,target);
-        if((section==2&&!kind.equals("COMPANY_PAYMENT"))||(section==1&&!Arrays.asList("EXPENSE","COLLECTION","LOAN","TRANSFER").contains(kind))||(section!=1&&section!=2))throw new IllegalArgumentException("نوع الحركة غير صحيح");
+        if((section==2&&!kind.equals("COMPANY_PAYMENT"))||(section==1&&!Arrays.asList("EXPENSE","COLLECTION","LOAN","TRANSFER","COMPANY_PAYMENT").contains(kind))||(section!=1&&section!=2))throw new IllegalArgumentException("نوع الحركة غير صحيح");
         if(kind.equals("COMPANY_PAYMENT")&&target!=0&&target!=1)throw new IllegalArgumentException("اختر الشركة");
         double rate=db.rate(code),other=db.rate(targetCode);SQLiteDatabase s=db.getWritableDatabase();s.beginTransaction();try{
         long id=add(db,shift,section,kind,box,target,"",0,nativeAmount*rate,note);

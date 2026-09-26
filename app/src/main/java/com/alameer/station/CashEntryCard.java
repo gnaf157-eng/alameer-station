@@ -13,12 +13,13 @@ final class CashEntryCard {
  final WorkspaceForms host;final ShiftActivity a;final Db db;final long shift,boxId;
  final WorkspaceForms.Choices boxes;
  final Spinner currency,to,targetCurrency;final AutoCompleteTextView person;final EditText amount,note;
- final TextView current,after,targetBalance,feedback,partyLabel,partyRole;final LinearLayout targetGroup;
+ final TextView current,after,targetBalance,feedback,partyLabel,partyRole;final LinearLayout targetGroup,targetCurrencyGroup;
  final Button[] kinds=new Button[3];final AlertDialog dialog;AlertDialog classificationDialog;
  ArrayList<NameDirectory.Entry> directory;
  int kind;String selectedName="",selectedRole="";
  CashEntryCard(WorkspaceForms h,long selectedBox){
   host=h;a=h.a;db=h.db;shift=h.shift;boxId=selectedBox;CashAccounts.requireBox(db,boxId);boxes=h.new Choices("cashboxes",boxId);
+  boxes.names.set(0,"اختر وجهة التحويل");boxes.ids.add(-1L);boxes.names.add("شركة النفط");boxes.ids.add(-2L);boxes.names.add("شركة الغاز");
   LinearLayout form=h.form();form.setPadding(h.dp(16),h.dp(8),h.dp(16),h.dp(8));
   currency=h.spinner(Db.CURRENCY_NAMES);to=boxes.spinner();targetCurrency=h.spinner(Db.CURRENCY_NAMES);
   currency.setTag("cash-currency");currency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(ShiftWorkspace.boxCurrency(db,boxId)));
@@ -47,7 +48,7 @@ final class CashEntryCard {
    if(!name.equals(selectedName)){selectedName=name;selectedRole="";int matches=0;for(NameDirectory.Entry entry:directory)if(entry.name.equals(name)&&!entry.role.isEmpty()){selectedRole=entry.role;matches++;}if(matches!=1)selectedRole="";}
    showRole();
   }));
-  targetGroup=StationUi.column(a);h.label(targetGroup,"إلى الصندوق");targetGroup.addView(to);h.label(targetGroup,"عملة الاستلام");targetGroup.addView(targetCurrency);targetBalance=h.text("",14);targetGroup.addView(targetBalance);form.addView(targetGroup);
+  targetGroup=StationUi.column(a);h.label(targetGroup,"إلى صندوق أو شركة");targetGroup.addView(to);targetCurrencyGroup=StationUi.column(a);h.label(targetCurrencyGroup,"عملة الاستلام");targetCurrencyGroup.addView(targetCurrency);targetGroup.addView(targetCurrencyGroup);targetBalance=h.text("",14);targetGroup.addView(targetBalance);form.addView(targetGroup);
   h.label(form,"المبلغ");amount=h.number("المبلغ بعملة الصندوق");amount.setTag("cash-amount");form.addView(amount);
   h.label(form,"ملاحظة اختيارية");note=h.note();form.addView(note);
   feedback=h.text("",13);feedback.setTextColor(Util.GREEN);feedback.setTag("cash-feedback");form.addView(feedback);
@@ -81,11 +82,14 @@ final class CashEntryCard {
   person.setVisibility(kind<2?View.VISIBLE:View.GONE);partyLabel.setVisibility(kind<2?View.VISIBLE:View.GONE);partyRole.setVisibility(kind<2?View.VISIBLE:View.GONE);targetGroup.setVisibility(kind==2?View.VISIBLE:View.GONE);feedback.setText("");refresh();
  }
  String code(){return Db.CURRENCIES[currency.getSelectedItemPosition()];}
+ String company(){return boxes.id(to)==-1?"OIL":boxes.id(to)==-2?"GAS":"";}
  String targetCode(){return Db.CURRENCIES[targetCurrency.getSelectedItemPosition()];}
  void refresh(){
   String code=code(),unit=Db.currencyName(code);double balance=CashAccounts.expected(db,shift,boxId,code);Double entered=WorkspaceForms.validCount(amount.getText().toString());double value=entered==null?0:entered;
   current.setText(Calc.money(balance)+" "+unit);after.setText(Calc.money(balance+(kind==0?value:-value))+" "+unit);after.setTextColor(balance+(kind==0?value:-value)<0?Util.RED:Util.NAVY);
-  if(kind==2&&boxes.id(to)>0){double before=CashAccounts.expected(db,shift,boxes.id(to),targetCode()),converted=value*db.rate(code)/db.rate(targetCode());targetBalance.setText("رصيد المستلم الحالي: "+Calc.money(before)+" "+Db.currencyName(targetCode())+"\nبعد التحويل: "+Calc.money(before+converted)+" "+Db.currencyName(targetCode()));}else targetBalance.setText("");
+  targetCurrencyGroup.setVisibility(company().isEmpty()?View.VISIBLE:View.GONE);
+  if(kind==2&&!company().isEmpty()){double before=ShiftWorkspace.expectedCompany(db,shift,company());targetBalance.setText("رصيد الشركة الحالي: "+Calc.money(before)+" ر.ي\nبعد التحويل: "+Calc.money(before+value*db.rate(code))+" ر.ي");}
+  else if(kind==2&&boxes.id(to)>0){double before=CashAccounts.expected(db,shift,boxes.id(to),targetCode()),converted=value*db.rate(code)/db.rate(targetCode());targetBalance.setText("رصيد المستلم الحالي: "+Calc.money(before)+" "+Db.currencyName(targetCode())+"\nبعد التحويل: "+Calc.money(before+converted)+" "+Db.currencyName(targetCode()));}else targetBalance.setText("");
  }
  void save(){
   try{
@@ -96,7 +100,8 @@ final class CashEntryCard {
      classificationDialog=new AlertDialog.Builder(a).setTitle("نوع الاسم: "+name).setItems(new String[]{"حساب عميل","بند مخاريج"},(d,w)->{selectedName=name;selectedRole=w==0?NameDirectory.CUSTOMER:NameDirectory.EXPENSE;showRole();save();}).setNegativeButton("إلغاء",null).show();return;
     }
     NameDirectory.addCash(db,shift,boxId,kind==0?"IN":"OUT",code(),value,name,selectedRole,note.getText().toString());
-   }else ShiftWorkspace.addCash(db,shift,1,"TRANSFER",boxId,boxes.id(to),code(),targetCode(),value,"تحويل إلى "+CashAccounts.name(db,boxes.id(to))+(note.getText().length()==0?"":" — "+note.getText()));
+   }else if(!company().isEmpty())ShiftWorkspace.addCash(db,shift,1,"COMPANY_PAYMENT",boxId,company().equals("GAS")?1:0,code(),"YER",value,"تحويل إلى "+Db.supplierName(company())+(note.getText().length()==0?"":" — "+note.getText()));
+   else ShiftWorkspace.addCash(db,shift,1,"TRANSFER",boxId,boxes.id(to),code(),targetCode(),value,"تحويل إلى "+CashAccounts.name(db,boxes.id(to))+(note.getText().length()==0?"":" — "+note.getText()));
    feedback.setText("✓ أضيفت "+LABELS[kind]+" • "+Calc.money(value)+" "+Db.currencyName(code()));amount.setText("");person.setText("");note.setText("");refreshNames();refresh();(kind<2?person:amount).requestFocus();
   }catch(RuntimeException e){host.error(e);}
  }

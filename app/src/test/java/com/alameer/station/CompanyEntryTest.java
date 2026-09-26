@@ -37,6 +37,20 @@ public class CompanyEntryTest {
   assertEquals("لنا 200 ر.ي",card.after.getText().toString());assertTrue(card.cashBalance.getText().toString().contains("98"));card.dialog.getButton(-1).performClick();idle();assertFalse(card.dialog.isShowing());assertEquals(1,rows("shift_operations"));assertEquals(3,ShiftWorkspace.reviewed(db,shift));assertEquals(0,rows("supplier_entries"));assertEquals(200,ShiftWorkspace.expectedCompany(db,shift,"GAS"),0.00001);assertEquals(0,ShiftWorkspace.expectedCompany(db,shift,"OIL"),0.00001);
   controller.pause().stop().destroy();db.setRate("SAR",200);close();assertEquals(98,CashAccounts.posted(db,box,"SAR"),0.00001);assertEquals(200,db.supplierBalance("GAS"),0.00001);assertEquals(0,db.supplierBalance("OIL"),0.00001);assertEquals(0,rows("debt_entries"));assertEquals(0,rows("shift_counts"));assertEquals(db.journalDebit(),db.journalCredit(),0.00001);
  }
+ @Test public void cashboxTransfersToBothCompaniesPostOnceWithTheirCurrencySnapshot(){
+  org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).setup();ShiftActivity a=controller.get();a.workspacePage(5);
+  CashEntryCard card=new CashEntryCard(new WorkspaceForms(a,a.pages[5],1),box);card.show();idle();card.chooseKind(2);
+  card.to.setSelection(card.boxes.ids.indexOf(-1L));idle();card.amount.setText("2");
+  assertEquals(View.GONE,card.targetCurrencyGroup.getVisibility());assertTrue(card.targetBalance.getText().toString().contains("200"));
+  card.dialog.getButton(-1).performClick();idle();assertTrue(card.dialog.isShowing());assertEquals(200,ShiftWorkspace.expectedCompany(db,shift,"OIL"),0.00001);assertEquals(98,CashAccounts.expected(db,shift,box,"SAR"),0.00001);
+  card.to.setSelection(card.boxes.ids.indexOf(-2L));idle();card.amount.setText("3");card.dialog.getButton(-1).performClick();idle();
+  assertEquals(300,ShiftWorkspace.expectedCompany(db,shift,"GAS"),0.00001);assertEquals(95,CashAccounts.expected(db,shift,box,"SAR"),0.00001);assertEquals(0,rows("supplier_entries"));assertEquals(0,rows("cashbox_entries"));assertEquals(1,ShiftWorkspace.reviewed(db,shift));
+  try(Cursor c=ShiftWorkspace.operations(db,shift,1)){assertEquals(2,c.getCount());while(c.moveToNext())assertEquals("COMPANY_PAYMENT",c.getString(1));}
+  card.dialog.dismiss();controller.pause().stop().destroy();db.setRate("SAR",200);reject(this::close);ShiftWorkspace.review(db,shift,1);close();
+  assertEquals(95,CashAccounts.posted(db,box,"SAR"),0.00001);assertEquals(200,db.supplierBalance("OIL"),0.00001);assertEquals(300,db.supplierBalance("GAS"),0.00001);assertEquals(2,rows("supplier_entries"));assertEquals(2,rows("cashbox_entries"));assertEquals(0,rows("expense_entries"));assertEquals(db.journalDebit(),db.journalCredit(),0.00001);
+  ReportTable report=new ReportTable(db,shift);boolean oil=false,gas=false;for(ReportTable.Row row:report.rows){oil|="شركة النفط\nصادر — تحويل".equals(row.cells[3]);gas|="شركة الغاز\nصادر — تحويل".equals(row.cells[3]);}assertTrue(oil&&gas);
+  reject(this::close);assertEquals(2,rows("supplier_entries"));
+ }
  @Test public void gasSupplyDialogUsesOnlyGasAndPreservesDriverFreight(){
   NameDirectory.remember(db,"سائق محفوظ",NameDirectory.CUSTOMER);
   org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).setup();ShiftActivity a=controller.get();a.workspacePage(6);
