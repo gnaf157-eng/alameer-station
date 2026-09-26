@@ -54,6 +54,7 @@ public class ShiftWorkspaceTest {
  }
  @Test public void workerPageAutosavesReadingsAndRejectsInvalidInputWithoutNavigation(){
   db.setSetting("name_set","1");context.getSharedPreferences("reading_drafts",0).edit().clear().commit();
+  db.getWritableDatabase().execSQL("UPDATE pumps SET last_reading=100,price=100");
   db.getWritableDatabase().execSQL("UPDATE readings SET previous=100,current=101 WHERE shift_id=?",new Object[]{shift});
   org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).setup();
   ShiftActivity screen=controller.get();

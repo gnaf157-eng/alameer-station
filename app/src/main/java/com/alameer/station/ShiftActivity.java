@@ -170,7 +170,7 @@ public class ShiftActivity extends Activity {
         totalsBox=panel(Color.WHITE);pages[0].addView(totalsBox,space());
         reconciliationLitresBox=panel(Color.WHITE);pages[0].addView(reconciliationLitresBox,space());
         TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[0].addView(pending,space());
-        Button confirm=action("تأكيد مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[0].addView(confirm,space());
+        Button confirm=action("تأكيد مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);workspacePage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[0].addView(confirm,space());
 
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
