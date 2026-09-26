@@ -24,6 +24,11 @@ public class ShiftWorkspaceTest {
   assertEquals(780,db.cashboxBalance(box),0.001);assertFalse(db.isOpen(shift));assertEquals(1,count("posted_shifts"));assertTrue(count("shift_links")>0);assertEquals(2,count("shift_operations"));refuse(this::close);refuse(()->db.reopenShift(shift,"تصحيح"));refuse(()->db.unpostShift(shift));
   try(Cursor c=db.getReadableDatabase().rawQuery("SELECT row_id FROM shift_links WHERE entity='journal' LIMIT 1",null)){assertTrue(c.moveToFirst());long id=c.getLong(0);refuse(()->db.reverseEntry(id,"اختبار"));}
   ReportTable report=new ReportTable(db,shift);boolean cash=false,material=false,code=false;for(ReportTable.Row r:report.rows)for(Object v:r.cells){cash|="كهرباء".equals(v);material|="فاتورة".equals(v);code|=db.shiftCode(shift).equals(v);}assertTrue(cash&&material&&code);
+  boolean cashTable=false;for(ReportTable.Row r:report.rows){
+   if("حركة المواد الإضافية".equals(r.cells[0]))break;
+   if("المخاريج".equals(r.cells[0])&&"وارد".equals(r.cells[1])&&"صادر".equals(r.cells[2])){cashTable=true;continue;}
+   if(cashTable)for(int col=0;col<3;col++)assertTrue("Cash amount columns must contain only numbers or blanks",r.cells[col]==null||"".equals(r.cells[col])||r.cells[col] instanceof Number||r.cells[col] instanceof XlsxWorkbook.Formula);
+  }assertTrue(cashTable);
   long next=db.openSoloShift(db.soloWorkerId());ShiftWorkspace.ensure(db,next);assertNotEquals(shift,next);assertNotEquals(db.shiftCode(shift),db.shiftCode(next));
  }
  @Test public void failureInLastSectionRollsBackEverything(){

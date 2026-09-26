@@ -65,6 +65,7 @@ public class LedgerStatementTest {
   assertEquals("كهرباء",s.rows.get(1).cash.person);assertEquals("سالم",s.rows.get(3).cash.person);assertEquals("الصراف",s.rows.get(3).cash.box);
   for(LedgerStatement.Row row:s.rows){assertEquals(row.decrease,row.expense()+row.outgoing(),0.00001);assertFalse(row.expense()!=0&&row.outgoing()!=0);}
   LedgerPdf pdf=new LedgerPdf(context,s);assertArrayEquals(new String[]{"المخاريج","وارد","صادر","البيان","الجهة"},pdf.headings());
+  for(java.util.ArrayList<LedgerPdf.Block> page:pdf.pages)for(LedgerPdf.Block block:page)for(int col=0;col<3;col++)assertTrue(block.cells[col].getText().toString().matches("[-0-9,.]*"));
   java.io.File file=new CashboxReport(context,db).build("2026-01-01","2026-01-31",box,"الصراف");
   try(java.util.zip.ZipFile zip=new java.util.zip.ZipFile(file)){String xml=new String(zip.getInputStream(zip.getEntry("xl/worksheets/sheet1.xml")).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);assertTrue(xml.contains("rightToLeft=\"1\""));assertTrue(xml.contains("A1:E"));assertTrue(xml.contains("SUM(A"));assertTrue(xml.contains("<v>150.0</v>"));assertTrue(xml.contains("سالم"));}
  }

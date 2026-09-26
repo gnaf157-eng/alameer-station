@@ -42,13 +42,6 @@ final class LedgerPdf {
   }
   if(statement.rows.isEmpty())blocks.add(cash?new Block(new String[]{"","","","لا توجد حركات خلال الفترة المختارة",""},0,statement.opening,widths):new Block(new String[]{"","لا توجد حركات خلال الفترة المختارة","","",""},0,statement.opening));
   blocks.add(cash?new Block(new String[]{LedgerStatement.number(statement.expenses()),LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease-statement.expenses()),"إجمالي الفترة",""},2,statement.closing,widths):new Block(new String[]{"","إجمالي الفترة",LedgerStatement.number(statement.increase),LedgerStatement.number(statement.decrease),LedgerStatement.number(statement.closing)},2,statement.closing));
-  if(cash&&!statement.rows.isEmpty()){
-   blocks.add(new Block(new String[]{"","","","تفاصيل الحركات",""},1,statement.closing,widths));
-   for(LedgerStatement.Row row:statement.rows){String detail=row.cash.person+" • "+row.date
-      +(row.note.equals(row.cash.person)?"":"\n"+row.note)+(row.code.isEmpty()||row.note.contains(row.code)?"":"\n"+row.code);
-    cashTextBlocks(blocks,new String[]{"","","",detail,row.cash.box},statement.closing);
-   }
-  }
   ArrayList<Block> page=new ArrayList<>();int y=bodyTop;double carried=statement.opening;
   for(Block block:blocks){if(y+block.height>BOTTOM){pages.add(page);page=new ArrayList<>();Block carry=balanceBlock("رصيد منقول",carried,1);page.add(carry);y=bodyTop+carry.height;}
    if(y+block.height>BOTTOM)throw new IllegalArgumentException("تعذر تنسيق إحدى الحركات للطباعة");page.add(block);y+=block.height;carried=block.balance;
@@ -57,7 +50,7 @@ final class LedgerPdf {
  Block balanceBlock(String label,double value,int kind){return cash?new Block(new String[]{"","","",label,LedgerStatement.number(value)},kind,value,widths):new Block(new String[]{"",label,"","",LedgerStatement.number(value)},kind,value);}
  String[] headings(){return cash?new String[]{"المخاريج","وارد","صادر","البيان","الجهة"}:new String[]{"التاريخ","البيان",statement.source.equals("supplier_entries")?"إضافة":statement.increaseLabel,statement.source.equals("supplier_entries")?"خصم":statement.decreaseLabel,"الرصيد"};}
  void cashBlocks(ArrayList<Block> blocks,LedgerStatement.Row row){
-  String[] values={row.expense()==0?"":LedgerStatement.number(row.expense()),row.increase==0?"":LedgerStatement.number(row.increase),row.outgoing()==0?"":LedgerStatement.number(row.outgoing()),row.cash.person+(row.expense()>0?" — صادر":""),row.cash.box};
+  String[] values={row.expense()==0?"":LedgerStatement.number(row.expense()),row.increase==0?"":LedgerStatement.number(row.increase),row.outgoing()==0?"":LedgerStatement.number(row.outgoing()),row.cash.person+"\n"+(row.expense()>0?"صادر — مخاريج":row.increase>0?"وارد":"صادر"),row.cash.box};
   cashTextBlocks(blocks,values,row.balance);
  }
  void cashTextBlocks(ArrayList<Block> blocks,String[] values,double balance){

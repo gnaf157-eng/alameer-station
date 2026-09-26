@@ -27,12 +27,12 @@ public final class CashboxReport {
 
         // خمسة أعمدة فقط؛ معلومات الفترة أعلى الجدول والتفاصيل أسفله.
         book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة");
-        book.row(false,"المبالغ في الأعمدة الثلاثة بالريال اليمني", "", "", "", "");
+        book.row(false,"", "", "", "المبالغ بالريال اليمني", "");
 
         int first = book.nextRow();
         int rows = 0;
         double totalIn = 0, totalOut = 0, totalExpense=0;
-        java.util.ArrayList<String[]> details=new java.util.ArrayList<>();
+
 
         try (Cursor c = db.cashboxRange(from, to, boxId)) {
             while (c.moveToNext()) {
@@ -52,10 +52,8 @@ public final class CashboxReport {
 
                 CashReportDetails detail=CashReportDetails.load(db,c.getLong(6));
                 boolean expense=!in&&detail.expense;
-                double original=c.getDouble(8)!=0?c.getDouble(8):amount/(c.getDouble(9)>0?c.getDouble(9):1);
                 book.row(false,expense?amount:null,in?amount:null,!in&&!expense?amount:null,
-                        detail.person+(expense?" — صادر":""),box);
-                details.add(new String[]{detail.person+" • "+date+"\n"+note+"\n"+Calc.money(original)+" "+Db.currencyName(c.getString(7)),box});
+                        detail.person+"\n"+(expense?"صادر — مخاريج":in?"وارد":"صادر"),box);
                 rows++;
                 if(in)totalIn+=amount;else if(expense)totalExpense+=amount;else totalOut+=amount;
             }
@@ -67,10 +65,8 @@ public final class CashboxReport {
         book.row(true,new XlsxWorkbook.Formula("SUM(A"+first+":A"+last+")",totalExpense),
                 new XlsxWorkbook.Formula("SUM(B"+first+":B"+last+")",totalIn),
                 new XlsxWorkbook.Formula("SUM(C"+first+":C"+last+")",totalOut),"الإجمالي",rows+" حركة");
-        book.row(true,"الصافي",new XlsxWorkbook.Formula("B"+(last+1)+"-C"+(last+1)+"-A"+(last+1),totalIn-totalOut-totalExpense),"","وارد ناقص صادر ومخاريج","");
-        book.row(true,"","","","تفاصيل الحركات","");
-        for(String[] detail:details)book.row(false,"","","",detail[0],detail[1]);
-        book.row(false, Branding.CREDIT, "", "", "", "");
+        book.row(true,"","","","صافي الحركة",new XlsxWorkbook.Formula("B"+(last+1)+"-C"+(last+1)+"-A"+(last+1),totalIn-totalOut-totalExpense));
+        book.row(false, "", "", "", Branding.CREDIT, "");
 
         File dir = new File(context.getCacheDir(), "exports");
         if (!dir.isDirectory() && !dir.mkdirs())
