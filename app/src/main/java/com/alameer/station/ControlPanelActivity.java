@@ -43,7 +43,7 @@ public class ControlPanelActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("لوحة التحكم", 19, Color.WHITE, true));
-        words.addView(text(Branding.stationName(db) + "  •  " + ShiftDates.today(), 11, 0xffCFE2FA, false));
+        words.addView(text(Branding.stationName(db) + "  •  " + ShiftDates.today(), 11, 0xffE6E6E6, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -76,10 +76,25 @@ public class ControlPanelActivity extends Activity {
         int delay = 0;
         delay = add(capitalCard(), delay);
         delay = add(auditBoard(), delay);
+        delay = add(currentShift(), delay);
         delay = add(statusRow(), delay);
-        delay = add(stockSection(), delay);
-        delay = add(cashSection(), delay);
+        delay = add(collapsible("المخزون",stockSection()), delay);
+        delay = add(collapsible("الصناديق",cashSection()), delay);
         add(debtSection(), delay);
+    }
+
+    private View collapsible(String title,View body){
+        LinearLayout c=StationUi.column(this);body.setVisibility(View.GONE);
+        c.addView(StationUi.button(this,title+"  ▾",false,()->body.setVisibility(body.getVisibility()==View.GONE?View.VISIBLE:View.GONE)));c.addView(body);return c;
+    }
+    private View currentShift(){
+        LinearLayout c=StationUi.card(this);c.addView(StationUi.text(this,"مطابقة الوردية الحالية",18,true));
+        try(Cursor row=db.getReadableDatabase().rawQuery("SELECT s.id,w.reviewed FROM shifts s JOIN shift_workspace w ON w.shift_id=s.id WHERE s.status='OPEN' ORDER BY s.id LIMIT 1",null)){
+            if(row.moveToFirst()){long id=row.getLong(0);int r=row.getInt(1);c.addView(StationUi.text(this,db.shiftCode(id)+" • "+db.shiftDate(id),13,false));
+                c.addView(StationUi.text(this,"العامل: "+((r&1)!=0?"تمت المطابقة":"قيد المطابقة")+" • فرق "+Calc.money(db.balance(id))+" ر.ي",15,false));
+                c.addView(StationUi.text(this,"الصناديق: "+((r&2)!=0?"تمت المطابقة":"قيد المطابقة")+"\nالمواد: "+((r&4)!=0?"تمت المطابقة":"قيد المطابقة"),15,false));
+            }else c.addView(StationUi.text(this,"لا توجد وردية مفتوحة",15,false));
+        }return c;
     }
 
     /** رأس المال: بطاقة بارزة، والضغط عليها يكشف مكوّناته. */
@@ -87,7 +102,7 @@ public class ControlPanelActivity extends Activity {
         final double cash = db.cashboxesTotal();
         final double debts = db.debtsTotal();
         final double credits = db.creditsTotal();
-        final double netDebt = debts - credits;
+        final double netDebt = Capital.enabled(db)?Capital.debts(db):debts-credits;
         final double stock = db.stockValueTotal();
         // القاعدة الموحّدة: الموجب لنا والسالب علينا، فالرصيد يُجمع كما هو.
         final double owed = db.supplierBalance();
@@ -102,15 +117,16 @@ public class ControlPanelActivity extends Activity {
         box.setElevation(dp(3));
         box.setClickable(true);
         box.setOnClickListener(v -> showCapitalDetail(cash, netDebt, stock, owed, capital));
+        if(Capital.enabled(db)){TextView checks=text("سجل مطابقة رأس المال",15,Color.WHITE,true);checks.setOnClickListener(v->new android.app.AlertDialog.Builder(this).setTitle("مطابقة رأس المال").setMessage(Capital.history(db)).setPositiveButton("حسنًا",null).show());box.addView(checks);}
 
-        box.addView(text("صافي الأصول التقديري", 13, 0xffCFE2FA, false));
-        TextView grand = text(whole(capital) + "  ر.ي", 30,
+        box.addView(text(Capital.enabled(db)?"رأس المال الفعلي — أرصدة الدفاتر":"صافي الأصول التقديري", 13, 0xffE6E6E6, false));
+        TextView grand = text(Calc.money(capital) + "  ر.ي", 30,
                 capital < -0.009 ? 0xffFFB3BC : Color.WHITE, true);
         grand.setTextDirection(View.TEXT_DIRECTION_LTR);
         grand.setPadding(0, dp(4), 0, dp(8));
         box.addView(grand);
         box.addView(text("الصناديق + الديون + المخزون + الموردين  •  اضغط للتفصيل",
-                11, 0xffCFE2FA, false));
+                11, 0xffE6E6E6, false));
         return box;
     }
 
@@ -147,6 +163,7 @@ public class ControlPanelActivity extends Activity {
         }
         sb.append("\n");
         // كل مورّد في جانبه: الموجب موجودات والسالب مطلوبات.
+        if(Capital.external(db)!=0)sb.append("\nمخزوننا خارج المحطة: ").append(Calc.money(Capital.external(db))).append(" ر.ي\n");
         double oil = db.supplierBalance("OIL"), gas = db.supplierBalance("GAS");
         double assetSide = cash + netDebt + stock + Math.max(0, oil) + Math.max(0, gas);
         if (oil > 0.009)
@@ -242,7 +259,7 @@ public class ControlPanelActivity extends Activity {
 
         LinearLayout line = new LinearLayout(this);
         line.setGravity(Gravity.CENTER_VERTICAL);
-        line.addView(text("الفرق", 12, 0xffCFE2FA, false), new LinearLayout.LayoutParams(0, -2, 1));
+        line.addView(text("الفرق", 12, 0xffE6E6E6, false), new LinearLayout.LayoutParams(0, -2, 1));
         TextView value = text(money(Math.abs(gap)) + " ر.ي", 20, ok ? Color.WHITE : 0xffFFB3BC, true);
         value.setTextDirection(View.TEXT_DIRECTION_LTR);
         line.addView(value);
@@ -254,7 +271,7 @@ public class ControlPanelActivity extends Activity {
         else if (unposted > 0 && Journal.balanced(gap))
             why = unposted + " وردية مُغلقة لم تُرحّل إلى الدفتر  •  اضغط للترحيل";
         else why = Journal.explain(gap) + "  •  " + flagged + " بند يحتاج مراجعة  •  اضغط للتفصيل";
-        TextView note = text(why, 11, 0xffCFE2FA, false);
+        TextView note = text(why, 11, 0xffE6E6E6, false);
         note.setPadding(0, dp(4), 0, 0);
         diff.addView(note);
 
@@ -306,7 +323,7 @@ public class ControlPanelActivity extends Activity {
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setPadding(dp(12), dp(10), dp(12), dp(10));
         cell.setBackground(Util.round(0x22FFFFFF, dp(13)));
-        cell.addView(text(title, 11, 0xffCFE2FA, false));
+        cell.addView(text(title, 11, 0xffE6E6E6, false));
         TextView v = text(money(amount), 17, Color.WHITE, true);
         v.setTextDirection(View.TEXT_DIRECTION_LTR);
         v.setPadding(0, dp(3), 0, 0);

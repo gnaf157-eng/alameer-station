@@ -1,71 +1,95 @@
 package com.alameer.station.shifts;
 import android.app.*;
 import android.database.Cursor;
-import android.graphics.Color;
-import android.text.InputType;
+import android.text.*;
 import android.view.*;
 import android.widget.*;
 import java.util.*;
 
-/** Mobile forms staging movements against one shift, never against the live ledgers. */
+/** Input stays attached to its shift until the single final posting transaction. */
 final class WorkspaceForms {
-    final ShiftActivity a;final Db db;final long shift;final int section;final LinearLayout root;
-    WorkspaceForms(ShiftActivity a,LinearLayout root,int section){this.a=a;this.db=a.db;this.shift=a.shiftId;this.section=section;this.root=root;render();}
-    TextView text(String s,int size){TextView t=new TextView(a);t.setText(s);t.setTextColor(Util.NAVY);t.setTextSize(size);t.setPadding(12,12,12,12);return t;}
-    Button button(String s,Runnable r){Button b=new Button(a);b.setText(s);b.setTextColor(Util.NAVY);b.setAllCaps(false);b.setMinHeight(52);b.setOnClickListener(v->{try{r.run();}catch(RuntimeException e){error(e);}});root.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
-    void error(Exception e){new AlertDialog.Builder(a).setTitle("راجع البيانات").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}
-    void render(){
-        root.removeAllViews();root.addView(text(section==1?"حركة الصناديق":"حركة المواد",23));
-        root.addView(text(db.shiftCode(shift)+"  •  "+db.shiftDate(shift),14));
-        root.addView(text("مسودة الوردية — تُرحّل جميع التبويبات عند الإغلاق فقط",14));
-        if(section==1){
-            root.addView(text("النقد المسلّم من العامل: "+Calc.money(db.total(shift,"CASH"))+" ر.ي — يُضاف تلقائيًا مرة واحدة",16));
-            root.addView(text("صندوق استلام نقد العامل",14));
-            Choices boxes=new Choices("cashboxes");Spinner pick=boxes.spinner();int selected=boxes.ids.indexOf(ShiftWorkspace.box(db,shift));if(selected>=0)pick.setSelection(selected);root.addView(pick);
-            button("حفظ صندوق الاستلام",()->{ShiftWorkspace.selectBox(db,shift,boxes.id(pick));render();});
-            button("＋ تعريف صندوق",()->newAccount(false));
-            button("＋ تعريف عميل",()->newAccount(true));
-        }
-        button(section==1?"＋ إضافة حركة صندوق":"＋ إضافة حركة مواد",this::entry);
-        try(Cursor c=ShiftWorkspace.operations(db,shift,section)){
-            if(c.getCount()==0)root.addView(text("لا توجد حركات إضافية",15));
-            while(c.moveToNext()){
-                final long row=c.getLong(0);
-                TextView line=text(ShiftWorkspace.label(c.getString(1))+" • "+c.getString(7)+"\n"+(section==2?c.getString(4)+" • "+Calc.money(c.getDouble(5))+" — ":"")+Calc.money(c.getDouble(6))+" ر.ي",17);
-                line.setBackground(Util.round(Color.WHITE,16));root.addView(line);
-                Button remove=new Button(a);remove.setText("حذف من المسودة");remove.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("حذف هذه الحركة من مسودة الوردية؟").setPositiveButton("حذف",(d,w)->{try{ShiftWorkspace.delete(db,shift,row);render();}catch(RuntimeException e){error(e);}}).setNegativeButton("رجوع",null).show());root.addView(remove);
-            }
-        }
-        button((ShiftWorkspace.reviewed(db,shift)&(1<<section))!=0?"✓ تمت مراجعة هذا التبويب":"تأكيد المراجعة / لا توجد حركة أخرى",()->{ShiftWorkspace.review(db,shift,section);render();});
-        button(section==1?"متابعة إلى المواد":"مراجعة الوردية وإغلاقها",()->a.workspacePage(section==1?6:2));
+ final ShiftActivity a;final Db db;final long shift;final int section;final LinearLayout root;
+ WorkspaceForms(ShiftActivity a,LinearLayout root,int section){this.a=a;db=a.db;shift=a.shiftId;this.section=section;this.root=root;render();}
+ int dp(int n){return StationUi.dp(a,n);}
+ TextView text(String s,int size){TextView t=StationUi.text(a,s,size,false);t.setPadding(0,dp(6),0,dp(6));return t;}
+ void error(Exception e){new AlertDialog.Builder(a).setTitle("راجع البيانات").setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}
+ Button button(LinearLayout parent,String title,boolean primary,Runnable r){Button b=StationUi.button(a,title,primary,()->{try{r.run();}catch(RuntimeException e){error(e);}});parent.addView(b,StationUi.space(a));return b;}
+ LinearLayout card(String title){LinearLayout c=StationUi.card(a);c.addView(StationUi.text(a,title,18,true));root.addView(c,StationUi.space(a));return c;}
+ void render(){
+  root.removeAllViews();root.addView(StationUi.text(a,section==1?"حركة الصناديق":"حركة المواد",23,true));
+  root.addView(text(db.shiftCode(shift)+"  •  "+db.shiftDate(shift),13));
+  root.addView(text("تُرحّل بيانات الوردية كاملة من تبويب المواد بعد المراجعة.",13));
+  if(Capital.enabled(db)){LinearLayout capital=card("رأس المال");capital.addView(text(Capital.preview(db,shift),14));}
+  if(section==1){
+   LinearLayout receipt=card("استلام نقد العامل");receipt.addView(text("النقد المسلّم: "+Calc.money(db.total(shift,"CASH"))+" ر.ي",17));
+   Choices boxes=new Choices("cashboxes");Spinner pick=boxes.spinner();int chosen=boxes.ids.indexOf(ShiftWorkspace.box(db,shift));if(chosen>=0)pick.setSelection(chosen);LinearLayout receiveRow=new LinearLayout(a);receiveRow.addView(pick,new LinearLayout.LayoutParams(0,dp(48),1));receipt.addView(receiveRow);Spinner receiveCurrency=spinner(Db.CURRENCY_NAMES);receiveCurrency.setSelection(Arrays.asList(Db.CURRENCIES).indexOf(CashAccounts.receiptCurrency(db,shift)));receiveRow.addView(receiveCurrency,new LinearLayout.LayoutParams(0,dp(48),1));
+   button(receipt,"اعتماد صندوق الاستلام",false,()->{if(boxes.id(pick)==0)throw new IllegalArgumentException("اختر صندوق الاستلام");ShiftWorkspace.selectBox(db,shift,boxes.id(pick),Db.CURRENCIES[receiveCurrency.getSelectedItemPosition()]);render();});
+   LinearLayout entry=card("اختر الصندوق");entry.addView(text("الرصيد يشمل الحركات المسجّلة. اضغط الصندوق لإضافة وارد أو صادر أو تحويل.",13));
+   for(int i=1;i<boxes.ids.size();i+=2){
+    LinearLayout tiles=new LinearLayout(a);tiles.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+    for(int col=0;col<2;col++){
+     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(4),dp(4),dp(4),dp(4));
+     if(i+col<boxes.ids.size())tiles.addView(CashEntryCard.tile(this,boxes.ids.get(i+col)),p);
+     else tiles.addView(new View(a),new LinearLayout.LayoutParams(0,0,1));
     }
-    void newAccount(boolean customer){EditText name=new EditText(a);name.setHint(customer?"اسم العميل":"اسم الصندوق");AlertDialog dialog=new AlertDialog.Builder(a).setTitle(customer?"تعريف عميل دون رصيد افتتاحي":"تعريف صندوق دون رصيد افتتاحي").setView(name).setPositiveButton("حفظ",null).setNegativeButton("رجوع",null).create();dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->{try{String n=name.getText().toString().trim();if(n.isEmpty())throw new IllegalArgumentException("أدخل الاسم");if(customer)db.addDebtor(n,"",0);else db.addCashbox(n,0);dialog.dismiss();render();}catch(RuntimeException e){name.setError(e.getMessage());}}));dialog.show();}
-    final class Choices {
-        final ArrayList<Long> ids=new ArrayList<>();final ArrayList<String> names=new ArrayList<>();
-        Choices(String table){ids.add(0L);names.add("اختر الحساب");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM "+table+" WHERE active=1 ORDER BY name",null)){while(c.moveToNext()){ids.add(c.getLong(0));names.add(c.getString(1));}}}
-        Spinner spinner(){Spinner s=new Spinner(a);s.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,names));return s;}
-        long id(Spinner s){return ids.get(s.getSelectedItemPosition());}
-    }
-    Spinner spinner(String[] options){Spinner s=new Spinner(a);s.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,options));return s;}
-    void entry(){
-        LinearLayout form=new LinearLayout(a);form.setOrientation(1);form.setPadding(24,12,24,12);
-        String[] kinds=section==1?new String[]{"EXPENSE","COLLECTION","LOAN","TRANSFER","SUPPLIER"}:new String[]{"BUY_CREDIT","BUY_CASH","LOSS"};
-        String[] labels=new String[kinds.length];for(int i=0;i<kinds.length;i++)labels[i]=ShiftWorkspace.label(kinds[i]);
-        Spinner kind=spinner(labels);form.addView(text("نوع الحركة",14));form.addView(kind);
-        Choices boxes=new Choices("cashboxes"),customers=new Choices("debtors");Spinner box=boxes.spinner(),other=boxes.spinner(),person=customers.spinner();
-        Spinner supplier=spinner(new String[]{"شركة النفط","شركة الغاز"}),material=spinner(Db.MATERIALS);
-        form.addView(text("الصندوق (للدفع أو القبض النقدي)",14));form.addView(box);
-        TextView targetLabel=text("الحساب المقابل",14);form.addView(targetLabel);form.addView(other);form.addView(person);form.addView(supplier);
-        EditText qty=new EditText(a);qty.setHint("الكمية");qty.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        EditText amount=new EditText(a);amount.setHint(section==2?"القيمة الإجمالية بسعر التكلفة — ر.ي":"المبلغ — ر.ي");amount.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        EditText note=new EditText(a);note.setHint("البيان / رقم الفاتورة");
-        if(section==2){form.addView(text("المادة",14));form.addView(material);form.addView(qty);form.addView(text("التوريد الآجل على شركة النفط أو الغاز حسب المادة. الفاقد بسعر التكلفة. أجرة النقل تُسجّل بحركة منفصلة مع بيانها.",14));}
-        else form.addView(text("هذه حركات إضافية مستقلة؛ لا تكرر المقبوضات والمخاريج المسجلة في مطابقة العامل.",14));
-        form.addView(amount);form.addView(note);
-        kind.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){}public void onItemSelected(android.widget.AdapterView<?> p,View v,int position,long id){String k=kinds[position];other.setVisibility(k.equals("TRANSFER")?View.VISIBLE:View.GONE);person.setVisibility(k.equals("COLLECTION")||k.equals("LOAN")?View.VISIBLE:View.GONE);supplier.setVisibility(k.equals("SUPPLIER")?View.VISIBLE:View.GONE);targetLabel.setVisibility(section==1&&!k.equals("EXPENSE")?View.VISIBLE:View.GONE);box.setEnabled(section==1||k.equals("BUY_CASH"));}});
-        ScrollView scroll=new ScrollView(a);scroll.addView(form);
-        String draftKey="workspace_"+shift+"_"+section;String[] date={db.shiftDate(shift)};EntryDraft.restore(a,draftKey,date,qty,amount,note);
-        AlertDialog dialog=new AlertDialog.Builder(a).setTitle("إضافة إلى مسودة الوردية").setView(scroll).setPositiveButton("إضافة",null).setNeutralButton("حفظ الخانات لاحقًا",null).setNegativeButton("رجوع",null).create();
-        dialog.setOnShowListener(x->{dialog.getButton(-3).setOnClickListener(v->{if(EntryDraft.save(a,draftKey,date[0],qty,amount,note))dialog.dismiss();});dialog.getButton(-1).setOnClickListener(v->{try{String k=kinds[kind.getSelectedItemPosition()];long target=k.equals("TRANSFER")?boxes.id(other):k.equals("SUPPLIER")?supplier.getSelectedItemPosition():customers.id(person);ShiftWorkspace.add(db,shift,section,k,boxes.id(box),target,Db.MATERIALS[material.getSelectedItemPosition()],Calc.number(qty.getText().toString()),Calc.number(amount.getText().toString()),note.getText().toString());EntryDraft.clear(a,draftKey);dialog.dismiss();render();}catch(RuntimeException e){amount.setError(e.getMessage());}});});dialog.show();
-    }
+    entry.addView(tiles,new LinearLayout.LayoutParams(-1,-2));
+   }
+   if(boxes.ids.size()==1)entry.addView(text("أضف الصناديق من الضبط ← تعريف الصناديق.",14));
+   root.removeView(entry);root.addView(entry,3,StationUi.space(a));
+  }else{
+   LinearLayout companies=card("اختر حساب الشركة");
+   LinearLayout tiles=new LinearLayout(a);tiles.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);tiles.setTag("company-tiles");
+   for(String company:Db.SUPPLIERS){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(4),dp(4),dp(4),dp(4));tiles.addView(CompanyEntryCard.tile(this,company),p);}
+   companies.addView(tiles,new LinearLayout.LayoutParams(-1,-2));
+  }
+  operations();
+  int checked=ShiftWorkspace.reviewed(db,shift);
+  root.addView(text("تأكيدات الوردية\n"+((checked&1)!=0?"✓":"○")+" مطابقة العامل\n"+((checked&2)!=0?"✓":"○")+" مراجعة الصناديق\n"+((checked&4)!=0?"✓":"○")+" مراجعة المواد",15));
+  root.addView(text(section==1?"راجع رصيد الصندوق الظاهر مع رصيد الصراف في مجموعة الواتساب، ثم أكد المراجعة. لا يُشترط فرق صفري هنا.":"سجّل حركات المواد وراجعها، ثم أكد المراجعة. شرط تصفير فرق العامل مستقل.",13));
+  button(root,section==1?"تأكيد مراجعة الصناديق":"تأكيد مراجعة المواد",false,()->{ShiftWorkspace.review(db,shift,section);render();});
+  if(section==1)button(root,"متابعة إلى المواد",true,()->a.workspacePage(6));
+  else button(root,"ترحيل الوردية بالكامل",true,()->a.requestPostShift());
+ }
+ void operations(){LinearLayout list=card("الحركات المسجّلة في الوردية");try(Cursor c=ShiftWorkspace.operations(db,shift,section)){
+  if(!c.moveToFirst()){list.addView(text("لا توجد حركات إضافية",14));return;}
+  do{long row=c.getLong(0);String kind=c.getString(1);if(section==1){cashOperation(list,c);continue;}String line=ShiftWorkspace.label(kind)+" • "+c.getString(7)+"\n"+(c.getDouble(5)>0?c.getString(4)+" • "+Calc.money(c.getDouble(5))+" لتر\n":"")+Calc.money(c.getDouble(6))+" ر.ي";
+   if(kind.equals("FUEL_SUPPLY"))try(Cursor f=db.getReadableDatabase().rawQuery("SELECT driver_name,freight FROM shift_operations WHERE id=?",new String[]{""+row})){f.moveToFirst();line+="\nأجرة "+f.getString(0)+": "+Calc.money(f.getDouble(1))+" ر.ي";}
+   list.addView(text(line,15));button(list,"حذف الحركة",false,()->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(d,w)->{ShiftWorkspace.delete(db,shift,row);render();}).setNegativeButton("رجوع",null).show());
+  }while(c.moveToNext());}}
+ void cashOperation(LinearLayout list,Cursor c){
+  final long id=c.getLong(0);String kind=c.getString(1),box=CashAccounts.name(db,c.getLong(2)),note=c.getString(7);
+  String unit="YER";double rate=1;
+  try(Cursor fx=db.getReadableDatabase().rawQuery("SELECT currency,rate FROM shift_operations WHERE id=?",new String[]{""+id})){if(fx.moveToFirst()){unit=fx.getString(0);rate=fx.getDouble(1);}}
+  String amount=Calc.money(c.getDouble(6)/(rate>0?rate:1))+" "+Db.currencyName(unit);
+  boolean incoming=kind.equals("COLLECTION"),company=kind.equals("COMPANY_PAYMENT"),transfer=kind.equals("TRANSFER")||company;
+  String type=transfer?"تحويل":incoming?"وارد":"صادر";
+  int tint=transfer?0xff626870:incoming?Util.GREEN:Util.RED;
+  String description=box+" · "+(note==null?"":note);
+  final String details=ShiftWorkspace.label(kind)+"\nالصندوق: "+box
+    +(transfer?"\nإلى: "+(company?Db.supplierName(c.getLong(3)==1?"GAS":"OIL"):CashAccounts.name(db,c.getLong(3))):"")+"\nالمبلغ: "+amount
+    +(note==null||note.isEmpty()?"":"\n"+note);
+  LinearLayout row=new LinearLayout(a);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setGravity(Gravity.CENTER_VERTICAL);
+  row.setPadding(dp(4),0,dp(4),0);row.setMinimumHeight(dp(48));row.setTag("cash-operation-"+id);
+  row.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x12000000),Util.round(android.graphics.Color.WHITE,dp(4)),null));
+  View mark=new View(a);mark.setBackground(Util.round(tint,dp(2)));row.addView(mark,new LinearLayout.LayoutParams(dp(3),dp(18)));
+  TextView label=StationUi.text(a,type,12,true);label.setTextColor(tint);label.setSingleLine(true);label.setPadding(dp(6),0,dp(6),0);row.addView(label);
+  TextView name=StationUi.text(a,description.replace('\n',' ').replace('\r',' '),13,false);name.setSingleLine(true);name.setEllipsize(TextUtils.TruncateAt.END);name.setPadding(dp(6),0,0,0);row.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+  TextView value=StationUi.text(a,amount,13,true);value.setSingleLine(true);row.addView(value);
+  row.setFocusable(true);row.setContentDescription(details+"، اضغط للتفاصيل");
+  row.setOnClickListener(v->new AlertDialog.Builder(a).setTitle("تفاصيل الحركة").setMessage(details).setPositiveButton("إغلاق",null)
+    .setNegativeButton("حذف الحركة",(d,w)->new AlertDialog.Builder(a).setMessage("حذف الحركة من هذه الوردية؟").setPositiveButton("حذف",(confirm,which)->{try{ShiftWorkspace.delete(db,shift,id);render();}catch(RuntimeException e){error(e);}}).setNegativeButton("رجوع",null).show()).show());
+  list.addView(row,new LinearLayout.LayoutParams(-1,-2));
+  View divider=new View(a);divider.setBackgroundColor(0xffEEEEEE);list.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+ }
+ static Double validCount(String raw){
+  StringBuilder normalized=new StringBuilder();for(char ch:raw.trim().toCharArray()){if(ch>='٠'&&ch<='٩')normalized.append((char)('0'+ch-'٠'));else if(ch>='۰'&&ch<='۹')normalized.append((char)('0'+ch-'۰'));else if(ch=='٫')normalized.append('.');else if(ch!=','&&ch!='٬')normalized.append(ch);}
+  String value=normalized.toString();if(!value.matches("([0-9]+(\\.[0-9]*)?|\\.[0-9]+)"))return null;try{double n=Double.parseDouble(value);return Double.isFinite(n)&&n>=0?n:null;}catch(NumberFormatException e){return null;}
+ }
+ LinearLayout form(){LinearLayout f=StationUi.column(a);f.setPadding(dp(18),dp(10),dp(18),dp(10));return f;}
+ void label(LinearLayout f,String s){StationUi.label(a,f,s);}
+ EditText number(String hint){EditText e=new EditText(a);StationUi.input(a,e);e.setHint(hint);e.setSingleLine(true);e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);e.setTextDirection(View.TEXT_DIRECTION_LTR);return e;}
+ EditText note(){EditText e=new EditText(a);StationUi.input(a,e);e.setHint("ملاحظة اختيارية");return e;}
+ AutoCompleteTextView name(String hint){AutoCompleteTextView e=new AutoCompleteTextView(a);StationUi.input(a,e);e.setHint(hint);e.setThreshold(1);ArrayList<String> names=NameDirectory.names(db);e.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_dropdown_item_1line,names));return e;}
+ Spinner spinner(String[] values){Spinner s=new Spinner(a);s.setMinimumHeight(dp(48));ArrayAdapter<String> adapter=new ArrayAdapter<>(a,android.R.layout.simple_spinner_item,values);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);s.setAdapter(adapter);s.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));return s;}
+ final class Choices {final ArrayList<Long> ids=new ArrayList<>();final ArrayList<String> names=new ArrayList<>();Choices(String table){this(table,0); }Choices(String table,long excluded){ids.add(0L);names.add("اختر الصندوق");try(Cursor c=db.getReadableDatabase().rawQuery("SELECT id,name FROM "+table+" WHERE active=1 ORDER BY name",null)){while(c.moveToNext()){if(c.getLong(0)==excluded)continue;ids.add(c.getLong(0));names.add(c.getString(1));}}}Spinner spinner(){return WorkspaceForms.this.spinner(names.toArray(new String[0]));}long id(Spinner s){return ids.get(s.getSelectedItemPosition());}}
 }

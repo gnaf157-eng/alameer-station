@@ -13,6 +13,9 @@ jobs:
     permissions:
       contents: write
     timeout-minutes: 25
+    concurrency:
+      group: station-release-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +53,25 @@ jobs:
           fi
           exit $code
 
+      - name: Enable Android emulator acceleration
+        run: sudo setfacl -m u:$(whoami):rw /dev/kvm
+
+      - name: Test real Android PDF generation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: default
+          arch: x86_64
+          profile: Nexus 6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            ./gradlew --no-daemon -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true :app:connectedDebugAndroidTest
+            mkdir -p app/build/reports/pdf
+            adb shell run-as com.alameer.station.shifts.v2.preview ls files/ledger-qa
+            adb exec-out run-as com.alameer.station.shifts.v2.preview tar -C files/ledger-qa -cf - . > "$RUNNER_TEMP/ledger-qa.tar"
+            tar -xf "$RUNNER_TEMP/ledger-qa.tar" -C app/build/reports/pdf
+
       - name: Summarize accounting tests
         if: always()
         run: |
@@ -59,8 +81,21 @@ jobs:
           for path in glob.glob('app/build/test-results/testDebugUnitTest/TEST-*.xml'):
               root = ET.parse(path).getroot()
               for key in totals: totals[key] += int(root.get(key, 0))
+              for failure in root.iter('failure'):
+                  print('TEST_FAILURE', path, (failure.text or '')[:5000])
           print('TEST_SUMMARY', totals)
           PYTEST
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/ui/
+            app/build/reports/pdf/
 
       - name: Read app version
         id: version
@@ -69,7 +104,7 @@ jobs:
           echo "code=$(grep -oP 'versionCode \K\d+' app/build.gradle)" >> "$GITHUB_OUTPUT"
 
       - name: Decode release keystore
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         id: keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -83,7 +118,7 @@ jobs:
           fi
 
       - name: Build signed release APK
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         env:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -108,7 +143,7 @@ jobs:
              "Tabiq-v${{ steps.version.outputs.name }}.apk"
 
       - name: Verify the APK is signed
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         run: |
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           "$BT/apksigner" verify --print-certs "Tabiq-v${{ steps.version.outputs.name }}.apk" | tee certs.txt
@@ -116,7 +151,7 @@ jobs:
 
 
       - name: Verify candidate update compatibility
-        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         env:
           CANDIDATE_VERSION_NAME: ${{ steps.version.outputs.name }}
           CANDIDATE_VERSION_CODE: ${{ steps.version.outputs.code }}
@@ -185,11 +220,11 @@ jobs:
               summary.write('Same signing certificate and application ID as 2.66.1 (153); '
                             'candidate version code is higher. Signatures verified for Android 9/10.\n\n')
               summary.write('Phone installation, data retention and visual checks are still pending. '
-                            'No GitHub Release or update manifest was published.\n')
+                            'Release publication is handled by the later publish step.\n')
           PYCHECK
 
       - name: Upload verified candidate for phone testing
-        if: github.ref == 'refs/heads/arena/accounting-audit-264'
+        if: github.ref == 'refs/heads/arena/accounting-audit-264' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         uses: actions/upload-artifact@v4
         with:
           name: Tabiq-candidate-${{ steps.version.outputs.name }}
@@ -200,7 +235,7 @@ jobs:
           retention-days: 30
 
       - name: Generate update manifest
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         run: |
           FILE="Tabiq-v${{ steps.version.outputs.name }}.apk"
           SIZE=$(stat -c%s "$FILE")
@@ -222,7 +257,7 @@ jobs:
           cat update-manifest.json
 
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
@@ -231,32 +266,67 @@ jobs:
           TAG="v${{ steps.version.outputs.name }}"
           APK="Tabiq-v${{ steps.version.outputs.name }}.apk"
 
-          # النشر في المستودع العام للنسخ إن ضُبط، حتى يعمل التحديث التلقائي
-          # مع بقاء الشيفرة ومفتاح التوقيع في مستودع خاص.
-          if [ -n "$RELEASES_REPO" ] && [ -n "$RELEASES_TOKEN" ]; then
-            echo "Publishing to public releases repo: $RELEASES_REPO"
-            GH_TOKEN="$RELEASES_TOKEN" gh release delete "$TAG" --repo "$RELEASES_REPO" --yes --cleanup-tag 2>/dev/null || true
-            GH_TOKEN="$RELEASES_TOKEN" gh release create "$TAG" \
-              --repo "$RELEASES_REPO" \
-              --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
-              --notes "نسخة موقّعة تُثبَّت فوق السابقة دون فقدان البيانات." \
-              "$APK" update-manifest.json
-          fi
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          إضافة شركة النفط وشركة الغاز إلى وجهات التحويل من الصناديق.
+          عرض رصيد الشركة قبل التحويل وبعده، وحفظ عملة الصندوق وسعر الصرف.
+          ترحيل التحويل مرة واحدة بعد تأكيد الأقسام الثلاثة، دون احتسابه مخاريج.
+          NOTES
 
-          # نسخة في المستودع نفسه للأرشفة الداخلية.
-          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" \
-            --target "${{ github.sha }}" \
-            --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
-            --notes "نسخة موقّعة تُثبَّت فوق السابقة دون فقدان البيانات." \
-            "$APK" update-manifest.json
+          publish_repo() {
+            local destination="$1"
+            if gh release view "$TAG" --repo "$destination" >/dev/null 2>&1; then
+              echo "::error::Version $TAG already exists in $destination. Published versions are immutable; use a new version."
+              return 1
+            fi
+            local target_args=()
+            if [ "$destination" = "$GITHUB_REPOSITORY" ]; then
+              target_args=(--target "$GITHUB_SHA")
+            fi
+            # Upload both assets while hidden, then expose the complete release atomically.
+            gh release create "$TAG" --repo "$destination" "${target_args[@]}" \
+              --draft --title "طابق ورحّل ${{ steps.version.outputs.name }}" \
+              --notes-file release-notes.md "$APK" update-manifest.json
+            gh release edit "$TAG" --repo "$destination" --draft=false --latest
+          }
+
+          if [ -n "$RELEASES_REPO" ] && [ "$RELEASES_REPO" != "$GITHUB_REPOSITORY" ]; then
+            if [ -z "$RELEASES_TOKEN" ]; then
+              echo "::error::RELEASES_TOKEN is required for the configured public update repository."
+              exit 1
+            fi
+            GH_TOKEN="$RELEASES_TOKEN" publish_repo "$RELEASES_REPO"
+          fi
+          publish_repo "$GITHUB_REPOSITORY"
+
+      - name: Verify public in-app update
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
+        env:
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+        run: |
+          python3 - <<'PYLIVE'
+          import hashlib, json, os, pathlib, time, urllib.request
+          expected = json.loads(pathlib.Path('update-manifest.json').read_text())
+          repo = os.environ.get('RELEASES_REPO') or os.environ['GITHUB_REPOSITORY']
+          feed = 'https://github.com/' + repo + '/releases/latest/download/update-manifest.json'
+          request = urllib.request.Request(feed + '?t=' + str(int(time.time() * 1000)), headers={'User-Agent': 'TabiqUpdater', 'Cache-Control': 'no-cache'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              actual = json.loads(response.read(65536))
+          if actual != expected:
+              raise RuntimeError('The public update feed does not match the verified release.')
+          with urllib.request.urlopen(actual['apkUrl'], timeout=30) as response:
+              apk = response.read(100 * 1024 * 1024)
+          if len(apk) != actual['sizeBytes'] or hashlib.sha256(apk).hexdigest() != actual['sha256']:
+              raise RuntimeError('Public APK download failed its size or SHA-256 check.')
+          print('PUBLIC_UPDATE_VERIFIED', actual['versionName'], actual['versionCode'], feed)
+          PYLIVE
 
       - name: Clean up keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload installable APK
-        if: github.ref == 'refs/heads/arena/01a07882-alameer-station'
+        if: github.ref == 'refs/heads/arena/01a07882-alameer-station' || github.ref == 'refs/heads/arena/cat-ledgers-workflow'
         uses: actions/upload-artifact@v4
         with:
           name: Alameer-Station-Shifts-APK

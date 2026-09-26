@@ -170,6 +170,8 @@ public class AdminActivity extends Activity {
         Button save=Util.goldButton(this,"حفظ نسخة احتياطية الآن");
         save.setOnClickListener(v->new Backup(this).export());
         content.addView(save,Util.spaced());
+        Button opening=Util.goldButton(this,"استيراد الأرصدة الافتتاحية من ملف");
+        opening.setOnClickListener(v->OpeningImport.pick(this));content.addView(opening,Util.spaced());
         Button restore=Util.dangerButton(this,"استعادة من نسخة سابقة");
         restore.setOnClickListener(v->new Backup(this).pickForRestore());
         content.addView(restore,Util.spaced());
@@ -177,6 +179,7 @@ public class AdminActivity extends Activity {
         back();}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==OpeningImport.REQUEST&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null)OpeningImport.from(this,data.getData());
         if(requestCode==Backup.REQUEST_RESTORE&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null)
             new Backup(this).restoreFrom(data.getData());}
     private LinearLayout form(){LinearLayout b=new LinearLayout(this);b.setPadding(28,8,28,0);b.setOrientation(LinearLayout.VERTICAL);return b;}

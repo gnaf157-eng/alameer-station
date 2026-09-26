@@ -7,7 +7,7 @@ import java.io.File;
 
 /**
  * تقرير حركة الصناديق في ملف Excel واحد حسب المدى التاريخي.
- * الأعمدة من اليمين إلى اليسار كما تُقرأ: وارد، صادر، البيان، اسم الصندوق.
+ * الأعمدة من اليمين إلى اليسار: المخاريج، وارد، صادر، البيان، الجهة.
  */
 public final class CashboxReport {
     private final Context context;
@@ -25,13 +25,14 @@ public final class CashboxReport {
         book.row(false, "الصندوق", boxId > 0 ? boxName : "كل الصناديق",
                 "تاريخ الطباعة", ShiftDates.today(), "");
 
-        // ترويسة الجدول: التاريخ ثم الأعمدة الأربعة المطلوبة.
-        book.row(true, "التاريخ", "وارد", "صادر", "البيان", "اسم الصندوق");
+        // خمسة أعمدة فقط؛ معلومات الفترة أعلى الجدول والتفاصيل أسفله.
+        book.row(true, "المخاريج", "وارد", "صادر", "البيان", "الجهة");
+        book.row(false,"", "", "", "المبالغ بالريال اليمني", "");
 
         int first = book.nextRow();
         int rows = 0;
-        double totalIn = 0, totalOut = 0;
-        String lastDate = "";
+        double totalIn = 0, totalOut = 0, totalExpense=0;
+
 
         try (Cursor c = db.cashboxRange(from, to, boxId)) {
             while (c.moveToNext()) {
@@ -49,30 +50,23 @@ public final class CashboxReport {
                     if (!code.isEmpty() && !note.contains(code)) note = note + "  [" + code + "]";
                 }
 
-                // التاريخ يُكتب مرة واحدة لكل يوم فيسهل تتبّع الأيام.
-                String shown = date.equals(lastDate) ? "" : date;
-                lastDate = date;
-
-                book.row(false, shown,
-                        in ? (Object) amount : null,
-                        in ? null : (Object) amount,
-                        note, box);
+                CashReportDetails detail=CashReportDetails.load(db,c.getLong(6));
+                boolean expense=!in&&detail.expense;
+                book.row(false,expense?amount:null,in?amount:null,!in&&!expense?amount:null,
+                        detail.person+"\n"+(expense?"صادر — مخاريج":in?"وارد":"صادر"),box);
                 rows++;
-                if (in) totalIn += amount; else totalOut += amount;
+                if(in)totalIn+=amount;else if(expense)totalExpense+=amount;else totalOut+=amount;
             }
         }
 
         if (rows == 0) throw new IllegalStateException("لا توجد حركات في هذا المدى.");
 
         int last = book.nextRow() - 1;
-        book.row(true, "الإجمالي",
-                new XlsxWorkbook.Formula("SUM(B" + first + ":B" + last + ")", totalIn),
-                new XlsxWorkbook.Formula("SUM(C" + first + ":C" + last + ")", totalOut),
-                rows + " حركة", "");
-        book.row(true, "الصافي",
-                new XlsxWorkbook.Formula("B" + (last + 1) + "-C" + (last + 1), totalIn - totalOut),
-                "", "وارد ناقص صادر", "");
-        book.row(false, Branding.CREDIT, "", "", "", "");
+        book.row(true,new XlsxWorkbook.Formula("SUM(A"+first+":A"+last+")",totalExpense),
+                new XlsxWorkbook.Formula("SUM(B"+first+":B"+last+")",totalIn),
+                new XlsxWorkbook.Formula("SUM(C"+first+":C"+last+")",totalOut),"الإجمالي",rows+" حركة");
+        book.row(true,"","","","صافي الحركة",new XlsxWorkbook.Formula("B"+(last+1)+"-C"+(last+1)+"-A"+(last+1),totalIn-totalOut-totalExpense));
+        book.row(false, "", "", "", Branding.CREDIT, "");
 
         File dir = new File(context.getCacheDir(), "exports");
         if (!dir.isDirectory() && !dir.mkdirs())

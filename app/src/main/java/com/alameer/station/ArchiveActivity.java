@@ -36,7 +36,7 @@ public class ArchiveActivity extends Activity {
         LinearLayout words = new LinearLayout(this);
         words.setOrientation(LinearLayout.VERTICAL);
         words.addView(text("الأرشيف", 19, Color.WHITE, true));
-        words.addView(text("الورديات المرحّلة — فتح PDF أو مشاركة Excel", 11, 0xffCFE2FA, false));
+        words.addView(text("الورديات المرحّلة — فتح PDF أو مشاركة Excel", 11, 0xffE6E6E6, false));
         header.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         shell.addView(header);
 
@@ -67,7 +67,7 @@ public class ArchiveActivity extends Activity {
             while (c.moveToNext()) {
                 count++;
                 final long id = c.getLong(0);
-                String who = c.getString(1);
+                String who = ShiftWorkspace.workerName(db,id);
                 String date = c.getString(2);
                 double sales = c.getDouble(3);
                 totalSales += sales;
@@ -146,8 +146,8 @@ public class ArchiveActivity extends Activity {
             Button b = new Button(this);
             b.setText(labels[i]);
             b.setAllCaps(false);
-            b.setTextSize(16);
-            b.setTextColor(which == 1 ? Color.WHITE : Util.NAVY);
+            b.setTextSize(16);b.setBackgroundTintList(null);
+            b.setTextColor(Util.NAVY);
             b.setStateListAnimator(null);
             b.setBackground(Util.round(which == 1 ? Util.ACCENT : Util.ACCENT_SOFT, dp(12)));
             b.setPadding(dp(12), dp(12), dp(12), dp(12));

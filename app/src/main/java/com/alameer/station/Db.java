@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Db extends SQLiteOpenHelper {
     private static final String DB_NAME = "alameer_station.db";
-    private static final int DB_VERSION = 21;
+    private static final int DB_VERSION = 26;
     public Db(Context c) { super(c, DB_NAME, null, DB_VERSION); }
 
     static final String SETTLEMENT_SQL="CREATE TABLE IF NOT EXISTS settlement_links(entry_id INTEGER PRIMARY KEY,debt_entry INTEGER NOT NULL DEFAULT 0,cashbox_entry INTEGER NOT NULL DEFAULT 0,expense_entry INTEGER NOT NULL DEFAULT 0)";
@@ -35,6 +35,7 @@ public class Db extends SQLiteOpenHelper {
         db.execSQL(POSTED_SQL);
         db.execSQL(SUPPLIER_SQL);
         ShiftWorkspace.create(db);
+        Capital.create(db);
         seed(db);
     }
 
@@ -91,7 +92,9 @@ public class Db extends SQLiteOpenHelper {
         "cashbox_entry INTEGER NOT NULL DEFAULT 0,voided INTEGER NOT NULL DEFAULT 0,supplier TEXT NOT NULL DEFAULT 'OIL',debt_entry INTEGER NOT NULL DEFAULT 0)";
 
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if(oldVersion<21&&newVersion>=21)ShiftWorkspace.create(db);
+        if(oldVersion<26)Capital.create(db);
+        if(oldVersion<25&&newVersion>=21){ShiftWorkspace.create(db);db.execSQL("UPDATE shift_workspace SET strict_counts=0,reviewed=0 WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");}
+        if(oldVersion<25&&newVersion>=25)db.execSQL("DELETE FROM shift_counts WHERE shift_id IN (SELECT id FROM shifts WHERE status='OPEN')");
         if(oldVersion<19){
             try{db.execSQL("ALTER TABLE supplier_entries ADD COLUMN supplier TEXT NOT NULL DEFAULT 'OIL'");}catch(Exception ignored){}
             // الحركات القديمة: الغاز لشركة الغاز وما عداه لشركة النفط.
@@ -463,7 +466,8 @@ public class Db extends SQLiteOpenHelper {
     }
     /** Status, pump handover, ledgers and journal commit together. */
     private boolean closingWorkspace=false;
-    public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){
+    public String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId){return closeAndPostShift(shiftId,workerId,reason,cashboxId,false);}
+    String closeAndPostShift(long shiftId,int workerId,String reason,long cashboxId,boolean capitalOverride){
         return atomic(()->{
             if(!isOpen(shiftId))throw new IllegalStateException("الوردية مغلقة بالفعل");
             requireDate(shiftDate(shiftId));
@@ -476,13 +480,16 @@ public class Db extends SQLiteOpenHelper {
             ShiftWorkspace.ready(this,shiftId);
             boolean unified=ShiftWorkspace.exists(this,shiftId);
             Map<String,Long> before=unified?ShiftWorkspace.before(this):null;
+            Capital.Plan capitalPlan=Capital.plan(this,shiftId);
             closingWorkspace=true;
             try{
                 submit(shiftId,workerId,why);
                 approve(shiftId);
                 String result=postShift(shiftId,unified?ShiftWorkspace.box(this,shiftId):cashboxId);
                 journalShift(shiftId);
-                if(unified){ShiftWorkspace.post(this,shiftId);ShiftWorkspace.link(this,shiftId,before);}
+                if(unified){ShiftWorkspace.convertWorkerCash(this,shiftId,before.get("cashbox_entries"));ShiftWorkspace.post(this,shiftId);}
+                Capital.finish(this,shiftId,capitalPlan,reason,capitalOverride);
+                if(unified)ShiftWorkspace.link(this,shiftId,before);
                 return result;
             }finally{closingWorkspace=false;}
         });
@@ -584,7 +591,7 @@ public class Db extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();v.put("name",clean);v.put("opening",opening);v.put("created_at",Util.now());
         long id=getWritableDatabase().insertWithOnConflict("cashboxes",null,v,SQLiteDatabase.CONFLICT_IGNORE);
         if(id==-1)throw new IllegalArgumentException("يوجد صندوق بهذا الاسم");
-        return id;
+        CashAccounts.seed(getWritableDatabase(),id,opening);return id;
     }
     public void renameCashbox(long id,String name){
         String clean=name.trim();
@@ -599,8 +606,7 @@ public class Db extends SQLiteOpenHelper {
     private void setCashboxOpeningAtomic(long id,double opening){
         if(openingPosted())throw new IllegalStateException("الأرصدة الافتتاحية معتمدة؛ سجّل حركة تصحيح بدل تغيير الأصل.");
         if(!Double.isFinite(opening))throw new IllegalArgumentException("الرصيد الافتتاحي غير صالح");
-        ContentValues v=new ContentValues();v.put("opening",opening);
-        getWritableDatabase().update("cashboxes",v,"id=?",new String[]{String.valueOf(id)});
+        CashAccounts.setOpening(this,id,ShiftWorkspace.boxCurrency(this,id),opening/ShiftWorkspace.openingRate(this,id));
     }
     public void setCashboxActive(long id,boolean active){
         ContentValues v=new ContentValues();v.put("active",active?1:0);
@@ -851,7 +857,7 @@ public class Db extends SQLiteOpenHelper {
         args.add(from);args.add(to);
         if(boxId>0){where.append("AND e.box_id=? ");args.add(String.valueOf(boxId));}
         return getReadableDatabase().rawQuery(
-            "SELECT e.entry_date,e.direction,e.amount,e.note,b.name,e.source_shift "+
+            "SELECT e.entry_date,e.direction,e.amount,e.note,b.name,e.source_shift,e.id,e.currency,e.orig_amount,e.rate "+
             "FROM cashbox_entries e JOIN cashboxes b ON b.id=e.box_id "+where+
             "ORDER BY e.entry_date,e.id",args.toArray(new String[0]));
     }
@@ -1160,7 +1166,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COUNT(*) FROM shifts s WHERE s.status<>'OPEN' "+
                 "AND substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7)=? "+
-                "AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0)",
+                "AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0)",
                 new String[]{period})){
             if(c.moveToFirst()&&c.getInt(0)>0)
                 throw new IllegalStateException("لا يمكن إقفال "+period+": فيها "+c.getInt(0)+" وردية لم تُرحّل بعد. رحّلها أولًا.");
@@ -1481,16 +1487,20 @@ public class Db extends SQLiteOpenHelper {
     }
 
     /** الورديات المُغلقة التي لم يُسجَّل لها قيد بعد: 0=id,1=عامل,2=تاريخ,3=الفرق. */
+    // A fully posted workspace can have cash/material operations with no worker money.
+    // Its posted_shifts record is the completion evidence; no zero journal is invented.
+    private static final String ZERO_WORKER_POSTED="s.sales=0 AND s.collections=0 AND s.cash_delivered=0 AND s.debts=0 AND s.expenses=0 AND s.balance=0 AND EXISTS(SELECT 1 FROM posted_shifts ps JOIN shift_workspace sw ON sw.shift_id=ps.shift_id WHERE ps.shift_id=s.id)";
     public Cursor unpostedShifts(){
         return getReadableDatabase().rawQuery(
             "SELECT s.id,w.name,COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),s.balance "+
             "FROM shifts s JOIN workers w ON w.id=s.worker_id "+
-            "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
+            "WHERE s.status<>'OPEN' AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
             "ORDER BY s.id DESC",null);
     }
 
     /** هل للوردية قيد مسجّل؟ */
     public boolean shiftJournalled(long shiftId){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM shifts s WHERE s.id=? AND ("+ZERO_WORKER_POSTED+")",new String[]{String.valueOf(shiftId)})){if(c.moveToFirst())return true;}
         try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM journal WHERE source='SHIFT' AND source_id=? AND reversed_by=0 AND reverses=0",
                 new String[]{String.valueOf(shiftId)})){
             return c.moveToFirst();
@@ -1557,7 +1567,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT DISTINCT p.period FROM period_locks p JOIN shifts s "+
                 "ON p.period=substr(COALESCE(NULLIF(s.shift_date,''),substr(s.opened_at,1,10)),1,7) "+
-                "WHERE s.status<>'OPEN' AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
+                "WHERE s.status<>'OPEN' AND NOT ("+ZERO_WORKER_POSTED+") AND NOT EXISTS(SELECT 1 FROM journal j WHERE j.source='SHIFT' AND j.source_id=s.id AND j.reversed_by=0 AND j.reverses=0) "+
                 "ORDER BY p.period LIMIT 1",null)){
             return c.moveToFirst()?c.getString(0):"";
         }
@@ -2083,10 +2093,11 @@ public class Db extends SQLiteOpenHelper {
             for(String t:new String[]{"movements","readings","shifts","cashbox_entries",
                     "debt_entries","expense_entries","material_entries","dip_readings",
                     "supplier_entries","journal_lines","journal","posted_shifts",
-                    "period_locks","ledger_audit","audit_log"}){
+                    "period_locks","ledger_audit","audit_log","shift_workspace","shift_operations","shift_counts","shift_links","settlement_links"}){
                 try{db.delete(t,null,null);}catch(Exception ignored){}
             }
             if(!keepOpenings){
+                db.execSQL("UPDATE cashbox_openings SET native_amount=0,yer_amount=0");
                 ContentValues zero=new ContentValues();
                 zero.put("opening",0);
                 try{db.update("cashboxes",zero,null,null);}catch(Exception ignored){}
@@ -2200,7 +2211,7 @@ public class Db extends SQLiteOpenHelper {
                 "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0 AND COALESCE(supplier,'OIL')=?",
                 new String[]{supplier})){
-            return c.moveToFirst()?c.getDouble(0):0;
+            return (c.moveToFirst()?c.getDouble(0):0)+Capital.scalar(this,"SELECT COALESCE(SUM(balance),0) FROM supplier_openings WHERE supplier=?",supplier);
         }
     }
 
@@ -2209,7 +2220,7 @@ public class Db extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery(
                 "SELECT COALESCE(SUM(CASE WHEN kind='PAY' THEN amount ELSE -amount END),0) "+
                 "FROM supplier_entries WHERE voided=0",null)){
-            return c.moveToFirst()?c.getDouble(0):0;
+            return (c.moveToFirst()?c.getDouble(0):0)+Capital.scalar(this,"SELECT COALESCE(SUM(balance),0) FROM supplier_openings");
         }
     }
 
@@ -2492,12 +2503,12 @@ public class Db extends SQLiteOpenHelper {
 
     /** قيمة مخزون مادة بسعر التكلفة. */
     public double stockValue(String material){
-        return Math.max(0,materialSummary(material)[3])*unitCost(material);
+        return Capital.enabled(this)?materialSummary(material)[3]*Capital.cost(this,material):Math.max(0,materialSummary(material)[3])*unitCost(material);
     }
 
     /** قيمة كل المخزون بسعر التكلفة. */
     public double stockValueTotal(){
-        double total=0;
+        double total=Capital.external(this);
         for(String m:MATERIALS)total+=stockValue(m);
         return total;
     }
@@ -2673,5 +2684,4 @@ public class Db extends SQLiteOpenHelper {
     }
     private void audit(SQLiteDatabase db,long shiftId,int workerId,String action,String details){ContentValues v=new ContentValues();v.put("shift_id",shiftId);v.put("worker_id",workerId);v.put("action",action);v.put("details",details);v.put("created_at",Util.now());db.insert("audit_log",null,v);}
 }
-
 
