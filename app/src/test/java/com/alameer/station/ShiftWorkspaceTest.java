@@ -52,6 +52,34 @@ public class ShiftWorkspaceTest {
   ShiftActivity screen=controller.get();assertEquals(3,screen.tabs.length);assertEquals("مطابقة العامل",screen.tabs[0].getText().toString());screen.tabs[1].performClick();assertTrue(screen.tabs[1].isSelected());assertEquals(0,ShiftWorkspace.reviewed(db,shift));screen.tabs[2].performClick();assertTrue(screen.tabs[2].isSelected());assertEquals(0,ShiftWorkspace.reviewed(db,shift));screen.tabs[0].performClick();assertTrue(screen.tabs[0].isSelected());screen.workspacePage(2);controller.pause().stop().destroy();
   org.robolectric.android.controller.ActivityController<LedgerActivity> ledger=Robolectric.buildActivity(LedgerActivity.class,LedgerActivity.intent(context,"cashbox_entries")).create().start().resume();ledger.pause().stop().destroy();
  }
+ @Test public void workerPageAutosavesReadingsAndRejectsInvalidInputWithoutNavigation(){
+  db.setSetting("name_set","1");context.getSharedPreferences("reading_drafts",0).edit().clear().commit();
+  db.getWritableDatabase().execSQL("UPDATE readings SET previous=100,current=101 WHERE shift_id=?",new Object[]{shift});
+  org.robolectric.android.controller.ActivityController<ShiftActivity> controller=Robolectric.buildActivity(ShiftActivity.class).setup();
+  ShiftActivity screen=controller.get();
+  assertEquals(screen.pages[0],screen.readingsBox.getParent());
+  assertEquals(screen.pages[0],screen.movementsBox.getParent());
+  assertNotNull(findText(screen.pages[0],"تأكيد مطابقة العامل"));
+  assertNull(findText(screen.pages[0],"حفظ القراءات ومتابعة الوردية"));
+  assertNull(findText(screen.pages[0],"مطابقة وتسليم الوردية"));
+  screen.workspacePage(1);assertEquals(0,screen.page);screen.workspacePage(2);assertEquals(0,screen.page);
+  ShiftActivity.ReadingInput input=screen.inputs.get(0);
+  ShiftWorkspace.review(db,shift,1);ShiftWorkspace.review(db,shift,2);assertEquals(6,ShiftWorkspace.reviewed(db,shift));
+  input.current.setText("102");
+  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT current,sales,price FROM readings WHERE id=?",new String[]{String.valueOf(input.id)})){
+   assertTrue(c.moveToFirst());assertEquals(102,c.getDouble(0),0);assertEquals(2*c.getDouble(2),c.getDouble(1),0.00001);
+  }
+  assertEquals(0,ShiftWorkspace.reviewed(db,shift));assertEquals(0,count("journal"));
+  input.current.setText("99");
+  try(Cursor c=db.getReadableDatabase().rawQuery("SELECT current,sales FROM readings WHERE id=?",new String[]{String.valueOf(input.id)})){
+   assertTrue(c.moveToFirst());assertTrue(c.isNull(0));assertEquals(0,c.getDouble(1),0);
+  }
+  refuse(()->ShiftWorkspace.review(db,shift,0));refuse(this::close);
+  controller.pause().resume();assertEquals("99",screen.inputs.get(0).current.getText().toString());
+  screen.inputs.get(0).current.setText("103");controller.pause().resume();assertEquals("103",screen.inputs.get(0).current.getText().toString());
+  screen.inputs.get(0).current.setText("");controller.pause().resume();assertEquals("",screen.inputs.get(0).current.getText().toString());
+  assertEquals(0,count("journal"));assertTrue(db.isOpen(shift));controller.pause().stop().destroy();
+ }
  @Test public void independentReviewsAllowAnyOrderButNeverPartialPosting(){
   ShiftWorkspace.review(db,shift,2);assertEquals(4,ShiftWorkspace.reviewed(db,shift));refuse(this::close);
   ShiftWorkspace.review(db,shift,1);assertEquals(6,ShiftWorkspace.reviewed(db,shift));refuse(this::close);

@@ -141,9 +141,7 @@ public class ShiftActivity extends Activity {
         pages[0].addView(shiftCard,space());
         fuelLitresBox=panel(Color.WHITE);pinnedSummaries.addView(fuelLitresBox);
         readingsBox=panel(Color.WHITE);pages[0].addView(readingsBox,space());loadReadings();
-        Button save=action("حفظ القراءات ومتابعة الوردية",true);
-        save.setOnClickListener(v->{if(saveReadings()){showPage(1);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}});pages[0].addView(save,space());
-        pages[1].addView(heading("الحركات"));
+        pages[0].addView(heading("الحركات"));
         movementsBox=panel(Color.WHITE);
         // أربع أيقونات ظاهرة بدل القائمة المنسدلة؛ كل واحدة تفتح نافذة إدخال سريعة.
         LinearLayout picker=panel(Color.WHITE);
@@ -152,11 +150,10 @@ public class ShiftActivity extends Activity {
         typePicker=column();
         picker.addView(typePicker);
         buildTypeTiles();
-        pages[1].addView(picker,space());
-        pages[1].addView(text("الحركات المسجّلة",18,Util.NAVY,true),space());
+        pages[0].addView(picker,space());
+        pages[0].addView(text("الحركات المسجّلة",18,Util.NAVY,true),space());
 
-        pages[1].addView(movementsBox,space());
-        Button review=action("مطابقة وتسليم الوردية",false);review.setOnClickListener(v->showPage(2));pages[1].addView(review,space());
+        pages[0].addView(movementsBox,space());
         LinearLayout matchRow=new LinearLayout(this);
         matchRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView matchTitle=heading("مطابقة الوردية");
@@ -168,25 +165,12 @@ public class ShiftActivity extends Activity {
         LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-2,-2);
         mp.setMargins(dp(10),0,0,0);
         matchRow.addView(matchCodeBadge,mp);
-        pages[2].addView(matchRow);
-        LinearLayout steps=new LinearLayout(this);
-        String[] stepNames={"١\nالاستلام","٢\nالحركات","٣\nالتسليم"};
-        for(int i=0;i<3;i++){
-            final int dest=i==1?1:i==2?2:0;
-            TextView step=text(stepNames[i],14,i==2?Util.NAVY:0xff777d84,i==2);
-            step.setGravity(Gravity.CENTER);step.setPadding(0,dp(8),0,dp(8));
-            step.setBackground(Util.round(i==2?Util.ACCENT_SOFT:0xffEEEEEE,dp(14)));
-            step.setOnClickListener(v->showPage(dest));
-            LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,-2,1);
-            sp.setMargins(dp(4),0,dp(4),0);steps.addView(step,sp);
-        }
-        pages[2].addView(steps,space());
-        balanceText=text("",27,Util.GREEN,true);balanceText.setGravity(Gravity.CENTER);balanceText.setPadding(dp(16),dp(24),dp(16),dp(24));pages[2].addView(balanceText,space());
-        totalsBox=panel(Color.WHITE);pages[2].addView(totalsBox,space());
-        reconciliationLitresBox=panel(Color.WHITE);pages[2].addView(reconciliationLitresBox,space());
-        Button details=action("مراجعة التفاصيل  ▤",false);details.setOnClickListener(v->showPage(0));pages[2].addView(details,space());
-        TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[2].addView(pending,space());
-        Button confirm=action("تأكيد مراجعة مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[2].addView(confirm,space());
+        pages[0].addView(matchRow);
+        balanceText=text("",27,Util.GREEN,true);balanceText.setGravity(Gravity.CENTER);balanceText.setPadding(dp(16),dp(24),dp(16),dp(24));pages[0].addView(balanceText,space());
+        totalsBox=panel(Color.WHITE);pages[0].addView(totalsBox,space());
+        reconciliationLitresBox=panel(Color.WHITE);pages[0].addView(reconciliationLitresBox,space());
+        TextView pending=text("تُحفظ محليًا على الجهاز",12,0xff747a80,false);pending.setGravity(Gravity.CENTER);pages[0].addView(pending,space());
+        Button confirm=action("تأكيد مطابقة العامل",true);confirm.setOnClickListener(v->{try{if(!saveReadings())return;String issue=db.validateShift(shiftId);if(!issue.isEmpty())throw new IllegalStateException(issue);if(Math.abs(db.balance(shiftId))>0.0000001)throw new IllegalStateException("يجب تصفير فرق العامل");ShiftWorkspace.review(db,shiftId,0);showPage(5);}catch(RuntimeException e){new AlertDialog.Builder(this).setMessage(e.getMessage()).setPositiveButton("حسنًا",null).show();}});pages[0].addView(confirm,space());
 
         scroll.addView(content);shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         pages[3].addView(Util.label(this,"أرشيف وردياتي"));
@@ -856,6 +840,7 @@ public class ShiftActivity extends Activity {
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     void workspacePage(int selected){showPage(selected);if(screenScroll!=null)screenScroll.smoothScrollTo(0,0);}
     private void showPage(int selected){
+        if(selected==1||selected==2)selected=0; // One worker page: meters, movements and confirmation.
         page=selected;
         pinnedSummaries.setVisibility(selected==0||selected==1?View.VISIBLE:View.GONE);
         fuelLitresBox.setVisibility(selected==0?View.VISIBLE:View.GONE);
@@ -1062,7 +1047,7 @@ public class ShiftActivity extends Activity {
             }
         }
         inputs.clear();readingsBox.removeAllViews();readingsBox.addView(text("قراءات الطرمبات",20,Util.NAVY,true),space());
-        readingsBox.addView(text("تُحفظ الكتابة تلقائيًا. اضغط حفظ القراءات لتحديث الحساب.",12,0xff777d84,false),space());
+        readingsBox.addView(text("تُحفظ القراءات ويُحدّث الحساب تلقائيًا. سجّل الحركات أسفل العدادات.",12,0xff777d84,false),space());
         try(Cursor c=db.shiftReadings(shiftId)){while(c.moveToNext()){
             LinearLayout row=column();row.setPadding(0,dp(8),0,dp(12));
             LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
@@ -1109,32 +1094,39 @@ public class ShiftActivity extends Activity {
     private void restoreAndWatchDraft(EditText input,long readingId,String field){
         final String key=draftKey(readingId,field);
         final android.content.SharedPreferences prefs=readingDrafts();
-        if(prefs.contains(key))input.setText(prefs.getString(key,""));
+        if(prefs.contains(key)){
+            input.setText(prefs.getString(key,""));
+            persistReading(readingId,input.getText().toString());
+        }
         input.addTextChangedListener(new android.text.TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int count,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){}
             public void afterTextChanged(android.text.Editable value){
                 // Persist exact input, including a cleared field, separately from validated sales.
                 prefs.edit().putString(key,value.toString()).apply();
+                persistReading(readingId,value.toString());
                 refreshTotals();
             }
         });
+    }
+    private boolean persistReading(long readingId,String raw){
+        String current=raw.trim();
+        boolean numeric=current.replace(",", "").replace("٬", "").matches("(?:[0-9٠-٩۰-۹]+(?:[.٫][0-9٠-٩۰-۹]*)?|[.٫][0-9٠-٩۰-۹]+)");
+        boolean saved=current.isEmpty()?db.clearReading(readingId,shiftId):numeric&&db.saveReading(readingId,Util.number(current));
+        if(saved)readingDrafts().edit().remove(draftKey(readingId,"current")).apply();
+        else db.clearReading(readingId,shiftId); // An invalid draft must not leave stale sales or review flags.
+        return saved;
     }
     private boolean saveReadings(){
         boolean ok=true;
         for(ReadingInput r:inputs){
             if(!r.current.isEnabled())continue;
-            String curr=r.current.getText().toString().trim();
-            if(curr.isEmpty()){
-                if(db.clearReading(r.id,shiftId))readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
-                else ok=false;
-            }else{
-                if(db.saveReading(r.id,Util.number(curr)))
-                    readingDrafts().edit().remove(draftKey(r.id,"current")).apply();
-                else ok=false;
+            if(!persistReading(r.id,r.current.getText().toString())){
+                r.current.setError("أدخل قراءة صحيحة لا تقل عن السابقة");
+                ok=false;
             }
         }
-        Toast.makeText(this,ok?"تم الحفظ داخل الهاتف":"رفضت قراءة حالية أقل من السابقة",Toast.LENGTH_SHORT).show();
+        if(!ok)Toast.makeText(this,"صحّح القراءة الحالية؛ يجب ألا تقل عن السابقة",Toast.LENGTH_SHORT).show();
         loadReadings();refreshTotals();
         return ok;}
     /** يعيد رسم البطاقات الأربع لتحديث مجاميعها. */
